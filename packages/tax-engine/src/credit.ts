@@ -21,13 +21,16 @@
  * for the client is unchanged.
  */
 
-import { amountDue, paymentStatusFor, isCancelledBill, SALES_INVOICE_TYPES, localToday } from '../utils';
+import type { Rec } from './types.ts';
+import { amountDue, paymentStatusFor } from './payments.ts';
+import { isCancelledBill, SALES_INVOICE_TYPES } from './invoiceTypes.ts';
+import { localToday } from './dates.ts';
 
 // What the client owes on a bill: the total less TDS they deduct. Nothing on
 // a cancelled invoice, or on a quotation / proforma / challan (not a sale), so
 // money received against one - an advance, or a payment before the invoice was
 // cancelled - is the client's credit instead of disappearing.
-const owedOn = (bill) => {
+const owedOn = (bill: Rec) => {
   if (isCancelledBill(bill)) return 0;
   const type = bill.invoiceType || 'tax-invoice';
   if (type !== 'credit-note' && !SALES_INVOICE_TYPES.includes(type)) return 0;
@@ -36,10 +39,10 @@ const owedOn = (bill) => {
 
 // Overpayment on a single bill: paid - owed, ignoring the client-credit
 // paper trail so we don't double-count our own transfer entries.
-export function getBillOverpayment(bill) {
+export function getBillOverpayment(bill: Rec) {
   if (!bill) return 0;
   const total = owedOn(bill);
-  const cashPaid = (bill.payments || []).reduce((s, p) => {
+  const cashPaid = (bill.payments || []).reduce((s: number, p: Rec) => {
     // 'credit-transferred-out' entries reduce the raw paidAmount to show
     // that the excess has been moved off this bill. Skip 'credit-applied'
     // entries — those are inbound-from-another-bill and don't affect our
@@ -55,21 +58,30 @@ export function getBillOverpayment(bill) {
  * Returns { available, sources } where sources is a FIFO-sortable list
  * used by the apply flow to know which bill(s) to debit.
  */
-export function getClientCredit(clientName, allBills) {
+export function getClientCredit(clientName: string, allBills: Rec[] | null | undefined) {
   if (!clientName) return { available: 0, sources: [] };
   const lower = clientName.trim().toLowerCase();
-  const bills = (allBills || []).filter(b => (b.clientName || '').trim().toLowerCase() === lower);
+  const bills = (allBills || []).filter(
+    (b: Rec) => (b.clientName || '').trim().toLowerCase() === lower,
+  );
   const sources = [];
   let available = 0;
   for (const b of bills) {
     const over = getBillOverpayment(b);
     if (over > 0.005) {
-      sources.push({ billId: b.id, invoiceNumber: b.invoiceNumber, overpaid: over, invoiceDate: b.invoiceDate });
+      sources.push({
+        billId: b.id,
+        invoiceNumber: b.invoiceNumber,
+        overpaid: over,
+        invoiceDate: b.invoiceDate,
+      });
       available += over;
     }
   }
   // Oldest first — natural FIFO allocation on apply.
-  sources.sort((a, b) => new Date(a.invoiceDate || 0) - new Date(b.invoiceDate || 0));
+  sources.sort(
+    (a, b) => new Date(a.invoiceDate || 0).getTime() - new Date(b.invoiceDate || 0).getTime(),
+  );
   return { available, sources };
 }
 
@@ -83,7 +95,12 @@ export function getClientCredit(clientName, allBills) {
  * FIFO across sources. If `amountToApply` exceeds available credit, we
  * apply only what's available (caller should cap; we clamp defensively).
  */
-export function planCreditApplication(clientName, allBills, amountToApply, newBillId) {
+export function planCreditApplication(
+  clientName: string,
+  allBills: Rec[],
+  amountToApply: number,
+  newBillId: string,
+) {
   const { available, sources } = getClientCredit(clientName, allBills);
   const amount = Math.max(0, Math.min(Number(amountToApply) || 0, available));
   if (amount <= 0.005) return null;
@@ -94,7 +111,7 @@ export function planCreditApplication(clientName, allBills, amountToApply, newBi
   for (const src of sources) {
     if (remaining <= 0.005) break;
     const take = Math.min(remaining, src.overpaid);
-    const srcBill = allBills.find(b => b.id === src.billId);
+    const srcBill = allBills.find((b: Rec) => b.id === src.billId);
     if (!srcBill) continue;
     const newPayments = [
       ...(srcBill.payments || []),
@@ -108,13 +125,21 @@ export function planCreditApplication(clientName, allBills, amountToApply, newBi
         creditTargetBillId: newBillId,
       },
     ];
-    const newTotalPaid = newPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const newTotalPaid = newPayments.reduce((s: number, p: Rec) => s + (Number(p.amount) || 0), 0);
     // A source keeps its status when it is cancelled or not a sale.
-    const newStatus = isCancelledBill(srcBill) ? 'cancelled'
-      : (owedOn(srcBill) > 0 ? paymentStatusFor(srcBill, newTotalPaid) : (srcBill.status || 'unpaid'));
+    const newStatus = isCancelledBill(srcBill)
+      ? 'cancelled'
+      : owedOn(srcBill) > 0
+        ? paymentStatusFor(srcBill, newTotalPaid)
+        : srcBill.status || 'unpaid';
     sourcePatches.push({
       billId: src.billId,
-      updatedBill: { ...srcBill, payments: newPayments, paidAmount: newTotalPaid, status: newStatus },
+      updatedBill: {
+        ...srcBill,
+        payments: newPayments,
+        paidAmount: newTotalPaid,
+        status: newStatus,
+      },
     });
     consumedFrom.push({ billId: src.billId, invoiceNumber: src.invoiceNumber, amount: take });
     remaining -= take;
@@ -125,9 +150,9 @@ export function planCreditApplication(clientName, allBills, amountToApply, newBi
     amount,
     date: localToday(),
     mode: 'credit-applied',
-    note: `Applied from prior overpayment${consumedFrom.length > 1 ? 's' : ''} (${consumedFrom.map(c => c.invoiceNumber).join(', ')})`,
+    note: `Applied from prior overpayment${consumedFrom.length > 1 ? 's' : ''} (${consumedFrom.map((c) => c.invoiceNumber).join(', ')})`,
     recordedAt: new Date().toISOString(),
-    creditSourceBillIds: consumedFrom.map(c => c.billId),
+    creditSourceBillIds: consumedFrom.map((c) => c.billId),
   };
 
   return { amountApplied: amount, sourcePatches, targetEntry, consumedFrom };

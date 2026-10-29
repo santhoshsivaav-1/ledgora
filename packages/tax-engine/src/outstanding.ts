@@ -12,26 +12,44 @@
  * period that is still unpaid is money still owed, so it goes in an "Earlier"
  * column instead of disappearing.
  */
-import { countsAsSales, amountDue } from '../utils.js';
+import type { Rec } from './types.ts';
+import { countsAsSales } from './invoiceTypes.ts';
+import { amountDue } from './payments.ts';
 
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 // The 12 months of a financial year ('fy', April of startYear to March of the
 // next) or a calendar year ('calendar', January to December of startYear).
-export function periodMonths(mode, startYear) {
+export function periodMonths(mode: string, startYear: number) {
   const first = mode === 'fy' ? 3 : 0;
   return Array.from({ length: 12 }, (_, i) => {
     const m = (first + i) % 12;
     const y = startYear + Math.floor((first + i) / 12);
-    return { key: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTH_SHORT[m]} ${String(y).slice(-2)}` };
+    return {
+      key: `${y}-${String(m + 1).padStart(2, '0')}`,
+      label: `${MONTH_SHORT[m]} ${String(y).slice(-2)}`,
+    };
   });
 }
 
-export const billCurrency = (b) => b.currency || b.data?.invoiceOptions?.currency || 'INR';
+export const billCurrency = (b: Rec) => b.currency || b.data?.invoiceOptions?.currency || 'INR';
 
 // One row per party (same name, ignoring case and spaces), sorted by name:
 // { name, earlier, months: { 'YYYY-MM': amount }, total }.
-export function partyOutstanding(bills, months, currency = 'INR') {
+export function partyOutstanding(bills: Rec[], months: Rec[], currency = 'INR') {
   const first = months[0].key;
   const last = months[months.length - 1].key;
   const rows = new Map();

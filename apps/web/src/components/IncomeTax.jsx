@@ -25,7 +25,6 @@ function getAccentRGB() {
 }
 import {
   compareRegimes,
-  computeTax,
   parseBankStatement,
   AUTO_CATEGORY_RULES,
   DEDUCTION_CAPS,

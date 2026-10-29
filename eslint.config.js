@@ -27,7 +27,7 @@ export default defineConfig([
       parserOptions: { ecmaVersion: 'latest', ecmaFeatures: { jsx: true }, sourceType: 'module' },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', ignoreRestSiblings: true, caughtErrors: 'none' }],
       // React-Compiler diagnostics shipped in eslint-plugin-react-hooks v7. The legacy UI predates
       // them (they were already failing before the monorepo move), so they stay visible as
       // warnings and are fixed as each feature is rewritten in Phase 3.
@@ -49,11 +49,16 @@ export default defineConfig([
       'apps/web/vite.config.js',
       'apps/web/vitest.config.js',
       'apps/web/test/**/*.{js,mjs}',
+      'packages/*/test/**/*.{js,mjs}',
+      'packages/*/vitest.config.js',
       'docs-site/**/*.mjs',
       'eslint.config.js',
     ],
     extends: [js.configs.recommended],
     languageOptions: { ecmaVersion: 'latest', globals: { ...globals.node } },
+    rules: {
+      'no-unused-vars': ['error', { ignoreRestSiblings: true, caughtErrors: 'none' }],
+    },
   },
 
   // The smoke test also runs callbacks inside the browser page (document, window, ...).

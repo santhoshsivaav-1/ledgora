@@ -517,7 +517,7 @@ export default function PurchaseBills() {
 
         // Apply deltas + write.
         const upserts = [];
-        for (const [key, prod] of productsToUpsert) {
+        for (const [, prod] of productsToUpsert) {
           if (prod._placeholderId) {
             const existing = byId.get(prod._placeholderId);
             const delta = stockDeltaById.get(prod._placeholderId) || 0;

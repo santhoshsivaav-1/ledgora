@@ -1,10 +1,10 @@
 // v1.10.75 - Party outstanding in Tally's layout: parties down the side,
 // months across, totals on the right and at the bottom. Calculation lives in
-// utils/partyOutstanding.js (unit-tested); this file only shows and exports it.
+// the tax engine's outstanding.ts (unit-tested); this file only shows and exports it.
 import { useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { getFinancialYearStart } from '../utils';
-import { periodMonths, partyOutstanding, billCurrency } from '../utils/partyOutstanding';
+import { periodMonths, partyOutstanding, billCurrency } from '@ledgora/tax-engine';
 import TableExport from './TableExport';
 
 const amt = (n) => (n ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');

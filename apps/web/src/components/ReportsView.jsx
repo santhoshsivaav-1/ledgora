@@ -7,7 +7,7 @@ import HelpButton from './HelpButton';
 import PartyOutstandingReport from './PartyOutstandingReport';
 import StockReport from './StockReport';
 import TableExport from './TableExport';
-import { billCurrency } from '../utils/partyOutstanding';
+import { billCurrency } from '@ledgora/tax-engine';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
