@@ -34,7 +34,7 @@ const JUMP_NAV_SECTIONS = [
   ['section-data',     'Import/Export'],
 ];
 
-export default function SettingsView({ onSaved }) {
+export default function SettingsView({ onSaved, me, branches, canManageBranches, onAddBranch }) {
   const [profile, setProfile] = useState({
     businessName: '', address: '', state: '', gstin: '', pan: '',
     email: '', phone: '', bankName: '', accountNumber: '', ifsc: '',
@@ -1494,6 +1494,38 @@ export default function SettingsView({ onSaved }) {
         <p className="page-subtitle mb-4">
           Save multiple business profiles and switch between them instantly. Switching auto-saves your current profile first.
         </p>
+        {branches && (
+          <div className="template-card" style={{ marginBottom: '1rem', borderColor: 'var(--primary)' }}>
+            <div className="template-card-header">
+              <div>
+                <strong><Building2 size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Organization branches</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                  {me?.organization?.name} · {branches.length} branch{branches.length === 1 ? '' : 'es'} · shared with your whole team
+                </span>
+              </div>
+              {canManageBranches && (
+                <button type="button" className="btn btn-primary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }} onClick={onAddBranch}>
+                  <Plus size={14} style={{ verticalAlign: 'middle' }} /> Add branch
+                </button>
+              )}
+            </div>
+            <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              {branches.map(b => (
+                <li key={b.id} style={{ marginBottom: '0.25rem' }}>
+                  <strong>{b.name}</strong>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {b.gstin ? ` · ${b.gstin}` : ' · no GSTIN yet'}{b.state ? ` · ${b.state}` : ''}
+                    {(b.address || b.city) ? ` · ${[b.address, b.city].filter(Boolean).join(', ')}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted" style={{ fontSize: '0.78rem', margin: '0.5rem 0 0' }}>
+              Branches are the businesses of your organization. Switch between them from the
+              branch switcher in the sidebar; members only see the branches they were given.
+            </p>
+          </div>
+        )}
         {businessProfiles.length === 0 ? (
           <p className="text-muted" style={{ fontSize: '0.85rem' }}>
             No saved profiles yet. Fill in your business details above and click "Save as Profile".

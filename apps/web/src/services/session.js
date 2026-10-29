@@ -79,6 +79,18 @@ export const verifyPhoneCode = ({ phoneNumber, code }) => call('POST', '/v1/auth
 export const verifyTotp = (code) => call('POST', '/v1/auth/two-factor/verify-totp', { code });
 export const verifyBackupCode = (code) => call('POST', '/v1/auth/two-factor/verify-backup-code', { code });
 
+// ---- organization branches (businesses) ----
+// A "branch" is a business (GSTIN) inside the organization you are signed in
+// to. The list is already filtered by the server: members limited to some
+// businesses (member_businesses) only ever see theirs, via row-level security.
+export const listBusinesses = () => call('GET', '/v1/businesses');
+export const createBusiness = (body) => call('POST', '/v1/businesses', body);
+export const updateBusiness = (id, body) => call('PATCH', `/v1/businesses/${id}`, body);
+
+// Switch which organization this session works in (a user can belong to many).
+export const switchOrganization = (organizationId) =>
+  call('POST', '/v1/me/organization', { organizationId });
+
 // ---- sessions ----
 export const signOut = () => call('POST', '/v1/auth/sign-out', {});
 export const listSessions = () => call('GET', '/v1/sessions');

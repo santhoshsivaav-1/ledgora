@@ -47,3 +47,9 @@
 .account-bar-who span { font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-bar-logout { flex: none; display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text); font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
 .account-bar-logout:hover { color: var(--danger); border-color: var(--danger); }
+/* Organization switcher: sits where the "org · role" line is when the account
+   belongs to more than one organization. */
+.org-switcher { margin-top: 0.15rem; max-width: 100%; font-size: 0.7rem; color: var(--text-secondary); background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 0.1rem 0.25rem; cursor: pointer; }
+.org-switcher:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* Add-branch modal: full-screen dim with the form centred, scrolls on short phones. */
+.branch-modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.45); display: flex; overflow-y: auto; padding: 1.25rem; }

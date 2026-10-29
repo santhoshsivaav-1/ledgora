@@ -28,22 +28,35 @@ const MAX_PORT_SCAN = 50; // 47371 → 47420 is enough headroom for any conceiva
 
 const app = express();
 
-// v1.10.0 — CORS lockdown. Previously `app.use(cors())` echoed
-// Access-Control-Allow-Origin: *, which meant any site the user visited
-// could `fetch('http://localhost:47371/api/bills')` and read/wipe all
-// data. This is a local desktop-style app: legitimate callers either
-// have no Origin header (same-page fetch from our own served HTML,
-// browsers' XHR to localhost from about:blank tools, curl) or an
-// Origin pointing at http://localhost:<port>. Everything else is
-// rejected. The Vite dev server proxies /api → us so its origin is
-// also localhost.
+// Basic Auth (optional) — protects the online deployment if configured via env.
+const basicAuth = (req, res, next) => {
+  const user = process.env.BASIC_AUTH_USER;
+  const pass = process.env.BASIC_AUTH_PASS;
+  if (!user || !pass) return next();
+  const hdr = req.headers.authorization || '';
+  const [scheme, encoded] = hdr.split(' ');
+  if (scheme !== 'Basic' || !encoded) {
+    res.set('WWW-Authenticate', 'Basic realm="freegstbill"');
+    return res.status(401).send('Auth required');
+  }
+  const [u, p] = Buffer.from(encoded, 'base64').toString().split(':');
+  if (u === user && p === pass) return next();
+  res.set('WWW-Authenticate', 'Basic realm="freegstbill"');
+  return res.status(401).send('Bad credentials');
+};
+app.use(basicAuth);
+
+// v1.10.0 — CORS lockdown. Allows localhost and deployed cloud domains (Railway/custom domain).
 app.use((req, res, next) => {
   const origin = req.headers.origin;
+  const customOrigin = process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGIN || process.env.RAILWAY_PUBLIC_DOMAIN;
   const allow =
     !origin ||
     /^https?:\/\/localhost(:\d+)?$/i.test(origin) ||
     /^https?:\/\/127\.0\.0\.1(:\d+)?$/i.test(origin) ||
-    /^https?:\/\/\[::1\](:\d+)?$/i.test(origin);
+    /^https?:\/\/\[::1\](:\d+)?$/i.test(origin) ||
+    /^https?:\/\/.*\.up\.railway\.app$/i.test(origin) ||
+    (customOrigin && (origin.includes(customOrigin) || origin.endsWith(customOrigin)));
   if (!allow) {
     return res.status(403).json({ error: 'Cross-origin request refused' });
   }
@@ -1466,10 +1479,12 @@ process.on('unhandledRejection', (err) => logFatal(err, 'unhandledRejection'));
 // Bound to 127.0.0.1 explicitly so the server can NEVER be reached from the LAN —
 // every byte stays on the user's machine, which the privacy promise depends on.
 let activeServer = null;
+const BIND_HOST = process.env.HOST || (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production' || process.env.PORT ? '0.0.0.0' : '127.0.0.1');
+
 function startServer(port) {
-  const server = app.listen(port, '127.0.0.1', () => {
+  const server = app.listen(port, BIND_HOST, () => {
     activeServer = server;
-    console.log(`\n  Free GST Billing Software running at http://localhost:${port}`);
+    console.log(`\n  Free GST Billing Software running at http://${BIND_HOST}:${port}`);
     console.log(`  Data stored in: ${DATA_DIR}\n`);
   });
   server.on('error', (err) => {

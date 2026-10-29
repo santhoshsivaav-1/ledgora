@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart, LogOut } from 'lucide-react';
-import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients } from './store';
+import { getAllProfiles, saveProfile, saveBusinessProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients } from './store';
 import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
+import { listBusinesses, switchOrganization } from './services/session';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
 // Dashboard downloaded and parsed GSTReturns (1952), InvoiceGenerator
@@ -19,6 +20,7 @@ import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocal
 import Dashboard from './components/Dashboard';
 import InvoiceGenerator from './components/InvoiceGenerator';
 import SetupWizard from './components/SetupWizard';
+import BranchModal from './components/BranchModal';
 import { useSession } from './components/auth/SessionContext';
 import ToastContainer from './components/Toast';
 import ConfirmModalContainer from './components/ConfirmModal';
@@ -101,6 +103,15 @@ function App() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
+
+  // ---- Organization branches (signed-in accounts) ----
+  // When an account is signed in, the branch (business) list comes from the
+  // account server, not the local profiles: it is the same list for every
+  // device, and already filtered per member by row-level security. The local
+  // profile for a branch is still edited here (logo, payment accounts), and a
+  // branch switched to for the first time seeds a fresh profile its fields.
+  const [branches, setBranches] = useState(null); // null = never fetched (no account or server offline)
+  const [showBranchModal, setShowBranchModal] = useState(false);
 
   // ---- Notification centre ----
   // Computed from server data on app boot + every 10 minutes; tucked under a
@@ -343,6 +354,78 @@ function App() {
       getAllProfiles().then(setAllProfiles).catch(() => { });
     }
   }, [serverStatus]);
+
+  // Organization branches refresh whenever the switcher opens, so a branch someone
+  // else added (a teammate invites you to a second one) appears without a reload.
+  useEffect(() => {
+    if (!me || serverStatus !== 'online') return;
+    let live = true;
+    listBusinesses().then((r) => { if (live) setBranches(r.data || []); }).catch(() => { /* signed-out or offline: the legacy profile list still works */ });
+    return () => { live = false; };
+  }, [me, serverStatus, showProfileMenu]);
+
+  // A branch may not have a local profile yet (created on another device, or a
+  // teammate's copy of this business). Its fields already live on the server,
+  // so a profile is seeded from them — the logo, payment accounts and invoice
+  // history then fill in on this computer as the branch is used.
+  const branchMatchesProfile = (branch, bp) =>
+    (bp?.gstin && branch?.gstin && bp.gstin.toUpperCase() === branch.gstin.toUpperCase())
+    || ((bp?.businessName || '').trim().toLowerCase() === (branch?.name || '').trim().toLowerCase());
+
+  const profileFromBranch = (branch) => ({
+    businessName: branch.name,
+    gstin: branch.gstin || '',
+    state: branch.state || '',
+    address: branch.address || '',
+    city: branch.city || '',
+    pin: branch.pin || '',
+    phone: branch.phone || '',
+    email: branch.email || '',
+    country: branch.country || 'India',
+  });
+
+  // Switching to a branch: use the local profile saved for it when there is
+  // one; otherwise create it from the branch. Saving the seed first means the
+  // same match rule finds it next time.
+  const handleSwitchBranch = async (branch) => {
+    setShowProfileMenu(false);
+    let list = [];
+    try { list = (await getAllProfiles()) || []; } catch { /* profile storage offline: seed anyway */ }
+    const match = list.find((bp) => branchMatchesProfile(branch, bp));
+    if (match) { await handleSwitchProfile(match); return; }
+    const seed = profileFromBranch(branch);
+    try { await saveBusinessProfile(seed); } catch { /* old server down: the account copy is still saved */ }
+    try { await saveProfile(seed); } catch { /* same */ }
+    setAllProfiles(await getAllProfiles().catch(() => list));
+    setProfile(seed);
+  };
+
+  // Branch created from the Add Branch form: remember it here too and work in
+  // it right away, so the user can start invoicing from the new branch.
+  const handleBranchCreated = async (branch) => {
+    setShowBranchModal(false);
+    setBranches((prev) => [...(prev || []), branch]);
+    await handleSwitchBranch(branch);
+  };
+
+  const canManageBranches = !!me?.permissions?.includes('business:write');
+
+  // A user can belong to several organizations (their own workspace plus any
+  // they were invited to). Picking one moves the whole session: the active
+  // organization drives which branches and team the rest of the app sees, so
+  // the page reloads into it — the same result the account API gives everyone.
+  const handleSwitchOrg = async (organizationId) => {
+    if (!organizationId || organizationId === me?.organization?.id) return;
+    try {
+      await switchOrganization(organizationId);
+      window.location.reload();
+    } catch { /* not a member (can't happen — the list came from the server): stay where we are */ }
+  };
+
+  // Branches on the account with no profile saved on this computer. They are
+  // still numbered and legal (name/GSTIN/state come from the organization);
+  // the extras just start blank.
+  const extraBranches = (branches || []).filter((b) => !allProfiles.some((bp) => branchMatchesProfile(b, bp)));
 
   // Close profile menu on outside click
   useEffect(() => {
@@ -773,7 +856,18 @@ function App() {
           <div className="account-bar" title={me.user.email || me.user.phoneNumber || ''}>
             <span className="account-bar-who">
               <b>{me.user.name || me.user.email || me.user.phoneNumber}</b>
-              <span>{me.organization.name} · {me.role}</span>
+              {me.organizations?.length > 1 && (
+                <select
+                  className="org-switcher"
+                  value={me.organization.id}
+                  onChange={(e) => handleSwitchOrg(e.target.value)}
+                  title="Switch organization"
+                  aria-label="Switch organization"
+                >
+                  {me.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              )}
+              {me.organizations?.length <= 1 && <span>{me.organization.name} · {me.role}</span>}
             </span>
             <button type="button" className="account-bar-logout" onClick={signOut} title="Log out of this account">
               <LogOut size={15} /> Log out
@@ -784,13 +878,13 @@ function App() {
           <div className="profile-switcher-row">
             <button
               className="profile-switcher-btn"
-              onClick={() => allProfiles.length > 1 && setShowProfileMenu(v => !v)}
-              title={allProfiles.length > 1 ? 'Switch business profile' : profile?.businessName || 'My Business'}
-              style={{ cursor: allProfiles.length > 1 ? 'pointer' : 'default' }}
+              onClick={() => (allProfiles.length + extraBranches.length > 1) && setShowProfileMenu(v => !v)}
+              title={allProfiles.length + extraBranches.length > 1 ? 'Switch business / branch' : profile?.businessName || 'My Business'}
+              style={{ cursor: allProfiles.length + extraBranches.length > 1 ? 'pointer' : 'default' }}
             >
               <Building2 size={14} />
               <span className="profile-switcher-name">{profile?.businessName || 'My Business'}</span>
-              {allProfiles.length > 1 && <ChevronDown size={13} style={{ marginLeft: 'auto', opacity: 0.6 }} />}
+              {allProfiles.length + extraBranches.length > 1 && <ChevronDown size={13} style={{ marginLeft: 'auto', opacity: 0.6 }} />}
             </button>
             <button
               className="profile-switcher-edit"
@@ -811,6 +905,27 @@ function App() {
                   {bp.businessName}
                 </button>
               ))}
+              {extraBranches.map(b => (
+                <button
+                  key={b.id}
+                  className="profile-switcher-item"
+                  title={`${b.state || ''}${b.gstin ? ` · ${b.gstin}` : ''} — no details saved on this computer yet`}
+                  onClick={() => handleSwitchBranch(b)}
+                >
+                  {b.name}
+                  <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', opacity: 0.65 }}>
+                    {b.gstin ? `(${b.gstin})` : '(not set up here)'}
+                  </span>
+                </button>
+              ))}
+              {canManageBranches && (
+                <button
+                  className="profile-switcher-item profile-switcher-manage"
+                  onClick={() => { setShowProfileMenu(false); setShowBranchModal(true); }}
+                >
+                  <Plus size={12} style={{ display: 'inline' }} /> Add branch...
+                </button>
+              )}
               <button
                 className="profile-switcher-item profile-switcher-manage"
                 onClick={() => { setShowProfileMenu(false); setCurrentView('settings'); }}
@@ -932,7 +1047,7 @@ function App() {
             <IncomeTax key={businessKey} />
           )}
           {currentView === 'settings' && (
-            <SettingsView onSaved={(p) => setProfile(p)} />
+            <SettingsView onSaved={(p) => setProfile(p)} me={me} branches={branches} canManageBranches={canManageBranches} onAddBranch={() => setShowBranchModal(true)} />
           )}
         </Suspense>
         {/* Version + ledgora line: Dashboard only, so it never takes space on working screens. */}
@@ -1098,6 +1213,12 @@ function App() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Add a branch (organization accounts) — created on the account server,
+          then switched into so the user is invoicing from it immediately. */}
+      {showBranchModal && (
+        <BranchModal onClose={() => setShowBranchModal(false)} onCreated={handleBranchCreated} />
       )}
 
       <ToastContainer />
