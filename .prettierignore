@@ -1,0 +1,20 @@
+# Legacy code is migrated feature by feature (Phase 3); reformatting it now would
+# bury real changes in whitespace diffs. New packages and config ARE formatted.
+apps/web/src/
+apps/web/scripts/
+apps/web/public/
+apps/legacy-server/
+docs/
+docs-site/
+BLUEPRINT.md
+CHANGELOG.md
+README.md
+SECURITY.md
+pnpm-lock.yaml
+dist/
+data/
+Saved Invoices/
+Trash/
+.turbo/
+coverage/
+apps/web/vite.config.js

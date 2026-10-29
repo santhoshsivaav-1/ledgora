@@ -29,7 +29,7 @@ export default [
     body: `
 <section id="about">
 <h2>Free, and it stays free</h2>
-<p>Free GST Billing is built and maintained by <a href="${SITE.publisher.url}">ledgora</a> in India. No ads, no account, no locked features, and your invoices never leave your computer. The full source code is on <a href="${SITE.repo}">GitHub</a> under the MIT licence.</p>
+<p>Free GST Billing is built and maintained by <a href="${SITE.publisher.url}">ledgora</a> in India. No ads, no account, no locked features, and your invoices never leave your computer. The full source code is on <a href="${SITE.repo}">GitHub</a>.</p>
 <p>If it saves you time every month, you can help keep the fixes and new features coming.</p>
 </section>
 

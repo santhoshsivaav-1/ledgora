@@ -10,7 +10,6 @@ overview and feature list — everything below is the deep-dive material.
 | **[TAX_HELPER_PLAN.md](./TAX_HELPER_PLAN.md)** | Three-tier proposal for the v1.5.x **Income Tax Helper** feature — bank-statement CSV import, ITR Filing Summary PDF, optional ITR-4 JSON generation. Explains what's possible and what isn't given the IT Department portal's constraints. |
 
 > Looking for the version history? [CHANGELOG.md](../CHANGELOG.md) at the project root.
-> Looking for licence terms? [LICENSE](../LICENSE) at the project root.
 > Looking for installation? [Quick Start](../README.md#quick-start--installation) in the main README,
 > or the [User Guide](./USER_GUIDE.md#quick-start) for the step-by-step version.
 

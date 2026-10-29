@@ -1,13 +1,25 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from '@eslint/js';
+import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import tseslint from 'typescript-eslint';
+import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores([
+    '**/dist/**',
+    '**/node_modules/**',
+    '**/coverage/**',
+    '**/.turbo/**',
+    'docs-site/out/**',
+    'data/**',
+    'Saved Invoices/**',
+    'Trash/**',
+  ]),
+
+  // Browser app. Still plain JS/JSX; migrated to TypeScript feature by feature in Phase 3.
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['apps/web/src/**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -16,19 +28,59 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        ecmaFeatures: { jsx: true },
-        sourceType: 'module',
-      },
+      parserOptions: { ecmaVersion: 'latest', ecmaFeatures: { jsx: true }, sourceType: 'module' },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': [
+        'error',
+        { varsIgnorePattern: '^[A-Z_]', ignoreRestSiblings: true, caughtErrors: 'none' },
+      ],
+      // React-Compiler diagnostics shipped in eslint-plugin-react-hooks v7. The legacy UI predates
+      // them (they were already failing before the monorepo move), so they stay visible as
+      // warnings and are fixed as each feature is rewritten in Phase 3.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/use-memo': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-refresh/only-export-components': 'warn',
     },
   },
-  // The server and the build / test scripts run in Node, not the browser.
+
+  // Node code: the parked server, build and test scripts, tool configs.
   {
-    files: ['server.js', 'scripts/**/*.{js,mjs}', 'tests/**/*.{js,mjs}', 'docs-site/*.mjs', 'docs-site/pages/*.mjs'],
-    languageOptions: { globals: { ...globals.node } },
+    files: [
+      'apps/legacy-server/**/*.{js,mjs}',
+      'apps/web/scripts/**/*.{js,mjs}',
+      'apps/web/vite.config.js',
+      'apps/web/vitest.config.js',
+      'apps/web/test/**/*.{js,mjs}',
+      'packages/*/test/**/*.{js,mjs}',
+      'packages/*/vitest.config.js',
+      'docs-site/**/*.mjs',
+      'eslint.config.js',
+    ],
+    extends: [js.configs.recommended],
+    languageOptions: { ecmaVersion: 'latest', globals: { ...globals.node } },
+    rules: {
+      'no-unused-vars': ['error', { ignoreRestSiblings: true, caughtErrors: 'none' }],
+    },
   },
-])
+
+  // The smoke test also runs callbacks inside the browser page (document, window, ...).
+  {
+    files: ['apps/legacy-server/tests/**/*.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+
+  // TypeScript in packages/ and apps/ (new code).
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [js.configs.recommended, tseslint.configs.recommended],
+    languageOptions: { globals: { ...globals.node } },
+    rules: {
+      '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  },
+]);

@@ -47,7 +47,7 @@ export default [
 
 <section id="is-it-free">
 <h2>Is it really free?</h2>
-<p>Yes. It is open source under the MIT licence. There is no trial, no invoice limit, no feature that unlocks for money, and no advertising. The code is public on <a href="${SITE.repo}">GitHub</a>, so anyone can check what it does.</p>
+<p>Yes. It is open source. There is no trial, no invoice limit, no feature that unlocks for money, and no advertising. The code is public on <a href="${SITE.repo}">GitHub</a>, so anyone can check what it does.</p>
 </section>
 
 <section id="get-help">
