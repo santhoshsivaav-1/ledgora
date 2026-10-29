@@ -8,3 +8,5 @@ export * from './purchases.ts';
 export * from './recurring.ts';
 export * from './files.ts';
 export * from './platform.ts';
+export * from './permissions.ts';
+export * from './team.ts';

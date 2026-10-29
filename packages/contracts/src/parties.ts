@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalGstin, uuid, withStamps } from './common.ts';
+import { optionalGstin, patchOf, uuid, withStamps } from './common.ts';
 
 export const PARTY_KINDS = ['customer', 'supplier', 'both'] as const;
 
@@ -20,7 +20,7 @@ export const partyInput = z.object({
   extra: z.record(z.string(), z.unknown()).default({}),
 });
 export type PartyInput = z.infer<typeof partyInput>;
-export const partyPatch = partyInput.partial();
+export const partyPatch = patchOf(partyInput);
 export const party = partyInput.extend({ id: uuid, ...withStamps });
 export type Party = z.infer<typeof party>;
 export const partyListQuery = z.object({ kind: z.enum(PARTY_KINDS).optional() });

@@ -16,6 +16,7 @@ const STATUS: Record<Code, number> = {
   already_cancelled: 409,
   not_in_trash: 404,
   unprocessable: 422,
+  too_many_requests: 429,
   internal: 500,
 };
 

@@ -252,6 +252,9 @@ export function businessesModule({ route }: Registrar) {
         .insert(paymentAccounts)
         .values({ ...body, orgId, businessId: params.id })
         .returning();
+      await audit(tx, orgId, 'payment_account.create', 'payment_account', row.id, {
+        after: { label: row.label },
+      });
       return accountOut(row);
     },
   });
@@ -263,13 +266,16 @@ export function businessesModule({ route }: Registrar) {
     summary: 'Remove a payment account',
     params: idParam,
     response: okBody,
-    handler: async ({ tx, params }) => {
+    handler: async ({ tx, orgId, params }) => {
       const [row] = await tx
         .update(paymentAccounts)
         .set({ deletedAt: new Date() })
         .where(and(eq(paymentAccounts.id, params.id), isNull(paymentAccounts.deletedAt)))
         .returning();
       if (!row) throw notFound('Payment account');
+      await audit(tx, orgId, 'payment_account.delete', 'payment_account', row.id, {
+        before: { label: row.label },
+      });
       return { ok: true };
     },
   });

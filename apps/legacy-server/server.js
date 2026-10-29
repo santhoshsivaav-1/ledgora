@@ -3,7 +3,6 @@ import express from 'express';
 // middleware below is intentionally custom + strict (localhost only)
 // where `cors()` echoed `*` for every origin.
 import fs from 'fs';
-import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 // v1.10.31 — Data-F3.1: share computeInvoiceTotals with the client so
@@ -522,20 +521,19 @@ app.delete('/api/profiles/:id', (req, res) => {
 // ========================
 const META_PATH = path.join(DATA_DIR, 'meta.json');
 
-// v1.10.77 (#84) - the PIN lock lives in meta.json too, but only the
-// /api/lock routes below may read or change it.
-const LOCK_KEY = 'appLock';
-const withoutLock = (meta) => { const { [LOCK_KEY]: _lock, ...rest } = meta || {}; return rest; };
-const withLock = (meta, lock) => (lock ? { ...withoutLock(meta), [LOCK_KEY]: lock } : withoutLock(meta));
+// v2.13 - the PIN lock is gone (accounts replace it). An old hash left in meta.json is wiped once, here, so it can
+// never be read through /api/meta or end up in an export.
+{
+  const leftover = readJSON(META_PATH, null);
+  if (leftover && 'appLock' in leftover) { delete leftover.appLock; writeJSON(META_PATH, leftover); }
+}
 
 app.get('/api/meta/:key', (req, res) => {
-  if (req.params.key === LOCK_KEY) return errRes(res, 403, 'forbidden');
   const meta = readJSON(META_PATH, {});
   res.json({ value: meta[req.params.key] ?? null });
 });
 
 app.post('/api/meta/:key', (req, res) => {
-  if (req.params.key === LOCK_KEY) return errRes(res, 403, 'forbidden');
   if (!req.body || !('value' in req.body)) return errRes(res, 400, 'bad-request');
   const meta = readJSON(META_PATH, {});
   meta[req.params.key] = req.body.value;
@@ -549,7 +547,6 @@ app.post('/api/meta/:key', (req, res) => {
 // race-free across concurrent HTTP requests. Closes the
 // "two saves both reading 5, both writing 6" duplicate-invoice-number bug.
 app.post('/api/meta/:key/increment', (req, res) => {
-  if (req.params.key === LOCK_KEY) return errRes(res, 403, 'forbidden');
   const meta = readJSON(META_PATH, {});
   // v1.10.78 (#93) - a tax invoice sends its start ("Start numbering from");
   // see nextCounterValue. Nothing else jumps.
@@ -583,77 +580,6 @@ app.post(LOCAL_PREFS_ROUTE, express.json({ limit: '25mb' }), (req, res) => {
 });
 
 // ========================
-// PIN LOCK (v1.10.77, #84)
-// ========================
-// Optional 6 or 8 digit PIN asked when the app opens. It is a screen lock for
-// a shared PC, not encryption: the data files stay as they are, and the
-// server still answers this PC only (127.0.0.1). Only a salted scrypt hash is
-// stored. Forgotten PIN: put a file named RESET-PIN (or RESET-PIN.txt) in the
-// app folder; the next check removes the PIN and the file.
-const PIN_RE = /^(\d{6}|\d{8})$/;
-const RESET_PIN_FILES = [path.join(REPO_ROOT, '..'), REPO_ROOT]
-  .flatMap((dir) => ['RESET-PIN', 'RESET-PIN.txt'].map((n) => path.join(dir, n)));
-const pinHash = (pin, salt) => crypto.scryptSync(String(pin), salt, 32).toString('hex');
-const pinMatches = (lock, pin) => {
-  if (!lock?.salt || !lock?.hash || !PIN_RE.test(String(pin ?? ''))) return false;
-  const a = Buffer.from(pinHash(pin, lock.salt), 'hex');
-  const b = Buffer.from(lock.hash, 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-};
-// Five wrong PINs in a row -> wait 30 seconds before the next try.
-const pinTries = { wrong: 0, until: 0 };
-const currentLock = () => {
-  const meta = readJSON(META_PATH, {});
-  const reset = RESET_PIN_FILES.filter((f) => fs.existsSync(f));
-  if (reset.length) {
-    if (meta[LOCK_KEY]) { delete meta[LOCK_KEY]; writeJSON(META_PATH, meta); }
-    for (const f of reset) { try { fs.unlinkSync(f); } catch { /* removed already */ } }
-    console.log('[lock] RESET-PIN file found: PIN lock removed');
-    return null;
-  }
-  return meta[LOCK_KEY] || null;
-};
-// Checks a PIN; answers the response itself (and returns false) when it is
-// wrong or the user must wait.
-const checkPin = (res, lock, pin) => {
-  const wait = Math.ceil((pinTries.until - Date.now()) / 1000);
-  if (wait > 0) { res.status(429).json({ ok: false, wait }); return false; }
-  if (pinMatches(lock, pin)) { pinTries.wrong = 0; return true; }
-  pinTries.wrong += 1;
-  if (pinTries.wrong >= 5) { pinTries.wrong = 0; pinTries.until = Date.now() + 30000; }
-  res.status(401).json({ ok: false, error: 'wrong-pin' });
-  return false;
-};
-
-app.get('/api/lock', (req, res) => {
-  const lock = currentLock();
-  res.json({ enabled: !!lock, length: lock?.length || 0 });
-});
-
-app.post('/api/lock/verify', (req, res) => {
-  const lock = currentLock();
-  if (!lock) return res.json({ ok: true });
-  if (checkPin(res, lock, req.body?.pin)) res.json({ ok: true });
-});
-
-// Turn on, change ({ pin }) or turn off ({ pin: null }). When a PIN is
-// already set, the current one must come with it.
-app.post('/api/lock/set', (req, res) => {
-  const { pin, currentPin } = req.body || {};
-  if (pin !== null && !PIN_RE.test(String(pin ?? ''))) return errRes(res, 400, 'bad-request');
-  const lock = currentLock();
-  if (lock && !checkPin(res, lock, currentPin)) return undefined;
-  const meta = readJSON(META_PATH, {});
-  if (pin === null) delete meta[LOCK_KEY];
-  else {
-    const salt = crypto.randomBytes(16).toString('hex');
-    meta[LOCK_KEY] = { salt, hash: pinHash(pin, salt), length: String(pin).length };
-  }
-  writeJSON(META_PATH, meta);
-  return res.json({ ok: true, enabled: pin !== null });
-});
-
-// ========================
 // EXPORT / IMPORT
 // ========================
 app.get('/api/export', (req, res) => {
@@ -668,8 +594,7 @@ app.get('/api/export', (req, res) => {
     receipts: readAllFromDir('receipts'),
     profiles: readAllFromDir('profiles'),
     purchases: readAllFromDir('purchases'),
-    // v1.10.77 - never the PIN hash: a backup file can travel (email, Drive).
-    meta: withoutLock(readJSON(META_PATH, {})),
+    meta: readJSON(META_PATH, {}),
     exportedAt: new Date().toISOString(),
   };
   res.json(data);
@@ -730,9 +655,8 @@ app.post('/api/import', (req, res) => {
   // regress below existing bill numbers → collision loop on next save.
   if (data.meta) {
     if (overwrite || !fs.existsSync(META_PATH)) {
-      // The PIN on this PC stays as it is: a backup never sets, removes or
-      // brings back an old PIN.
-      writeJSON(META_PATH, withLock(withoutLock(data.meta), readJSON(META_PATH, {})[LOCK_KEY]));
+      const { appLock: _oldPin, ...cleanMeta } = data.meta; // a backup made before 2.13 may carry a PIN hash
+      writeJSON(META_PATH, cleanMeta);
     } else {
       // v1.10.79 (#95) - a merge keeps what is here and adds the backup's own
       // number series and the higher of each counter, so no number is reused.
@@ -1218,9 +1142,7 @@ app.post('/api/backups/:date/restore', (req, res) => {
       return errRes(res, 400, 'bad-request');
     }
 
-    // The PIN on this PC survives the restore (see withLock), and so does the
-    // backup folder setting (the backup may be older than it).
-    const lockBefore = readJSON(META_PATH, {})[LOCK_KEY];
+    // The backup folder setting survives the restore (the backup may be older than it).
     const backupFolderBefore = readJSON(META_PATH, {})[BACKUP_FOLDER_KEY];
 
     // Make a snapshot of live data before touching anything.
@@ -1251,7 +1173,7 @@ app.post('/api/backups/:date/restore', (req, res) => {
       restoredDirs.push(entry.name);
     }
     {
-      const restoredMeta = withLock(readJSON(META_PATH, {}), lockBefore);
+      const { appLock: _oldPin, ...restoredMeta } = readJSON(META_PATH, {});
       if (backupFolderBefore) restoredMeta[BACKUP_FOLDER_KEY] = backupFolderBefore;
       else delete restoredMeta[BACKUP_FOLDER_KEY];
       writeJSON(META_PATH, restoredMeta);

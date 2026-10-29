@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { uuid, withStamps } from './common.ts';
+import { patchOf, uuid, withStamps } from './common.ts';
 
 export const itemInput = z.object({
   name: z.string().trim().min(1).max(200),
@@ -16,7 +16,7 @@ export const itemInput = z.object({
   extra: z.record(z.string(), z.unknown()).default({}),
 });
 export type ItemInput = z.infer<typeof itemInput>;
-export const itemPatch = itemInput.omit({ openingStock: true }).partial();
+export const itemPatch = patchOf(itemInput.omit({ openingStock: true }));
 export const item = itemInput
   .omit({ openingStock: true })
   .extend({ id: uuid, stock: z.number(), ...withStamps });

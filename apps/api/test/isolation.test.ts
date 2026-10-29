@@ -181,14 +181,18 @@ describe('isolation through the API', () => {
     expect((await b.call('GET', `/v1/files/${up.body.fileId}/download-url`)).status).toBe(404);
   });
 
-  it('requests without an organization are refused', async () => {
-    const res = await h.app.request('/v1/parties');
-    expect(res.status).toBe(401);
-    expect(((await res.json()) as any).error.code).toBe('unauthorized');
-    const bad = await h.app.request('/v1/parties', { headers: { 'x-org-id': 'not-a-uuid' } });
-    expect(bad.status).toBe(400);
-    const unknown = await h.app.request('/v1/parties', { headers: { 'x-org-id': randomUUID() } });
-    expect(unknown.status).toBe(200);
-    expect(((await unknown.json()) as any).data).toEqual([]);
+  it('requests without a session, or for an organization you do not belong to, are refused', async () => {
+    const anon = await h.app.request('/v1/parties');
+    expect(anon.status).toBe(401);
+    expect(((await anon.json()) as any).error.code).toBe('unauthorized');
+    // An x-org-id header can only pick between organizations you are a member of.
+    expect(
+      (await a.call('GET', '/v1/parties', undefined, { 'x-org-id': 'not-a-uuid' })).status,
+    ).toBe(400);
+    const foreign = await a.call('GET', '/v1/parties', undefined, { 'x-org-id': b.orgId });
+    expect(foreign.status).toBe(403);
+    const invented = await a.call('GET', '/v1/parties', undefined, { 'x-org-id': randomUUID() });
+    expect(invented.status).toBe(403);
+    expect(invented.body.error.message).toBe(foreign.body.error.message); // does not reveal which ids exist
   });
 });

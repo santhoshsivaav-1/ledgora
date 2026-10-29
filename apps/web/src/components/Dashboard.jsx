@@ -5,7 +5,6 @@ import { getAllBills, saveBill, getAllProducts, applyStockChanges, getProfile, g
 import { formatCurrency, INVOICE_TYPES, getFYOptions, numberToWords, belongsToProfile, salesSign, isCancelledBill, markPaidPatch, markUnpaidPatch, stockEffect, appliedStock, stockDelta, SALES_INVOICE_TYPES, localToday, amountDue, paymentStatusFor } from '../utils';
 import { openWhatsAppShare } from '../utils/share';
 import PageHeader from './PageHeader';
-import LockButton from './LockButton';
 import ActionsMenu from './ActionsMenu';
 import BulkCsvImport from './BulkCsvImport';
 import PrintPreviewModal from './PrintPreviewModal';
@@ -1231,7 +1230,6 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
             <li><strong>Low-stock alert</strong> — appears when any product is at or below your threshold (Settings → Stock alert).</li>
           </ul>
         </HelpButton>
-        <LockButton />
         <BulkCsvImport kind="sales" onDone={loadBills} />
         <button className="btn btn-primary" onClick={onNew}><Plus size={18} /> New Invoice</button>
       </PageHeader>

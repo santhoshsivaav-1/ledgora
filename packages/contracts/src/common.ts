@@ -24,6 +24,7 @@ export const ERROR_CODES = [
   'already_cancelled',
   'not_in_trash',
   'unprocessable',
+  'too_many_requests',
   'internal',
 ] as const;
 export const errorBody = z.object({
@@ -45,6 +46,22 @@ export type PageQuery = z.infer<typeof pageQuery>;
 
 export const page = <T extends z.ZodType>(item: T) =>
   z.object({ data: z.array(item), nextCursor: z.string().nullable() });
+
+/**
+ * A PATCH body: every field optional and, unlike zod's .partial(), WITHOUT its default. With .partial() a field that is
+ * left out comes back as its default (isDefault false, address '', ...) and the update would overwrite saved data.
+ */
+export function patchOf<T extends z.ZodObject>(schema: T) {
+  const shape = Object.fromEntries(
+    Object.entries(schema.shape).map(([k, v]) => [
+      k,
+      ((v instanceof z.ZodDefault ? v.unwrap() : v) as z.ZodType).optional(),
+    ]),
+  );
+  return z.object(shape) as unknown as z.ZodObject<{
+    [K in keyof T['shape']]: z.ZodOptional<T['shape'][K]>;
+  }>;
+}
 
 export const idParam = z.object({ id: uuid });
 export const okBody = z.object({ ok: z.literal(true) });

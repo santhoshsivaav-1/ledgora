@@ -62,22 +62,22 @@ export function buildOpenApi(routes: DocumentedRoute[], version: string) {
       title: 'Ledgora API',
       version,
       description:
-        'Multi-tenant GST billing API. Until login ships (Phase 2) every request names its organization in the `x-org-id` header. ' +
+        'Multi-tenant GST billing API. Sign in with POST /v1/auth/sign-in/email (or a phone OTP) and the browser keeps the session cookie; /v1/console is a small page that does this for you. ' +
         'Errors always look like `{ "error": { "code", "message", "details?" } }`. Lists use cursor pagination: pass `nextCursor` back as `cursor`.',
     },
     servers: [{ url: '/' }],
     components: {
       securitySchemes: {
-        orgHeader: {
+        session: {
           type: 'apiKey',
-          in: 'header',
-          name: 'x-org-id',
+          in: 'cookie',
+          name: 'better-auth.session_token',
           description:
-            'Organization id (dev only, until login ships in Phase 2). The demo organization is 00000000-0000-4000-8000-000000000001.',
+            'Session cookie set when you sign in. In Swagger UI, sign in on /v1/console first: the browser then sends the cookie for you.',
         },
       },
     },
-    security: [{ orgHeader: [] }],
+    security: [{ session: [] }],
     paths,
   };
 }
@@ -90,5 +90,5 @@ export const docsHtml = `<!doctype html>
 <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css"></head>
 <body><div id="ui"></div>
 <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
-<script>SwaggerUIBundle({ url: '/v1/openapi.json', dom_id: '#ui', deepLinking: true, persistAuthorization: true, onComplete: function (ui) { ui.preauthorizeApiKey('orgHeader', '00000000-0000-4000-8000-000000000001'); } });</script>
+<script>SwaggerUIBundle({ url: '/v1/openapi.json', dom_id: '#ui', deepLinking: true });</script>
 </body></html>`;

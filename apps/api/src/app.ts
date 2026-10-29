@@ -1,9 +1,15 @@
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { sql } from 'drizzle-orm';
 import { health } from '@ledgora/contracts';
 import pkg from '../package.json' with { type: 'json' };
+import { createAuth } from './auth/auth.ts';
+import { consoleHtml } from './console.ts';
 import { errorHandler, notFoundHandler } from './errors.ts';
+import { getOutbox } from './mail/index.ts';
+import { applySecurity } from './security.ts';
+import { accountModule } from './modules/account.ts';
+import { membersModule } from './modules/members.ts';
+import { onboardingModule } from './modules/onboarding/routes.ts';
 import { createRegistrar, type Deps } from './http.ts';
 import { buildOpenApi, docsHtml } from './openapi.ts';
 import { businessesModule } from './modules/businesses.ts';
@@ -20,24 +26,15 @@ import { transferModule } from './modules/transfer.ts';
 
 const startedAt = Date.now();
 
-export function createApp(deps: Deps) {
+export function createApp(base: Omit<Deps, 'auth'>) {
+  const deps: Deps = { ...base, auth: createAuth(base.db, base.env) };
   const app = new Hono();
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
-  app.use(
-    '*',
-    cors({
-      origin: [deps.env.APP_URL],
-      allowHeaders: ['content-type', 'x-org-id', 'authorization'],
-      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      maxAge: 600,
-    }),
-  );
-  app.use('*', async (c, next) => {
-    await next();
-    c.header('x-content-type-options', 'nosniff');
-    c.header('cache-control', 'no-store');
-  });
+  applySecurity(app, deps.env);
+
+  // Better Auth owns everything under /v1/auth: sign-up, sign-in, OTP, 2FA, password reset, Google.
+  app.on(['GET', 'POST'], '/v1/auth/*', (c) => deps.auth.handler(c.req.raw));
 
   const reg = createRegistrar(app, deps);
   const { route } = reg;
@@ -48,7 +45,7 @@ export function createApp(deps: Deps) {
     tag: 'System',
     summary: 'Is the API up, and can it reach the database',
     response: health,
-    tenant: false,
+    access: 'public',
     handler: async ({ tx, c }) => {
       let db = false;
       try {
@@ -68,6 +65,9 @@ export function createApp(deps: Deps) {
   });
 
   for (const mod of [
+    accountModule,
+    membersModule,
+    onboardingModule,
     businessesModule,
     partiesModule,
     itemsModule,
@@ -85,5 +85,10 @@ export function createApp(deps: Deps) {
 
   app.get('/v1/openapi.json', (c) => c.json(buildOpenApi(reg.documented, pkg.version)));
   app.get('/v1/docs', (c) => c.html(docsHtml));
+  if (deps.env.NODE_ENV !== 'production') {
+    app.get('/v1/console', (c) => c.html(consoleHtml));
+    // Mail and SMS "sent" in development, so a sign-up can be finished without a mail provider.
+    app.get('/v1/dev/outbox', (c) => c.json({ data: [...getOutbox()].reverse() }));
+  }
   return app;
 }

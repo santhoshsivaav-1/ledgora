@@ -23,11 +23,6 @@ async function apiFetch(url, options = {}) {
   return res.json();
 }
 
-// ---- PIN lock (v1.10.77, #84; checked by the server, see AppLock.jsx) ----
-export const getLockStatus = () => apiFetch(`${API}/lock`);
-export const verifyPin = (pin) => apiFetch(`${API}/lock/verify`, { method: 'POST', body: JSON.stringify({ pin }) });
-// pin null turns the lock off. currentPin is needed when a PIN is already set.
-export const setLockPin = (pin, currentPin) => apiFetch(`${API}/lock/set`, { method: 'POST', body: JSON.stringify({ pin, currentPin }) });
 
 // ---- Invoice Number Settings ----
 const DEFAULT_INV_SETTINGS = {

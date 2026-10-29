@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart } from 'lucide-react';
-import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, getLockStatus } from './store';
+import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart, LogOut } from 'lucide-react';
+import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients } from './store';
 import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
@@ -19,6 +19,7 @@ import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocal
 import Dashboard from './components/Dashboard';
 import InvoiceGenerator from './components/InvoiceGenerator';
 import SetupWizard from './components/SetupWizard';
+import { useSession } from './components/auth/SessionContext';
 import ToastContainer from './components/Toast';
 import ConfirmModalContainer from './components/ConfirmModal';
 import WelcomeGuide from './components/WelcomeGuide';
@@ -33,8 +34,6 @@ const GSTReturns = lazy(() => import('./components/GSTReturns'));
 const IncomeTax = lazy(() => import('./components/IncomeTax'));
 const PurchaseBills = lazy(() => import('./components/PurchaseBills'));
 import AppFooter from './components/AppFooter';
-import LockButton from './components/LockButton';
-import { lockNow } from './utils/appLock';
 import { getPrintSettings } from './utils/printSettings';
 
 const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
@@ -57,6 +56,7 @@ function ViewLoading() {
 }
 
 function App() {
+  const { me, signOut } = useSession();
   // v1.9.3 — Setup Wizard shown on first-run (before onboardingComplete = true)
   const [showWizard, setShowWizard] = useState(() => {
     try { return !getPrintSettings().onboardingComplete; } catch { return false; }
@@ -583,10 +583,6 @@ function App() {
       } else if (e.key === '/') {
         e.preventDefault();
         setShowShortcutsHelp(s => !s);
-      } else if ((e.key === 'l' || e.key === 'L') && e.shiftKey) {
-        // v1.10.80 (#98) - lock now; does nothing when no PIN is set.
-        e.preventDefault();
-        getLockStatus().then((st) => { if (st?.enabled) lockNow(); }).catch(() => { });
       } else if ((e.key === 'n' || e.key === 'N') && !editable) {
         e.preventDefault();
         handleNewInvoice();
@@ -773,6 +769,17 @@ function App() {
           </button>
         </div>
 
+        {me && (
+          <div className="account-bar" title={me.user.email || me.user.phoneNumber || ''}>
+            <span className="account-bar-who">
+              <b>{me.user.name || me.user.email || me.user.phoneNumber}</b>
+              <span>{me.organization.name} · {me.role}</span>
+            </span>
+            <button type="button" className="account-bar-logout" onClick={signOut} title="Log out of this account">
+              <LogOut size={15} /> Log out
+            </button>
+          </div>
+        )}
         <div className="profile-switcher" ref={profileMenuRef} style={{ position: 'relative' }}>
           <div className="profile-switcher-row">
             <button
@@ -846,8 +853,6 @@ function App() {
                 }}>{notifTotal > 99 ? '99+' : notifTotal}</span>
               )}
             </button>
-            {/* v1.10.80 (#98) - only when a PIN is set. */}
-            <LockButton className="nav-btn" label="Lock app" />
             <button
               className="nav-btn"
               onClick={() => setDarkMode(!darkMode)}
@@ -1084,7 +1089,6 @@ function App() {
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>N</kbd></td><td>New invoice</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>S</kbd></td><td>Save current invoice (when on the invoice form)</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>P</kbd></td><td>Download PDF (when on the invoice form)</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>L</kbd></td><td>Lock the app (when a PIN is set)</td></tr>
                 <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>/</kbd></td><td>Toggle this help</td></tr>
                 <tr><td><kbd>Esc</kbd></td><td>Close any open modal</td></tr>
               </tbody>

@@ -6,3 +6,4 @@ export * from './sales.ts';
 export * from './payments.ts';
 export * from './purchases.ts';
 export * from './recurring.ts';
+export * from './auth.ts';

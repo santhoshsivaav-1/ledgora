@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalGstin, uuid, withStamps } from './common.ts';
+import { optionalGstin, patchOf, uuid, withStamps } from './common.ts';
 
 export const businessInput = z.object({
   name: z.string().trim().min(1).max(200),
@@ -18,7 +18,7 @@ export const businessInput = z.object({
   isDefault: z.boolean().default(false),
 });
 export type BusinessInput = z.infer<typeof businessInput>;
-export const businessPatch = businessInput.partial();
+export const businessPatch = patchOf(businessInput);
 export const business = businessInput.extend({ id: uuid, ...withStamps });
 export type Business = z.infer<typeof business>;
 

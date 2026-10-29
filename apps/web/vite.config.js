@@ -11,6 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The legacy Express server listens on 47371 unless API_PORT says otherwise.
 const apiPort = Number(process.env.API_PORT) || 47371;
+// The new account/billing API (apps/api). Requests to /v1 go through this proxy so the browser sees ONE origin and the
+// session cookie works without any CORS setup.
+const accountApiPort = Number(process.env.API_LISTEN_PORT) || 4000;
 
 export default defineConfig({
   // Vite source root lives in src/ rather than the project root. Reason:
@@ -136,7 +139,7 @@ export default defineConfig({
           '**/assets/index.es-*.js',
         ],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/v1\//],
         // v1.10.33 — Was `false` on both. Kept the prompt-mode reload
         // deferral in main.jsx but flipped these to true because:
         //   1. skipWaiting=true lets the new SW take over on install
@@ -243,7 +246,11 @@ export default defineConfig({
       '/api': {
         target: `http://localhost:${apiPort}`,
         changeOrigin: true,
-      }
+      },
+      '/v1': {
+        target: `http://localhost:${accountApiPort}`,
+        changeOrigin: true,
+      },
     }
   }
 })

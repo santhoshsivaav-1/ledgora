@@ -15,7 +15,6 @@ import { toast } from './Toast';
 import { confirmAction } from './ConfirmModal';
 import PrintSettings from './PrintSettings';
 import HelpButton from './HelpButton';
-import AppLockSettings from './AppLockSettings';
 import InvoiceNumberSettings from './InvoiceNumberSettings';
 import { getBackupsList, restoreBackup, triggerBackup, deleteBackup, getTrashedBills, restoreTrashedBill, purgeTrashedBill, saveBill, applyStockChanges, getBackupFolder, setBackupFolder } from '../store';
 
@@ -30,7 +29,6 @@ const JUMP_NAV_SECTIONS = [
   ['section-modules',  'Features'],
   ['section-stock',    'Stock'],
   ['section-region',   'Region'],
-  ['section-lock',     'App lock'],
   ['section-backups',  'Backups'],
   ['section-cloud',    'Google Drive'],
   ['section-data',     'Import/Export'],
@@ -1068,11 +1066,6 @@ export default function SettingsView({ onSaved }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* v1.10.77 (#84) - optional PIN lock. Same order as Region, so it sits right after it. */}
-      <div id="section-lock" className="glass-panel p-6 mb-6" style={{ order: 7 }}>
-        <AppLockSettings />
       </div>
 
       {/* ---- Business Profile ---- */}

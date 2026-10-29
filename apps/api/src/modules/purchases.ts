@@ -337,6 +337,7 @@ export function purchasesModule({ route }: Registrar) {
         .insert(expenseCategories)
         .values({ ...body, orgId })
         .returning();
+      await audit(tx, orgId, 'expense_category.create', 'expense_category', c.id, { after: body });
       return { id: c.id, name: c.name };
     },
   });

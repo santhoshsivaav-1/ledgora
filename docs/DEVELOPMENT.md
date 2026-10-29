@@ -95,8 +95,21 @@ point `DATABASE_URL` at it. The migration role needs `CREATEROLE` once, to creat
 
 - **See it:** open http://localhost:4000/v1/docs (Swagger UI, pre-signed in as the demo organization), or
   `curl localhost:4000/health`.
-- **Who is calling:** login arrives in Phase 2. Until then every request names its organization in the
-  `x-org-id` header (`DEV_ORG_ID` in `.env` is the fallback). A production process refuses this.
+- **Accounts (Phase 2):** open http://localhost:4000/v1/console. It signs up and signs in (e-mail or phone OTP),
+  turns on two-factor, shows who you are and what your role may do, invites teammates, lists and ends sessions,
+  and shows the audit trail. Mail and SMS the API "sends" show in its outbox panel (development only), so you can
+  finish a sign-up without a mail provider. With Docker, uncomment `SMTP_URL` and read mail in Mailpit instead.
+- **Sign-in in the main app:** `pnpm dev` starts the API, the legacy server and Vite together. Open
+  http://localhost:5173: signed-out visitors see the sign-in screen (e-mail, phone code, create account, forgot
+  password, two-step code), a new account gets the business form (the GSTIN must match the state), and the sidebar has
+  **Log out** at the top. Vite forwards `/v1` to the API, so the browser sees one origin and the session cookie just
+  works. `apps/web/scripts/auth-e2e.mjs` drives all of it in Firefox (read its header first: it writes to the legacy
+  server it talks to).
+- **Who is calling:** every `/v1` route needs a session cookie (Better Auth) and an organization the user belongs
+  to. The chain is `requireSession` -> `requireOrg` -> `requirePermission` -> `requireFeature`
+  (`apps/api/src/middleware`). `x-org-id` may pick another organization, but only one you are a member of.
+- **Roles:** `packages/contracts/src/permissions.ts` lists the permissions and the 7 built-in roles; a route's
+  permission comes from its method and path, or from `permission:` in the route definition.
 - **Tenant safety:** each request runs in one transaction as the `app_user` role with
   `app.org_id` set, and every table has a forced `tenant_isolation` policy. Never query with a plain
   connection in request code; use `withTenant()` (the route helper does this for you).

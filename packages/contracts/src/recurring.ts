@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, uuid, withStamps } from './common.ts';
+import { isoDate, patchOf, uuid, withStamps } from './common.ts';
 import { invoiceInput } from './invoices.ts';
 
 export const FREQUENCIES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
@@ -28,7 +28,7 @@ export const recurringInput = z.object({
   }),
 });
 export type RecurringInput = z.infer<typeof recurringInput>;
-export const recurringPatch = recurringInput.partial();
+export const recurringPatch = patchOf(recurringInput);
 export const recurring = recurringInput.extend({
   id: uuid,
   occurrencesCreated: z.number().int(),

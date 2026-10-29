@@ -14,6 +14,17 @@ const server = serve({ fetch: app.fetch, port: env.API_LISTEN_PORT }, (info) => 
   console.log(`Ledgora API on http://localhost:${info.port}  (docs: /v1/docs, health: /health)`);
 });
 
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${env.API_LISTEN_PORT} is already in use, probably by another copy of this API.\n` +
+        `Stop it (lsof -i :${env.API_LISTEN_PORT} shows the process) or set API_LISTEN_PORT in .env to a free port.`,
+    );
+    process.exit(1);
+  }
+  throw err;
+});
+
 async function shutdown(signal: string) {
   console.log(`${signal}: finishing background jobs and closing`);
   server.close();

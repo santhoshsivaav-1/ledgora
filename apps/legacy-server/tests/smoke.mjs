@@ -81,8 +81,6 @@ async function cleanup(page) {
       await del('receipts');
       await del('recurring');
       await del('templates');
-      // v1.10.77 - a PIN this suite set must never stay on the user's app.
-      await fetch('/api/lock/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: null, currentPin: '13572468' }) });
       // The expense added through the form gets a generated id.
       const expenses = await (await fetch('/api/expenses')).json();
       await Promise.all((expenses || [])
@@ -1540,19 +1538,12 @@ try {
       await dismissFirstRun(page);
     };
 
-    // #84 optional PIN lock
-    await post77('/api/lock/set', { pin: '13572468' });
-    await page.evaluate(() => sessionStorage.removeItem('gst_unlocked'));
+    // 2.13 the PIN lock is gone: no lock endpoints and no lock screen on open
     await page.reload({ waitUntil: 'networkidle' });
     await sleep(2000);
-    const locked = await page.getByText('Enter your PIN').isVisible().catch(() => false);
-    const metaRefused = (await get77('/api/meta/appLock')).status === 403;
-    await page.getByLabel('8 digit PIN').fill('13572468').catch(() => {});
-    await sleep(2500);
-    const unlocked = !(await page.getByText('Enter your PIN').count()) && (await page.locator('.sidebar').count()) > 0;
-    const off = (await post77('/api/lock/set', { pin: null, currentPin: '13572468' })).status === 200;
-    check('v77 #84 PIN lock: asked on open, opens with the right PIN, hash not readable, turns off', locked && unlocked && metaRefused && off,
-      JSON.stringify({ locked, unlocked, metaRefused, off }));
+    const lockGone = (await get77('/api/lock')).status === 404 && (await post77('/api/lock/set', { pin: '13572468' })).status === 404;
+    const noScreen = !(await page.getByText('Enter your PIN').count()) && (await page.locator('.sidebar').count()) > 0;
+    check('v2.13 PIN lock removed: no /api/lock routes, the app opens without a PIN screen', lockGone && noScreen, JSON.stringify({ lockGone, noScreen }));
     await dismissFirstRun(page);
 
     // #84 settings are kept in the data folder too, so a browser that loses

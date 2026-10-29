@@ -5,6 +5,10 @@ import { base } from './common.ts';
 export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  /** Better Auth's organization plugin reads these two; the app does not use them yet. */
+  slug: text('slug').unique(),
+  logo: text('logo'),
+  metadata: text('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -36,6 +40,7 @@ export const auditLog = pgTable(
   {
     ...base(),
     actorId: text('actor_id'),
+    ip: text('ip'),
     action: text('action').notNull(), // invoice.create, invoice.cancel, party.delete, ...
     entityType: text('entity_type').notNull(),
     entityId: uuid('entity_id'),

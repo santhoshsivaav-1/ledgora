@@ -6,12 +6,22 @@ import { withTenant, type Database, type Tx } from '@ledgora/db';
 import type { AppEnv } from './env.ts';
 import { AppError, validationError } from './errors.ts';
 import type { Storage } from './storage.ts';
+import type { Auth } from './auth/auth.ts';
+import {
+  requireFeature,
+  requireOrg,
+  requirePermission,
+  requireSession,
+  type OrgContext,
+} from './middleware/index.ts';
+import type { Permission } from '@ledgora/contracts';
 
 /** What every module gets: the pool, the settings and file storage. */
 export interface Deps {
   db: Database;
   env: AppEnv;
   storage: Storage;
+  auth: Auth;
 }
 
 export interface RouteSpec<
@@ -30,11 +40,20 @@ export interface RouteSpec<
   response?: R;
   /** 201 for creates, 202 for background jobs. Default 200. */
   status?: 200 | 201 | 202;
-  /** false = the handler does not need a tenant (health, signed file URLs). */
-  tenant?: boolean;
+  /**
+   * Who may call. 'org' (default) runs the whole chain: session, organization, permission, feature, and the handler
+   * gets a tenant transaction. 'session' needs only a signed-in user (account pages, accepting an invitation) and gets
+   * an owner transaction for the auth tables. 'public' needs nothing (health).
+   */
+  access?: 'org' | 'session' | 'public';
+  /** Overrides the permission the path would imply (null = any member). */
+  permission?: Permission | null;
+  /** Plan feature the route belongs to; checked by requireFeature once billing exists (change 4.4). */
+  feature?: string;
   handler: (a: {
     tx: Tx;
     orgId: string;
+    auth: OrgContext;
     params: z.infer<P>;
     query: z.infer<Q>;
     body: z.infer<B>;
@@ -56,23 +75,6 @@ export interface DocumentedRoute {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Who is calling. Login arrives in Phase 2; until then the organization comes from the `x-org-id` header, or from
- * DEV_ORG_ID on a developer machine. A production process refuses requests that name no organization.
- */
-export function resolveOrg(c: Context, env: AppEnv): string {
-  const header = c.req.header('x-org-id') ?? env.DEV_ORG_ID;
-  if (!header)
-    throw new AppError(
-      'unauthorized',
-      'Sign in required (send x-org-id until login ships in Phase 2)',
-    );
-  if (!UUID.test(header)) throw new AppError('bad_request', 'x-org-id must be a UUID');
-  if (env.NODE_ENV === 'production')
-    throw new AppError('unauthorized', 'Login is not available yet');
-  return header.toLowerCase();
-}
 
 /** Registers routes on a Hono app and remembers them so /v1/openapi.json can describe them. */
 export function createRegistrar(app: Hono, deps: Deps) {
@@ -113,10 +115,11 @@ export function createRegistrar(app: Hono, deps: Deps) {
         if (!parsed.success) throw validationError(parsed.error);
         body = parsed.data;
       }
-      const run = async (tx: Tx, orgId: string) =>
+      const run = async (tx: Tx, auth: OrgContext) =>
         spec.handler({
           tx,
-          orgId,
+          orgId: auth.orgId,
+          auth,
           params: params.data as z.infer<P>,
           query: query.data as z.infer<Q>,
           body: body as z.infer<B>,
@@ -124,11 +127,25 @@ export function createRegistrar(app: Hono, deps: Deps) {
           deps,
         });
       let result: unknown;
-      if (spec.tenant === false) {
-        result = await deps.db.transaction((tx) => run(tx, ''));
+      const access = spec.access ?? 'org';
+      if (access === 'public') {
+        result = await deps.db.transaction((tx) => run(tx, { orgId: '' } as unknown as OrgContext));
       } else {
-        const orgId = resolveOrg(c, deps.env);
-        result = await withTenant(deps.db, orgId, (tx) => run(tx, orgId));
+        const session = await requireSession(c, deps.auth, deps.env);
+        if (access === 'session') {
+          result = await deps.db.transaction((tx) =>
+            run(tx, { ...session, orgId: '' } as unknown as OrgContext),
+          );
+        } else {
+          const ctx = await requireOrg(c, deps.db, session);
+          requirePermission(ctx, spec.method, spec.path, spec.permission);
+          await requireFeature(ctx, spec.feature);
+          result = await withTenant(deps.db, ctx.orgId, (tx) => run(tx, ctx), {
+            businessIds: ctx.businessIds,
+            actorId: ctx.user.id,
+            ip: ctx.ip,
+          });
+        }
       }
       if (result instanceof Response) return result;
       return c.json((result ?? { ok: true }) as object, (spec.status ?? 200) as 200);

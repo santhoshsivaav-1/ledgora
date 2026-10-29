@@ -244,6 +244,7 @@ export function itemsModule({ route }: Registrar) {
         .insert(units)
         .values({ ...body, orgId })
         .returning();
+      await audit(tx, orgId, 'unit.create', 'unit', u.id, { after: body });
       return { id: u.id, code: u.code, name: u.name };
     },
   });

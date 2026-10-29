@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.jsx'
-import AppLockGate from './components/AppLock.jsx'
+import AuthGate from './components/auth/AuthGate.jsx'
 import { restorePrefs, startMirroring } from './utils/prefsMirror'
 import './index.css'
 
@@ -137,9 +137,9 @@ restorePrefs().then((restored) => {
   startMirroring(restored)
   createRoot(document.getElementById('root')).render(
     <StrictMode>
-      <AppLockGate>
+      <AuthGate>
         <App />
-      </AppLockGate>
+      </AuthGate>
     </StrictMode>,
   )
 })
