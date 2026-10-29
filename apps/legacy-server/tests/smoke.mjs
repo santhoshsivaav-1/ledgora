@@ -22,6 +22,10 @@
  */
 import { firefox } from 'playwright';
 import { spawn } from 'child_process';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { PDFDocument } from 'pdf-lib';
 import { setTimeout as sleep } from 'timers/promises';
 
@@ -36,7 +40,19 @@ const check = (name, pass, detail = '') => {
 /** Boot the app unless the caller pointed us at a running one. */
 async function startServer() {
   if (process.env.APP_URL) return process.env.APP_URL;
-  serverProc = spawn(process.execPath, ['server.js'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // Always run against throwaway folders: this suite creates, edits and deletes records, so it
+  // must never touch the real data/, Saved Invoices/ or Trash/ of the person running it.
+  const scratch = mkdtempSync(path.join(tmpdir(), 'gst-smoke-'));
+  const serverFile = fileURLToPath(new URL('../server.js', import.meta.url));
+  serverProc = spawn(process.execPath, [serverFile], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      DATA_DIR: path.join(scratch, 'data'),
+      INVOICES_DIR: path.join(scratch, 'Saved Invoices'),
+      TRASH_DIR: path.join(scratch, 'Trash'),
+    },
+  });
   const url = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('server did not report a port within 30s')), 30_000);
     serverProc.stdout.on('data', (d) => {

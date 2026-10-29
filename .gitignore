@@ -11,7 +11,7 @@ public/tesseract/
 
 # runtime data from the local-first legacy app: customer records stay out of git
 data/
-"Saved Invoices/"
+Saved Invoices/
 Trash/
 
 # environment files (use .env.example as the template)

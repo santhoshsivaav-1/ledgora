@@ -277,7 +277,7 @@ ${body}
       ${next ? `<a class="next" href="${next.slug}.html"><span>Next</span>${esc(next.nav || next.title)}</a>` : '<span></span>'}
     </nav>
     <footer class="foot">
-      <p>${esc(BRAND)} is free and open source under the MIT licence, made by <a href="${SITE.publisher.url}">${esc(SITE.publisher.name)}</a>. Something wrong or missing on this page?
+      <p>${esc(BRAND)} is free and open source, made by <a href="${SITE.publisher.url}">${esc(SITE.publisher.name)}</a>. Something wrong or missing on this page?
       <a href="${SITE.repo}/issues">Tell us on GitHub</a>.</p>
     </footer>
   </main>

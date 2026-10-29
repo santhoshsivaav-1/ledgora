@@ -12,10 +12,14 @@ import { fileURLToPath } from 'url';
 // invoice-level discount, and round-off. Previously the recurring auto-fire
 // re-implemented totals inline and silently reintroduced every bug the
 // v1.10.1 extraction fixed. Same source of truth now.
-import { templateTotals, clientYearToDate, nextCounterValue, startFor, numberSeriesFor, counterKeyFor, formatDocNumber, businessKeyOf, getFinancialYearLabel, INVOICE_TYPES } from './src/utils.js';
+import { templateTotals, clientYearToDate, nextCounterValue, startFor, numberSeriesFor, counterKeyFor, formatDocNumber, businessKeyOf, getFinancialYearLabel, INVOICE_TYPES } from '../web/src/utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'data');
+// The legacy app keeps its files at the repository root (data/, Saved Invoices/, Trash/),
+// not next to this file, so existing installs keep their records after the monorepo move.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+// DATA_DIR lets tests and CI point the server at a throwaway folder.
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(REPO_ROOT, 'data');
 
 // 47371 is in IANA's unassigned range and is not claimed by common software.
 // PORT overrides it; if it is busy the next free port up to +50 is used.
@@ -587,7 +591,7 @@ app.post(LOCAL_PREFS_ROUTE, express.json({ limit: '25mb' }), (req, res) => {
 // stored. Forgotten PIN: put a file named RESET-PIN (or RESET-PIN.txt) in the
 // app folder; the next check removes the PIN and the file.
 const PIN_RE = /^(\d{6}|\d{8})$/;
-const RESET_PIN_FILES = [path.join(__dirname, '..'), __dirname]
+const RESET_PIN_FILES = [path.join(REPO_ROOT, '..'), REPO_ROOT]
   .flatMap((dir) => ['RESET-PIN', 'RESET-PIN.txt'].map((n) => path.join(dir, n)));
 const pinHash = (pin, salt) => crypto.scryptSync(String(pin), salt, 32).toString('hex');
 const pinMatches = (lock, pin) => {
@@ -798,7 +802,7 @@ app.post('/api/import', (req, res) => {
 // ========================
 // Save PDF to local folder
 // ========================
-const INVOICES_DIR = path.join(__dirname, 'Saved Invoices');
+const INVOICES_DIR = process.env.INVOICES_DIR ? path.resolve(process.env.INVOICES_DIR) : path.join(REPO_ROOT, 'Saved Invoices');
 if (!fs.existsSync(INVOICES_DIR)) fs.mkdirSync(INVOICES_DIR, { recursive: true });
 
 app.post('/api/save-pdf', express.raw({ type: 'application/pdf', limit: '20mb' }), (req, res) => {
@@ -830,7 +834,7 @@ app.post('/api/save-pdf', express.raw({ type: 'application/pdf', limit: '20mb' }
     // Don't leak absolute FS path — client only needs to know it saved
     // and where (relative). Absolute path revealed OS username +
     // install dir to any origin.
-    res.json({ saved: true, relPath: path.relative(__dirname, filePath).split(path.sep).join('/') });
+    res.json({ saved: true, relPath: path.relative(path.dirname(INVOICES_DIR), filePath).split(path.sep).join('/') });
   } catch (err) {
     errRes(res, 500, 'server-error', err);
   }
@@ -945,7 +949,7 @@ app.post('/api/saved-pdf/cancel-mark', express.json(), async (req, res) => {
 // ========================
 // Move saved PDF to Trash
 // ========================
-const TRASH_DIR = path.join(__dirname, 'Trash');
+const TRASH_DIR = process.env.TRASH_DIR ? path.resolve(process.env.TRASH_DIR) : path.join(REPO_ROOT, 'Trash');
 
 if (!fs.existsSync(TRASH_DIR)) fs.mkdirSync(TRASH_DIR, { recursive: true });
 
@@ -1016,7 +1020,7 @@ app.post('/api/trash-pdf', express.json(), (req, res) => {
 // ========================
 // Version check
 // ========================
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
+const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf-8'));
 
 app.get('/api/version', (req, res) => {
   res.json({ current: pkg.version });
@@ -1032,7 +1036,7 @@ app.get('/api/version', (req, res) => {
 // start before `vite build` finishes — common in StackBlitz, Codespaces, or
 // when a user accidentally runs `node server.js` directly — and seamlessly
 // flips to serving the app the moment dist/ appears.
-const distPath = path.join(__dirname, 'dist');
+const distPath = path.join(__dirname, '..', 'web', 'dist');
 const indexPath = path.join(distPath, 'index.html');
 app.use(express.static(distPath, { fallthrough: true })); // fallthrough = ok if dist doesn't exist
 
@@ -1418,7 +1422,7 @@ app.get('/api/health', (req, res) => {
   } catch { /* ignore */ }
   res.json({
     ok: true,
-    version: process.env.npm_package_version || 'unknown',
+    version: pkg.version,
     uptimeSec: Math.round(process.uptime()),
     pid: process.pid,
     hasRecentErrors: !!errorsTail.trim(),

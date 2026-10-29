@@ -1,0 +1,4 @@
+{
+  "extends": "@ledgora/config/tsconfig.base.json",
+  "include": ["src", "test"]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@ledgora/tax-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure GST / invoice maths: no I/O, no React, no browser APIs. Shared by the web app, the API and (later) the mobile app.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@ledgora/config": "workspace:*"
+  }
+}
