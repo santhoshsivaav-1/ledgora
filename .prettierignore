@@ -3,7 +3,6 @@
 apps/web/src/
 apps/web/scripts/
 apps/web/public/
-apps/legacy-server/
 docs/
 docs-site/
 BLUEPRINT.md

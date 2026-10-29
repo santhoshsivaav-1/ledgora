@@ -1,24 +1,29 @@
 // Browser test of sign-in, sign-up, e-mail confirmation, onboarding, Log out and phone sign-in in the real app.
 //
-// It needs the whole stack running (docker or Homebrew Postgres, `pnpm dev`) and Firefox from Playwright
-// (`pnpm --filter @ledgora/legacy-server exec playwright install firefox`). It creates throwaway accounts and
-// WRITES THE BUSINESS PROFILE to the legacy server it talks to, so point it at a scratch copy, not your real data:
+// It needs Postgres, the API and the web app (one origin: `pnpm build && pnpm start`, or `pnpm dev` and E2E_APP_URL=http://localhost:5173)
+// and Firefox from Playwright (`pnpm --filter @ledgora/web exec playwright install firefox`). It creates throwaway accounts.
 //
-//   DATA_DIR=/tmp/ledgora-e2e PORT=47372 node apps/legacy-server/server.js
-//   API_PORT=47372 pnpm --filter @ledgora/web exec vite --port 5173
-//   E2E_LEGACY_URL=http://localhost:47372 node apps/web/scripts/auth-e2e.mjs [screenshot-folder]
+//   E2E_APP_URL=http://localhost:4000 E2E_API_URL=http://localhost:4000 node apps/web/scripts/auth-e2e.mjs [screenshot-folder]
 import { createRequire } from 'node:module';
-// Playwright lives with the legacy smoke test; reuse it.
-const require = createRequire(new URL('../../legacy-server/package.json', import.meta.url));
+const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
 const OUT = process.argv[2] || '';
 const APP = process.env.E2E_APP_URL || 'http://localhost:5173';
 const API = process.env.E2E_API_URL || 'http://localhost:4000';
-const LEGACY = process.env.E2E_LEGACY_URL || 'http://localhost:47371';
 const email = `e2e${Date.now()}@example.com`, password = 'correct-horse-9';
 const results = [];
 const check = (name, ok, extra = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  ' + extra}`); };
 const shot = (page, n) => (OUT ? page.screenshot({ path: `${OUT}/${n}.png` }) : Promise.resolve());
+
+// Mail is handed over in the background, so give it a moment to arrive.
+async function waitForMail(match) {
+  for (let i = 0; i < 50; i++) {
+    const found = (await (await fetch(`${API}/v1/dev/outbox`)).json()).data.find(match);
+    if (found) return found;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('the e-mail never arrived');
+}
 
 const browser = await firefox.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -56,8 +61,7 @@ await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
 check('signing in before confirming the e-mail is blocked', true);
 
 // open the mailed link
-const outbox = await (await fetch(`${API}/v1/dev/outbox`)).json();
-const mail = outbox.data.find((m) => m.to === email && /Confirm/.test(m.subject));
+const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject));
 const link = /https?:\/\/\S+/.exec(mail.text)[0];
 await page.goto(link);
 await page.getByRole('heading', { name: 'Tell us about your business' }).waitFor({ timeout: 15000 });
@@ -78,15 +82,13 @@ await page.getByLabel('Address').fill('12 Main Road');
 await page.getByLabel('City').fill('Salem');
 await page.getByRole('button', { name: 'Save and continue' }).click();
 await page.locator('.sidebar, nav').first().waitFor({ timeout: 15000 });
-await page.waitForTimeout(1500);
-// the legacy first-run wizard may appear on top: skip it
-const skip = page.getByRole('button', { name: /skip/i }).first();
-if (await skip.count()) await skip.click().catch(() => {});
+// The first-run wizard appears once this business's print settings have loaded; skip it.
+await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
 await page.waitForTimeout(500);
 const chip = await page.locator('.account-bar').innerText().catch(() => '');
 check('after onboarding the main app opens with the account bar and Log out in view', /Asha Sharma/.test(chip) && /owner/.test(chip) && await page.locator('.account-bar-logout').isVisible() && (await page.locator('.account-bar-logout').boundingBox()).y < 200, chip);
-const legacy = await (await fetch(`${LEGACY}/api/profile`)).json();
-check('the business was also written to the billing profile', legacy.businessName === 'Sri Lakshmi Traders' && legacy.state === 'Tamil Nadu' && legacy.gstin === '33AAAAA0000A1Z5', JSON.stringify(legacy).slice(0, 120));
+const legacy = await (await ctx.request.get(`${APP}/v1/workspace/profile`)).json();
+check('the business is also in the billing profile the invoice screens read (workspace)', legacy.businessName === 'Sri Lakshmi Traders' && legacy.state === 'Tamil Nadu' && legacy.gstin === '33AAAAA0000A1Z5', JSON.stringify(legacy).slice(0, 120));
 await shot(page, '4-app');
 
 // reload keeps the session

@@ -241,8 +241,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
         .select({ name: organizations.name })
         .from(organizations)
         .where(eq(organizations.id, orgId));
-      const base = deps.env.API_URL ?? `http://localhost:${deps.env.API_LISTEN_PORT}`;
-      const acceptUrl = `${base}/v1/console?invitation=${row.id}`;
+      // The web app opens this: it shows who invited you, then one Accept button (features/auth/AcceptInvitePage).
+      const acceptUrl = `${deps.env.APP_URL.replace(/\/$/, '')}/accept-invite/${row.id}`;
       if (email)
         await sendMail(
           deps.env,

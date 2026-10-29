@@ -924,9 +924,8 @@ export const FEATURE_GROUPS = [
   {
     id: 'integrations',
     label: 'Integrations',
-    description: 'Cloud backup and payment QR codes',
+    description: 'Payment QR codes',
     modules: [
-      { id: 'googleDrive', label: 'Google Drive backup', nav: null, defaultOn: true },
       { id: 'upiQr', label: 'UPI QR code on invoices', nav: null, defaultOn: true, indiaOnly: true },
     ],
   },

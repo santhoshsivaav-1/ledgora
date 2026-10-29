@@ -60,7 +60,6 @@ describe('errors and plumbing', () => {
   });
   it('has no backup endpoints: backups are managed Postgres point-in-time recovery now', async () => {
     expect((await t.call('GET', '/v1/backups')).status).toBe(404);
-    expect((await t.call('GET', '/api/backups')).status).toBe(404);
   });
 });
 

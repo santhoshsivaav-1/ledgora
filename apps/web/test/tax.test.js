@@ -35,8 +35,8 @@ import {
   splitNumberedTerms,
   templateTotals,
 } from '../src/utils.js';
-import { buildXlsx, colName } from '../src/utils/xlsx.js';
-import { bulkRowToProduct, closingStock, stockValueOf } from '../src/utils/products.js';
+import { buildXlsx, colName } from '../src/features/import-export/xlsx.js';
+import { bulkRowToProduct, closingStock, stockValueOf } from '../src/features/items/products.js';
 import { strFromU8, unzipSync } from 'fflate';
 import {
   AUTO_CATEGORY_RULES,
@@ -53,7 +53,7 @@ import {
   getAdvanceTaxSchedule,
   getCapitalGainsConfig,
   getOldRegimeSlabs,
-} from '../src/utils/itr.js';
+} from '@ledgora/tax-engine';
 
 // Same semantics as the legacy script helpers (JSON-string equality), reported through Vitest.
 const eq = (actual, expected, label) =>

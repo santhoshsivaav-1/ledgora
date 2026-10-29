@@ -1,7 +1,54 @@
-import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart, LogOut } from 'lucide-react';
-import { getAllProfiles, saveProfile, saveBusinessProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients } from './store';
-import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router';
+import {
+  Home,
+  FileText,
+  Settings,
+  Plus,
+  Users,
+  Package,
+  BarChart3,
+  Wallet,
+  RefreshCw,
+  Receipt,
+  BookOpen,
+  Moon,
+  Sun,
+  Download,
+  X,
+  ShoppingCart,
+  ChevronDown,
+  Building2,
+  Pencil,
+  HelpCircle,
+  Search,
+  Command,
+  Bell,
+  Calculator,
+  HardDrive,
+  Menu,
+  Heart,
+  LogOut,
+  ShieldCheck,
+} from 'lucide-react';
+import {
+  getAllProfiles,
+  saveProfile,
+  saveBusinessProfile,
+  getEnabledModules,
+  getAllBills,
+  getAllProducts,
+  getStockAlertSettings,
+  getAllClients,
+} from './lib/data';
+import {
+  isModuleEnabled,
+  getUpcomingFilings,
+  countsAsSales,
+  localToday,
+  toLocalIsoDate,
+  DOCS_URL,
+} from './utils';
 import { listBusinesses, switchOrganization } from './services/session';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
@@ -17,81 +64,83 @@ import { listBusinesses, switchOrganization } from './services/session';
 //    first navigation only. Suspense fallback is a lightweight spinner.
 // Result: smaller initial JS payload; each heavy view chunk-caches
 // once fetched.
-import Dashboard from './components/Dashboard';
-import InvoiceGenerator from './components/InvoiceGenerator';
-import SetupWizard from './components/SetupWizard';
-import BranchModal from './components/BranchModal';
-import { useSession } from './components/auth/SessionContext';
-import ToastContainer from './components/Toast';
-import ConfirmModalContainer from './components/ConfirmModal';
-import WelcomeGuide from './components/WelcomeGuide';
-const SettingsView = lazy(() => import('./components/SettingsView'));
-const ClientsView = lazy(() => import('./components/ClientsView'));
-const InventoryView = lazy(() => import('./components/InventoryView'));
-const ReportsView = lazy(() => import('./components/ReportsView'));
-const ExpenseTracker = lazy(() => import('./components/ExpenseTracker'));
-const RecurringInvoices = lazy(() => import('./components/RecurringInvoices'));
-const ReceiptVoucher = lazy(() => import('./components/ReceiptVoucher'));
-const GSTReturns = lazy(() => import('./components/GSTReturns'));
-const IncomeTax = lazy(() => import('./components/IncomeTax'));
-const PurchaseBills = lazy(() => import('./components/PurchaseBills'));
-import AppFooter from './components/AppFooter';
-import { getPrintSettings } from './utils/printSettings';
+import Dashboard from './features/dashboard/Dashboard';
+import InvoiceGenerator from './features/invoices/editor/InvoiceEditorPage';
+import SetupWizard from './features/onboarding/SetupWizard';
+import BranchModal from './features/settings/BranchModal';
+import { useSession } from './features/auth/SessionContext';
+import ToastContainer from './components/ui/Toast';
+import { useTheme } from './app/providers';
+import NotificationPopover from './app/NotificationBell';
+import Sidebar from './app/Sidebar';
+import TopBar from './app/TopBar';
+import AppShell from './app/AppShell';
+import CommandPalette from './app/CommandPalette';
+import ShortcutsHelp from './app/ShortcutsHelp';
+import { viewFromPath, pathForView, legacyViewRedirect } from './app/router';
+import { useEntitlements } from './features/billing/useEntitlements';
+import LockedFeature from './components/ui/LockedFeature';
+import { LoadingState } from './components/ui/States';
+import ScreenBoundary from './app/ScreenBoundary';
+import ConfirmModalContainer from './components/ui/ConfirmModal';
+import WelcomeGuide from './features/onboarding/WelcomeGuide';
+function GstReturnsPage() {
+  const { tab } = useParams();
+  const navigate = useNavigate();
+  const valid = ['gstr1', 'gstr3b', 'gstr2b', 'tds', 'guide'];
+  if (!valid.includes(tab)) return <Navigate to="/gst-returns/gstr1" replace />;
+  return <GSTReturns tab={tab} onTab={(t) => navigate(`/gst-returns/${t}`)} />;
+}
+
+const SettingsView = lazy(() => import('./features/settings/SettingsView'));
+const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout'));
+const TeamPage = lazy(() => import('./features/settings/team/TeamPage'));
+const SecurityPage = lazy(() => import('./features/settings/security/SecurityPage'));
+const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
+const ClientsView = lazy(() => import('./features/parties/ClientsView'));
+const InventoryView = lazy(() => import('./features/items/InventoryView'));
+const ReportsView = lazy(() => import('./features/reports/ReportsView'));
+const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
+const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoices'));
+const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
+const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
+const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
+const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
+import AppFooter from './app/AppFooter';
+import { getPrintSettings, loadPrintSettingsFor } from './features/print/printSettingsStore';
 
 const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
 
 // v1.10.4 — Lightweight Suspense fallback shown while a lazy view
 // downloads. Purely visual — no data fetching, no state.
-function ViewLoading() {
-  return (
-    <div style={{ padding: '3rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-        <span style={{
-          display: 'inline-block', width: 14, height: 14, border: '2px solid var(--border)',
-          borderTopColor: 'var(--primary)', borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        Loading…
-      </div>
-    </div>
-  );
-}
+const ViewLoading = LoadingState;
 
 function App() {
   const { me, signOut } = useSession();
   // v1.9.3 — Setup Wizard shown on first-run (before onboardingComplete = true)
-  const [showWizard, setShowWizard] = useState(() => {
-    try { return !getPrintSettings().onboardingComplete; } catch { return false; }
-  });
-  const [currentView, setCurrentView] = useState(() => {
-    // PWA manifest "shortcuts" deep-link in via ?view=X (e.g. right-clicking
-    // the pinned taskbar icon → "New Invoice" opens /?view=new). Honour that
-    // before falling back to whatever the user was last looking at.
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const v = params.get('view');
-      const valid = ['dashboard', 'new', 'clients', 'inventory', 'expenses', 'purchases', 'recurring', 'receipts', 'reports', 'filing', 'incometax', 'settings'];
-      if (v && valid.includes(v)) {
-        // Strip the query string so a refresh doesn't keep snapping back to
-        // the shortcut target — only the *first* navigation honours it.
-        window.history.replaceState({}, '', window.location.pathname);
-        return v;
-      }
-    } catch { /* sandboxed history API — fall through */ }
-    // 'guide' was the built-in User Guide (removed in v1.10.75).
-    const last = sessionStorage.getItem('gst_currentView');
-    return last && last !== 'guide' ? last : 'dashboard';
-  });
+  // Decided once this business's print settings have loaded (see printLoadedFor below).
+  const [showWizard, setShowWizard] = useState(false);
+  // The screen comes from the URL (change 3.1), so refresh, back/forward and copied links land where they should.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentView = viewFromPath(location.pathname);
+  const setCurrentView = useCallback((id) => navigate(pathForView(id)), [navigate]);
+  const { can, hasFeature } = useEntitlements();
+  // Old PWA shortcuts and bookmarks used /?view=new.
+  useEffect(() => {
+    const target = legacyViewRedirect(location.pathname, location.search);
+    if (target) navigate(target, { replace: true });
+  }, [location.pathname, location.search, navigate]);
   const [profile, setProfile] = useState(null);
   const [editingBill, setEditingBill] = useState(() => {
     try {
       const saved = sessionStorage.getItem('gst_editingBill');
       return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   });
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('freegstbill_theme') === 'dark';
-  });
+  const { dark: darkMode, toggle: toggleDark } = useTheme();
   const [showWelcome, setShowWelcome] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [serverDown, setServerDown] = useState(false);
@@ -117,7 +166,13 @@ function App() {
   // Computed from server data on app boot + every 10 minutes; tucked under a
   // bell icon next to dark-mode toggle in the sidebar. Each section is one
   // click away from the relevant page.
-  const [notifications, setNotifications] = useState({ overdue: [], dueSoon: [], lowStock: [], filings: [], autoFire: null });
+  const [notifications, setNotifications] = useState({
+    overdue: [],
+    dueSoon: [],
+    lowStock: [],
+    filings: [],
+    autoFire: null,
+  });
   const [showNotifs, setShowNotifs] = useState(false);
 
   // v1.10.62 — reported (#53, @sangwanmail-eng): "Notifications should clear
@@ -142,35 +197,60 @@ function App() {
   // business data, and it must not travel in a backup or sync to another PC.
   const DISMISS_KEY = 'fgsb_dismissedNotifs';
   const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '{}'); } catch { return {}; }
+    try {
+      return JSON.parse(localStorage.getItem(DISMISS_KEY) || '{}');
+    } catch {
+      return {};
+    }
   });
 
-  const notifSignatures = useMemo(() => ({
-    overdue: notifications.overdue.map(b => b.invoiceNumber || b.id).sort().join('|'),
-    dueSoon: notifications.dueSoon.map(b => b.invoiceNumber || b.id).sort().join('|'),
-    lowStock: notifications.lowStock.map(p => `${p.id || p.name}:${p.stock ?? ''}`).sort().join('|'),
-    filings: notifications.filings.map(f => f.label || f.id || String(f)).sort().join('|'),
-    autoFire: notifications.autoFire?.count > 0 ? `autofire:${notifications.autoFire.count}` : '',
-  }), [notifications]);
+  const notifSignatures = useMemo(
+    () => ({
+      overdue: notifications.overdue
+        .map((b) => b.invoiceNumber || b.id)
+        .sort()
+        .join('|'),
+      dueSoon: notifications.dueSoon
+        .map((b) => b.invoiceNumber || b.id)
+        .sort()
+        .join('|'),
+      lowStock: notifications.lowStock
+        .map((p) => `${p.id || p.name}:${p.stock ?? ''}`)
+        .sort()
+        .join('|'),
+      filings: notifications.filings
+        .map((f) => f.label || f.id || String(f))
+        .sort()
+        .join('|'),
+      autoFire: notifications.autoFire?.count > 0 ? `autofire:${notifications.autoFire.count}` : '',
+    }),
+    [notifications],
+  );
 
   // A section counts toward the badge only when it has content AND that
   // content is not the exact thing the user already dismissed.
   const isLive = (key) => !!notifSignatures[key] && dismissed[key] !== notifSignatures[key];
 
-  const notifTotal = (isLive('overdue') ? notifications.overdue.length : 0)
-    + (isLive('dueSoon') ? notifications.dueSoon.length : 0)
-    + (isLive('lowStock') ? notifications.lowStock.length : 0)
-    + (isLive('filings') ? notifications.filings.length : 0)
-    + (isLive('autoFire') ? 1 : 0);
+  const notifTotal =
+    (isLive('overdue') ? notifications.overdue.length : 0) +
+    (isLive('dueSoon') ? notifications.dueSoon.length : 0) +
+    (isLive('lowStock') ? notifications.lowStock.length : 0) +
+    (isLive('filings') ? notifications.filings.length : 0) +
+    (isLive('autoFire') ? 1 : 0);
 
   // How many sections are currently showing something that could be cleared.
-  const dismissableCount = ['overdue', 'dueSoon', 'lowStock', 'filings', 'autoFire']
-    .filter(isLive).length;
+  const dismissableCount = ['overdue', 'dueSoon', 'lowStock', 'filings', 'autoFire'].filter(
+    isLive,
+  ).length;
 
   const markAllNotifsRead = () => {
     const next = { ...dismissed, ...notifSignatures };
     setDismissed(next);
-    try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+    try {
+      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+    } catch {
+      /* private mode */
+    }
   };
 
   useEffect(() => {
@@ -186,15 +266,16 @@ function App() {
         // Local dates: toISOString() is UTC (yesterday in India until 05:30),
         // while the server stamps lastRecurringAutoFire with its local date.
         const today = localToday();
-        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 3);
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 3);
         const tomorrowStr = toLocalIsoDate(tomorrow);
         // v1.10.67 (#66 item 12) — never chase payment for a cancelled invoice;
         // nor for a quotation, proforma, challan or credit note (countsAsSales).
-        const overdue = bills.filter(b => {
+        const overdue = bills.filter((b) => {
           const d = b.data?.details?.dueDate;
           return d && d < today && b.status !== 'paid' && countsAsSales(b);
         });
-        const dueSoon = bills.filter(b => {
+        const dueSoon = bills.filter((b) => {
           const d = b.data?.details?.dueDate;
           return d && d >= today && d <= tomorrowStr && b.status !== 'paid' && countsAsSales(b);
         });
@@ -202,27 +283,35 @@ function App() {
         // returns nothing — bell badge drops to 0 for the stock category.
         // When enabled, use the configured threshold (default 5).
         const stockThreshold = Number(stockAlertCfg?.threshold ?? 5);
-        const lowStock = stockAlertCfg?.enabled === false
-          ? []
-          : products.filter(p => (p.stock ?? 999) <= stockThreshold);
-        const filings = getUpcomingFilings().filter(f => f.daysAway <= 10);
+        const lowStock =
+          stockAlertCfg?.enabled === false
+            ? []
+            : products.filter((p) => (p.stock ?? 999) <= stockThreshold);
+        const filings = getUpcomingFilings().filter((f) => f.daysAway <= 10);
         // Recurring auto-fire breadcrumb — set by server.js processDueRecurring().
         // Only "fresh" (today's) auto-fires count as a notification; older ones
         // would otherwise stay sticky forever.
         let autoFire = null;
         try {
-          const r = await fetch('/api/meta/lastRecurringAutoFire');
+          const r = await fetch('/v1/workspace/meta/lastRecurringAutoFire');
           if (r.ok) {
             const j = await r.json();
             if (j.value && j.value.date === today && j.value.count > 0) autoFire = j.value;
           }
-        } catch { /* fine */ }
+        } catch {
+          /* fine */
+        }
         setNotifications({ overdue, dueSoon, lowStock, filings, autoFire });
-      } catch { /* offline / server down — leave previous counts */ }
+      } catch {
+        /* offline / server down — leave previous counts */
+      }
     };
     compute();
     const interval = setInterval(compute, 10 * 60 * 1000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [currentView]); // recompute on view change so the bell stays fresh after the user records a payment
 
   // ---- Keyboard shortcuts + command palette ----
@@ -269,7 +358,7 @@ function App() {
 
     const checkServer = async () => {
       try {
-        const res = await fetch('/api/profile', { signal: AbortSignal.timeout(8000) });
+        const res = await fetch('/v1/workspace/profile', { signal: AbortSignal.timeout(8000) });
         if (res.ok) {
           if (cancelled) return;
           misses = 0;
@@ -311,8 +400,9 @@ function App() {
   // a busy moment never saw it again).
   useEffect(() => {
     const dismissedAt = localStorage.getItem('freegstbill_pwa_dismissed_at');
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true; // iOS Safari
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true; // iOS Safari
     if (isStandalone) return;
     // 14-day cool-down on dismissal
     if (dismissedAt) {
@@ -330,10 +420,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    sessionStorage.setItem('gst_currentView', currentView);
-  }, [currentView]);
-
-  useEffect(() => {
     if (editingBill) {
       // _printOnOpen is a one-shot request; a refresh must not print again.
       const { _printOnOpen, ...toKeep } = editingBill;
@@ -343,15 +429,12 @@ function App() {
     }
   }, [editingBill]);
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    localStorage.setItem('freegstbill_theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-
   // Load all saved business profiles
   useEffect(() => {
     if (serverStatus === 'online') {
-      getAllProfiles().then(setAllProfiles).catch(() => { });
+      getAllProfiles()
+        .then(setAllProfiles)
+        .catch(() => {});
     }
   }, [serverStatus]);
 
@@ -360,8 +443,16 @@ function App() {
   useEffect(() => {
     if (!me || serverStatus !== 'online') return;
     let live = true;
-    listBusinesses().then((r) => { if (live) setBranches(r.data || []); }).catch(() => { /* signed-out or offline: the legacy profile list still works */ });
-    return () => { live = false; };
+    listBusinesses()
+      .then((r) => {
+        if (live) setBranches(r.data || []);
+      })
+      .catch(() => {
+        /* signed-out or offline: the legacy profile list still works */
+      });
+    return () => {
+      live = false;
+    };
   }, [me, serverStatus, showProfileMenu]);
 
   // A branch may not have a local profile yet (created on another device, or a
@@ -369,8 +460,8 @@ function App() {
   // so a profile is seeded from them — the logo, payment accounts and invoice
   // history then fill in on this computer as the branch is used.
   const branchMatchesProfile = (branch, bp) =>
-    (bp?.gstin && branch?.gstin && bp.gstin.toUpperCase() === branch.gstin.toUpperCase())
-    || ((bp?.businessName || '').trim().toLowerCase() === (branch?.name || '').trim().toLowerCase());
+    (bp?.gstin && branch?.gstin && bp.gstin.toUpperCase() === branch.gstin.toUpperCase()) ||
+    (bp?.businessName || '').trim().toLowerCase() === (branch?.name || '').trim().toLowerCase();
 
   const profileFromBranch = (branch) => ({
     businessName: branch.name,
@@ -390,12 +481,27 @@ function App() {
   const handleSwitchBranch = async (branch) => {
     setShowProfileMenu(false);
     let list = [];
-    try { list = (await getAllProfiles()) || []; } catch { /* profile storage offline: seed anyway */ }
+    try {
+      list = (await getAllProfiles()) || [];
+    } catch {
+      /* profile storage offline: seed anyway */
+    }
     const match = list.find((bp) => branchMatchesProfile(branch, bp));
-    if (match) { await handleSwitchProfile(match); return; }
+    if (match) {
+      await handleSwitchProfile(match);
+      return;
+    }
     const seed = profileFromBranch(branch);
-    try { await saveBusinessProfile(seed); } catch { /* old server down: the account copy is still saved */ }
-    try { await saveProfile(seed); } catch { /* same */ }
+    try {
+      await saveBusinessProfile(seed);
+    } catch {
+      /* old server down: the account copy is still saved */
+    }
+    try {
+      await saveProfile(seed);
+    } catch {
+      /* same */
+    }
     setAllProfiles(await getAllProfiles().catch(() => list));
     setProfile(seed);
   };
@@ -419,13 +525,17 @@ function App() {
     try {
       await switchOrganization(organizationId);
       window.location.reload();
-    } catch { /* not a member (can't happen — the list came from the server): stay where we are */ }
+    } catch {
+      /* not a member (can't happen — the list came from the server): stay where we are */
+    }
   };
 
   // Branches on the account with no profile saved on this computer. They are
   // still numbered and legal (name/GSTIN/state come from the organization);
   // the extras just start blank.
-  const extraBranches = (branches || []).filter((b) => !allProfiles.some((bp) => branchMatchesProfile(b, bp)));
+  const extraBranches = (branches || []).filter(
+    (b) => !allProfiles.some((bp) => branchMatchesProfile(b, bp)),
+  );
 
   // Close profile menu on outside click
   useEffect(() => {
@@ -451,7 +561,24 @@ function App() {
   // keyed on it below. GSTIN first, the same rule belongsToProfile() uses to
   // decide which records a business owns; the name covers a business that has
   // no GSTIN yet.
-  const businessKey = String(profile?.gstin || profile?.businessName || '').trim().toUpperCase();
+  const businessKey = String(profile?.gstin || profile?.businessName || '')
+    .trim()
+    .toUpperCase();
+
+  // Print settings belong to the business (change 3.11): load the active business's copy before its screens draw.
+  const [printLoadedFor, setPrintLoadedFor] = useState(null);
+  useEffect(() => {
+    if (!profile) return undefined;
+    let live = true;
+    loadPrintSettingsFor(businessKey).then(() => {
+      if (!live) return;
+      setPrintLoadedFor(businessKey);
+      setShowWizard(!getPrintSettings().onboardingComplete);
+    });
+    return () => {
+      live = false;
+    };
+  }, [businessKey, profile]);
 
   // v1.10.66 (#59) — on a phone the sidebar is a slide-in menu. It closes as
   // soon as something in it is chosen, so picking a page never leaves the menu
@@ -469,11 +596,19 @@ function App() {
   // v1.10.77 (#84) - sidebar auto-hide (desktop): a slim strip of icons that
   // opens over the page when pointed at, for more room on small screens.
   const [sidebarAutoHide, setSidebarAutoHide] = useState(() => {
-    try { return localStorage.getItem('freegstbill_sidebarAutoHide') === '1'; } catch { return false; }
+    try {
+      return localStorage.getItem('freegstbill_sidebarAutoHide') === '1';
+    } catch {
+      return false;
+    }
   });
   const toggleSidebarAutoHide = (on) => {
     setSidebarAutoHide(on);
-    try { localStorage.setItem('freegstbill_sidebarAutoHide', on ? '1' : '0'); } catch { /* private mode */ }
+    try {
+      localStorage.setItem('freegstbill_sidebarAutoHide', on ? '1' : '0');
+    } catch {
+      /* private mode */
+    }
   };
   const handleNewInvoice = () => {
     setEditorKey((k) => k + 1);
@@ -545,7 +680,17 @@ function App() {
   // If the user just disabled the module backing the current view, kick them to dashboard
   // so they don't land on an empty page after toggling.
   useEffect(() => {
-    const map = { new: 'invoicing', clients: 'clients', inventory: 'inventory', expenses: 'expenses', purchases: 'purchases', recurring: 'recurring', receipts: 'receipts', reports: 'reports', filing: 'gstReturns' };
+    const map = {
+      new: 'invoicing',
+      clients: 'clients',
+      inventory: 'inventory',
+      expenses: 'expenses',
+      purchases: 'purchases',
+      recurring: 'recurring',
+      receipts: 'receipts',
+      reports: 'reports',
+      filing: 'gstReturns',
+    };
     const moduleForView = map[currentView];
     if (moduleForView && !isModuleEnabled(moduleForView, enabledModules)) {
       setCurrentView('dashboard');
@@ -555,6 +700,7 @@ function App() {
 
   const navItems = [
     { id: 'dashboard', icon: Home, label: 'Dashboard', module: 'dashboard' },
+    { id: 'invoices', icon: FileText, label: 'Invoices', module: 'dashboard' },
     { id: 'new', icon: Plus, label: 'New Invoice', onClick: handleNewInvoice, module: 'invoicing' },
     { id: 'clients', icon: Users, label: 'Clients', module: 'clients' },
     { id: 'inventory', icon: Package, label: 'Products', module: 'inventory' },
@@ -568,7 +714,7 @@ function App() {
     // v1.10.75 - opens the online documentation, which covers every screen
     // and stays current; the old built-in guide had fallen far behind.
     { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available
-  ].filter(item => showIfModule(item.module));
+  ].filter((item) => showIfModule(item.module));
 
   // Command palette actions — declared here (not earlier) because the deps
   // array references `navItems` and `handleNewInvoice`, which are consts.
@@ -576,15 +722,37 @@ function App() {
   // ReferenceError ("Cannot access 'X' before initialization") at runtime.
   const paletteActions = useMemo(() => {
     const acts = [
-      { label: 'New Invoice', hint: 'Ctrl+N', category: 'action', run: () => { handleNewInvoice(); } },
+      {
+        label: 'New Invoice',
+        hint: 'Ctrl+N',
+        category: 'action',
+        run: () => {
+          handleNewInvoice();
+        },
+      },
     ];
-    navItems.forEach(item => {
+    navItems.forEach((item) => {
       if (item.id === 'new') return; // already covered above
-      acts.push({ label: `Go to ${item.label}`, hint: '', category: 'nav', run: item.onClick || (() => setCurrentView(item.id)) });
+      acts.push({
+        label: `Go to ${item.label}`,
+        hint: '',
+        category: 'nav',
+        run: item.onClick || (() => setCurrentView(item.id)),
+      });
     });
-    acts.push({ label: 'Go to Settings', hint: '', category: 'nav', run: () => setCurrentView('settings') });
-    acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: () => setDarkMode(d => !d) });
-    acts.push({ label: 'Show keyboard shortcuts', hint: 'Ctrl+/', category: 'help', run: () => setShowShortcutsHelp(true) });
+    acts.push({
+      label: 'Go to Settings',
+      hint: '',
+      category: 'nav',
+      run: () => setCurrentView('settings'),
+    });
+    acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: toggleDark });
+    acts.push({
+      label: 'Show keyboard shortcuts',
+      hint: 'Ctrl+/',
+      category: 'help',
+      run: () => setShowShortcutsHelp(true),
+    });
     // v1.9.4 — cross-app search: invoices, clients, products
     // v1.10.5 — audit H24 fix. Prior code dispatched
     // `CustomEvent('fgsb-open-bill', { detail: b.id })` but no one
@@ -592,7 +760,7 @@ function App() {
     // dropped the ID and just landed on Dashboard. Now: reuse
     // handleEditInvoice() directly, which is already the canonical way
     // to open a bill for editing (works from Dashboard row-click too).
-    searchCorpus.bills.forEach(b => {
+    searchCorpus.bills.forEach((b) => {
       acts.push({
         label: `📄 ${b.invoiceNumber || 'INV-?'} — ${b.clientName || 'No client'}`,
         hint: b.invoiceDate ? new Date(b.invoiceDate).toLocaleDateString('en-IN') : '',
@@ -600,7 +768,7 @@ function App() {
         run: () => handleEditInvoice(b),
       });
     });
-    searchCorpus.clients.forEach(c => {
+    searchCorpus.clients.forEach((c) => {
       acts.push({
         label: `👤 ${c.name} — client${c.gstin ? ' · GSTIN: ' + c.gstin : ''}`,
         hint: c.phone || c.email || '',
@@ -608,7 +776,7 @@ function App() {
         run: () => setCurrentView('clients'),
       });
     });
-    searchCorpus.products.forEach(p => {
+    searchCorpus.products.forEach((p) => {
       acts.push({
         label: `📦 ${p.name} — product${p.hsn ? ' · HSN: ' + p.hsn : ''}`,
         hint: (p.stock ?? 0) + ' in stock',
@@ -632,22 +800,33 @@ function App() {
       setTimeout(jump, 50);
     };
     const settingsJumps = [
-      ['Company profile', 'section-company'], ['Payment accounts', 'section-company'],
-      ['Print & PDF Settings', 'section-print'], ['PDF Style Editor', 'section-print'],
-      ['Business type presets', 'section-print'], ['Section labels', 'section-print'],
-      ['Watermarks', 'section-print'], ['Multi-copy print', 'section-print'],
-      ['Digital signature', 'section-company'], ['Company letterhead', 'section-print'],
-      ['Modules', 'section-modules'], ['Region preference', 'section-region'],
+      ['Company profile', 'section-company'],
+      ['Payment accounts', 'section-company'],
+      ['Print & PDF Settings', 'section-print'],
+      ['PDF Style Editor', 'section-print'],
+      ['Business type presets', 'section-print'],
+      ['Section labels', 'section-print'],
+      ['Watermarks', 'section-print'],
+      ['Multi-copy print', 'section-print'],
+      ['Digital signature', 'section-company'],
+      ['Company letterhead', 'section-print'],
+      ['Modules', 'section-modules'],
+      ['Region preference', 'section-region'],
       ['Google Drive backup', 'section-cloud'],
     ];
     settingsJumps.forEach(([s, sectionId]) => {
-      acts.push({ label: `⚙️ Settings → ${s}`, hint: '', category: 'settings', run: () => openSettingsAt(sectionId) });
+      acts.push({
+        label: `⚙️ Settings → ${s}`,
+        hint: '',
+        category: 'settings',
+        run: () => openSettingsAt(sectionId),
+      });
     });
     return acts;
   }, [navItems, handleNewInvoice, searchCorpus]);
 
-  const filteredPalette = paletteActions.filter(a =>
-    !paletteQuery.trim() || a.label.toLowerCase().includes(paletteQuery.toLowerCase())
+  const filteredPalette = paletteActions.filter(
+    (a) => !paletteQuery.trim() || a.label.toLowerCase().includes(paletteQuery.toLowerCase()),
   );
 
   // Global keyboard shortcuts. Lives down here for the same TDZ reason —
@@ -660,12 +839,12 @@ function App() {
       const editable = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
       if (e.key === 'k' || e.key === 'K') {
         e.preventDefault();
-        setShowPalette(p => !p);
+        setShowPalette((p) => !p);
         setPaletteQuery('');
         setPaletteIdx(0);
       } else if (e.key === '/') {
         e.preventDefault();
-        setShowShortcutsHelp(s => !s);
+        setShowShortcutsHelp((s) => !s);
       } else if ((e.key === 'n' || e.key === 'N') && !editable) {
         e.preventDefault();
         handleNewInvoice();
@@ -691,7 +870,7 @@ function App() {
     // a MutationObserver that fires ONLY when new buttons enter the
     // DOM. Existing buttons get the treatment once at mount.
     const mirrorTitleToAria = (root = document) => {
-      root.querySelectorAll('button.icon-btn[title]:not([aria-label])').forEach(btn => {
+      root.querySelectorAll('button.icon-btn[title]:not([aria-label])').forEach((btn) => {
         btn.setAttribute('aria-label', btn.getAttribute('title'));
       });
     };
@@ -700,7 +879,8 @@ function App() {
       for (const m of mutations) {
         if (m.addedNodes.length) {
           for (const node of m.addedNodes) {
-            if (node.nodeType === 1) {  // Element
+            if (node.nodeType === 1) {
+              // Element
               if (node.matches?.('button.icon-btn[title]:not([aria-label])')) {
                 node.setAttribute('aria-label', node.getAttribute('title'));
               }
@@ -722,26 +902,11 @@ function App() {
       top.click();
     };
     window.addEventListener('keydown', onEsc);
-    return () => { observer.disconnect(); window.removeEventListener('keydown', onEsc); };
-  }, [showPalette]);
-
-  // Palette-only arrow / Enter / Esc nav. Filtered list dep keeps the
-  // handler in sync with the user's current query.
-  useEffect(() => {
-    if (!showPalette) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); setShowPalette(false); return; }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteIdx(i => Math.min(i + 1, filteredPalette.length - 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteIdx(i => Math.max(i - 1, 0)); }
-      else if (e.key === 'Enter') {
-        e.preventDefault();
-        const action = filteredPalette[paletteIdx];
-        if (action) { action.run(); setShowPalette(false); }
-      }
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('keydown', onEsc);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showPalette, paletteIdx, filteredPalette]);
+  }, [showPalette]);
 
   if (serverDown) {
     return (
@@ -750,8 +915,8 @@ function App() {
           <FileText size={48} color="#3b82f6" />
           <h2>Free GST Billing Software Needs a Quick Start</h2>
           <p>
-            Your data is <strong>100% safe</strong> on your computer — nothing is lost.
-            The app just needs to be started once.
+            Your data is <strong>100% safe</strong> on your computer — nothing is lost. The app just
+            needs to be started once.
           </p>
           {/* v1.10.69 - there was an "Open GST Billing" button here, linking to
               freegstbill://start. Only the old Install FreeGSTBill.bat ever
@@ -764,11 +929,19 @@ function App() {
           <div className="server-down-steps">
             <p className="server-down-hint">How to start it:</p>
             <ol>
-              <li>Double-click <strong>Free GST Billing</strong> on your Desktop, then click <strong>Open App</strong></li>
-              <li>Or search <strong>"Free GST Billing"</strong> in the Start Menu</li>
+              <li>
+                Double-click <strong>Free GST Billing</strong> on your Desktop, then click{' '}
+                <strong>Open App</strong>
+              </li>
+              <li>
+                Or search <strong>"Free GST Billing"</strong> in the Start Menu
+              </li>
             </ol>
           </div>
-          <p className="server-down-safe">All your invoices, clients, and data are safely stored on your computer. They are never deleted or shared.</p>
+          <p className="server-down-safe">
+            All your invoices, clients, and data are safely stored on your computer. They are never
+            deleted or shared.
+          </p>
           <div className="server-down-waiting">
             <div className="server-down-spinner" />
             <span>Starting... this page will open automatically.</span>
@@ -781,10 +954,12 @@ function App() {
   if (showWelcome) {
     return (
       <>
-        <WelcomeGuide onComplete={(p) => {
-          if (p) setProfile(p);
-          setShowWelcome(false);
-        }} />
+        <WelcomeGuide
+          onComplete={(p) => {
+            if (p) setProfile(p);
+            setShowWelcome(false);
+          }}
+        />
         <ToastContainer />
         <ConfirmModalContainer />
       </>
@@ -800,420 +975,261 @@ function App() {
     try {
       const ps = getPrintSettings();
       return !showWizard && ps.onboardingComplete === true && ps.onboardingSkipped === true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   })();
 
   return (
-    <div className={`app-layout${sidebarAutoHide ? ' sidebar-autohide' : ''}`}>
+    <AppShell autoHideSidebar={sidebarAutoHide}>
       {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
       {showResumeSetupPill && (
-        <button type="button"
+        <button
+          type="button"
           onClick={() => setShowWizard(true)}
           title="Come back to the setup wizard — pick a business type, paper size, and language."
           style={{
             // Above the docked Save bar on Settings, so it never covers Save.
-            position: 'fixed', bottom: currentView === 'settings' ? '5.5rem' : '1.25rem', right: '1.25rem', zIndex: 9998,
-            padding: '0.6rem 1rem', borderRadius: 999,
-            background: 'var(--primary)', color: '#fff', border: 'none',
-            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+            position: 'fixed',
+            bottom: currentView.startsWith('settings') ? '5.5rem' : '1.25rem',
+            right: '1.25rem',
+            zIndex: 9998,
+            padding: '0.6rem 1rem',
+            borderRadius: 999,
+            background: 'var(--primary)',
+            color: '#fff',
+            border: 'none',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
             boxShadow: '0 6px 20px rgba(30,64,175,0.35), 0 2px 4px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-          }}>
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+          }}
+        >
           ✨ Finish setup
         </button>
       )}
-      {/* v1.10.66 (#59) — phone-only top bar with the menu button. CSS hides it
-          on wider screens, where the sidebar is always shown. */}
-      <div className="mobile-topbar">
-        <button type="button" className="mobile-topbar-btn" onClick={() => setNavOpen(true)}
-          aria-label="Open menu" aria-expanded={navOpen}>
-          <Menu size={22} />
-        </button>
-        <span className="mobile-topbar-title">GST Billing</span>
-        <span className="mobile-topbar-business">{profile?.businessName || ''}</span>
-      </div>
-      {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
-      <div className={`sidebar${navOpen ? ' sidebar-open' : ''}`} onClick={closeNavAfterPick}>
-        <div className="sidebar-brand">
-          <div className="sidebar-logo">
-            <FileText size={22} />
-          </div>
-          <div>
-            <h2 className="sidebar-title">GST Billing</h2>
-            <p className="sidebar-subtitle">by ledgora</p>
-          </div>
-          {/* Auto-hide as a ☰ button (was a text checkbox): pressed = the menu
-              shrinks to icons and opens when pointed at. */}
-          <button type="button" className={`sidebar-autohide-toggle${sidebarAutoHide ? ' on' : ''}`}
-            aria-pressed={sidebarAutoHide} aria-label="Auto-hide menu"
-            title={sidebarAutoHide ? 'Keep this menu open' : 'Auto-hide this menu: icons only, it opens when you point at it'}
-            onClick={(e) => { e.stopPropagation(); toggleSidebarAutoHide(!sidebarAutoHide); }}>
-            <Menu size={18} />
-          </button>
-        </div>
-
-        {me && (
-          <div className="account-bar" title={me.user.email || me.user.phoneNumber || ''}>
-            <span className="account-bar-who">
-              <b>{me.user.name || me.user.email || me.user.phoneNumber}</b>
-              {me.organizations?.length > 1 && (
-                <select
-                  className="org-switcher"
-                  value={me.organization.id}
-                  onChange={(e) => handleSwitchOrg(e.target.value)}
-                  title="Switch organization"
-                  aria-label="Switch organization"
-                >
-                  {me.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              )}
-              {me.organizations?.length <= 1 && <span>{me.organization.name} · {me.role}</span>}
-            </span>
-            <button type="button" className="account-bar-logout" onClick={signOut} title="Log out of this account">
-              <LogOut size={15} /> Log out
-            </button>
-          </div>
-        )}
-        <div className="profile-switcher" ref={profileMenuRef} style={{ position: 'relative' }}>
-          <div className="profile-switcher-row">
-            <button
-              className="profile-switcher-btn"
-              onClick={() => (allProfiles.length + extraBranches.length > 1) && setShowProfileMenu(v => !v)}
-              title={allProfiles.length + extraBranches.length > 1 ? 'Switch business / branch' : profile?.businessName || 'My Business'}
-              style={{ cursor: allProfiles.length + extraBranches.length > 1 ? 'pointer' : 'default' }}
-            >
-              <Building2 size={14} />
-              <span className="profile-switcher-name">{profile?.businessName || 'My Business'}</span>
-              {allProfiles.length + extraBranches.length > 1 && <ChevronDown size={13} style={{ marginLeft: 'auto', opacity: 0.6 }} />}
-            </button>
-            <button
-              className="profile-switcher-edit"
-              onClick={() => { setShowProfileMenu(false); setCurrentView('settings'); }}
-              title="Edit business profile"
-            >
-              <Pencil size={13} />
-            </button>
-          </div>
-          {showProfileMenu && (
-            <div className="profile-switcher-menu">
-              {allProfiles.map(bp => (
-                <button
-                  key={bp.id || bp.businessName}
-                  className={`profile-switcher-item${bp.businessName?.trim().toLowerCase() === profile?.businessName?.trim().toLowerCase() ? ' active' : ''}`}
-                  onClick={() => handleSwitchProfile(bp)}
-                >
-                  {bp.businessName}
-                </button>
-              ))}
-              {extraBranches.map(b => (
-                <button
-                  key={b.id}
-                  className="profile-switcher-item"
-                  title={`${b.state || ''}${b.gstin ? ` · ${b.gstin}` : ''} — no details saved on this computer yet`}
-                  onClick={() => handleSwitchBranch(b)}
-                >
-                  {b.name}
-                  <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', opacity: 0.65 }}>
-                    {b.gstin ? `(${b.gstin})` : '(not set up here)'}
-                  </span>
-                </button>
-              ))}
-              {canManageBranches && (
-                <button
-                  className="profile-switcher-item profile-switcher-manage"
-                  onClick={() => { setShowProfileMenu(false); setShowBranchModal(true); }}
-                >
-                  <Plus size={12} style={{ display: 'inline' }} /> Add branch...
-                </button>
-              )}
-              <button
-                className="profile-switcher-item profile-switcher-manage"
-                onClick={() => { setShowProfileMenu(false); setCurrentView('settings'); }}
-              >
-                Manage profiles...
-              </button>
-            </div>
-          )}
-        </div>
-
-        <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              className={`nav-btn ${currentView === item.id ? 'nav-btn-active' : ''}`}
-              onClick={item.onClick || (() => setCurrentView(item.id))}
-            >
-              <item.icon size={18} /> {item.label}
-            </button>
-          ))}
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            {/* Notification bell — opens a popover listing overdue / due-soon
-                invoices, GST filing deadlines, and low-stock items. Each row
-                is a single click away from the page that fixes it. */}
-            <button
-              className="nav-btn"
-              onClick={() => setShowNotifs(s => !s)}
-              title="Notifications"
-              style={{ position: 'relative' }}
-            >
-              <Bell size={18} />
-              Notifications
-              {notifTotal > 0 && (
-                <span className="nav-badge" style={{
-                  position: 'absolute', top: '8px', right: '12px',
-                  minWidth: 18, height: 18, padding: '0 5px', borderRadius: '9px',
-                  background: 'var(--danger)', color: '#fff',
-                  fontSize: '0.65rem', fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>{notifTotal > 99 ? '99+' : notifTotal}</span>
-              )}
-            </button>
-            <button
-              className="nav-btn"
-              onClick={() => setDarkMode(!darkMode)}
-              title={darkMode ? 'Light Mode' : 'Dark Mode'}
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-              {darkMode ? 'Light Mode' : 'Dark Mode'}
-            </button>
-            <button
-              className={`nav-btn ${currentView === 'settings' ? 'nav-btn-active' : ''}`}
-              onClick={() => setCurrentView('settings')}
-            >
-              <Settings size={18} /> Settings
-            </button>
-            <div className={`server-status server-status-${serverStatus}`}>
-              <span className="server-status-dot" />
-              {serverStatus === 'online' ? 'App Ready' : serverStatus === 'offline' ? 'App Not Running' : 'Connecting...'}
-            </div>
-          </div>
-        </nav>
-      </div>
+      <Sidebar
+        me={me}
+        signOut={signOut}
+        handleSwitchOrg={handleSwitchOrg}
+        profile={profile}
+        navItems={navItems}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        can={can}
+        notifTotal={notifTotal}
+        setShowNotifs={setShowNotifs}
+        darkMode={darkMode}
+        toggleDark={toggleDark}
+        serverStatus={serverStatus}
+        sidebarAutoHide={sidebarAutoHide}
+        toggleSidebarAutoHide={toggleSidebarAutoHide}
+        navOpen={navOpen}
+        setNavOpen={setNavOpen}
+        closeNavAfterPick={closeNavAfterPick}
+      />
 
       {showInstallBanner && (
         <div className="pwa-install-banner">
           <Download size={18} />
           <span>
-            <strong>Install as Desktop App</strong> — own icon, no browser, opens instantly. Right-click the icon for quick-jump to New Invoice / GST Returns.
+            <strong>Install as Desktop App</strong> — own icon, no browser, opens instantly.
+            Right-click the icon for quick-jump to New Invoice / GST Returns.
           </span>
-          <button className="pwa-install-btn" onClick={handleInstallPWA}>Install App</button>
-          <button className="pwa-dismiss-btn" onClick={dismissInstallBanner} title="Remind me later (re-shows in 14 days)"><X size={16} /></button>
+          <button className="pwa-install-btn" onClick={handleInstallPWA}>
+            Install App
+          </button>
+          <button
+            className="pwa-dismiss-btn"
+            onClick={dismissInstallBanner}
+            title="Remind me later (re-shows in 14 days)"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
       <div className="main-content">
-        {currentView === 'dashboard' && (
-          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={openDocs} activeProfile={profile} />
-        )}
-        {currentView === 'new' && (
-          <InvoiceGenerator
-            key={editorKey}
-            onBack={() => { setEditingBill(null); setCurrentView('dashboard'); }}
-            profile={profile} editingBill={editingBill}
-          />
-        )}
-        {/* v1.10.4 — All lazy views under one Suspense boundary. Only the
-             matched view's chunk actually loads; others stay unfetched. */}
+        <TopBar
+          profile={profile}
+          allProfiles={allProfiles}
+          extraBranches={extraBranches}
+          showProfileMenu={showProfileMenu}
+          setShowProfileMenu={setShowProfileMenu}
+          profileMenuRef={profileMenuRef}
+          handleSwitchProfile={handleSwitchProfile}
+          handleSwitchBranch={handleSwitchBranch}
+          canManageBranches={canManageBranches}
+          setShowBranchModal={setShowBranchModal}
+          setCurrentView={setCurrentView}
+          onNewInvoice={handleNewInvoice}
+          onOpenPalette={() => setShowPalette(true)}
+          canWrite={can('invoice:write')}
+        />
+        {/* v1.10.4 — All lazy views under one Suspense boundary. Only the matched view's chunk actually loads.
+             `key={businessKey}` remounts the screens that read the business once when they open, so a business
+             switch never leaves the previous company's records on screen (v1.10.66, #64 item 1). */}
         <Suspense fallback={<ViewLoading />}>
-          {currentView === 'clients' && (
-            <ClientsView onNew={handleNewInvoice} onEdit={handleEditInvoice} onDuplicate={handleDuplicateInvoice} />
-          )}
-          {currentView === 'inventory' && (
-            <InventoryView />
-          )}
-          {/* v1.10.66 (#64 item 1) — `key={businessKey}` remounts these screens
-            when the business changes. Each reads the business once when it
-            opens, so a switch left the previous company's records on screen,
-            and a record added straight after switching was saved under the OLD
-            business. Remounting makes every one of them read it again. */}
-          {currentView === 'expenses' && (
-            <ExpenseTracker key={businessKey} />
-          )}
-          {currentView === 'purchases' && (
-            <PurchaseBills key={businessKey} />
-          )}
-          {currentView === 'recurring' && (
-            <RecurringInvoices key={businessKey} onEdit={handleEditInvoice} />
-          )}
-          {currentView === 'receipts' && (
-            <ReceiptVoucher key={businessKey} />
-          )}
-          {currentView === 'reports' && (
-            <ReportsView key={businessKey} />
-          )}
-          {currentView === 'filing' && (
-            <GSTReturns key={businessKey} />
-          )}
-          {currentView === 'incometax' && (
-            <IncomeTax key={businessKey} />
-          )}
-          {currentView === 'settings' && (
-            <SettingsView onSaved={(p) => setProfile(p)} me={me} branches={branches} canManageBranches={canManageBranches} onAddBranch={() => setShowBranchModal(true)} />
+          {printLoadedFor !== businessKey ? (
+            <ViewLoading />
+          ) : (
+            <ScreenBoundary resetKey={location.pathname}>
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <Dashboard
+                      onNew={handleNewInvoice}
+                      onEdit={handleEditInvoice}
+                      onPrint={handlePrintInvoice}
+                      onDuplicate={handleDuplicateInvoice}
+                      onConvert={handleConvertToInvoice}
+                      onOpenProducts={() => setCurrentView('inventory')}
+                      onOpenSettings={() => setCurrentView('settings')}
+                      onOpenGuide={openDocs}
+                      activeProfile={profile}
+                    />
+                  }
+                />
+                <Route
+                  path="/invoices"
+                  element={
+                    <Dashboard
+                      mode="invoices"
+                      onNew={handleNewInvoice}
+                      onEdit={handleEditInvoice}
+                      onPrint={handlePrintInvoice}
+                      onDuplicate={handleDuplicateInvoice}
+                      onConvert={handleConvertToInvoice}
+                      onOpenProducts={() => setCurrentView('inventory')}
+                      onOpenSettings={() => setCurrentView('settings')}
+                      onOpenGuide={openDocs}
+                      activeProfile={profile}
+                    />
+                  }
+                />
+                <Route
+                  path="/invoices/new"
+                  element={
+                    <InvoiceGenerator
+                      key={editorKey}
+                      onBack={() => {
+                        setEditingBill(null);
+                        setCurrentView('dashboard');
+                      }}
+                      profile={profile}
+                      editingBill={editingBill}
+                    />
+                  }
+                />
+                <Route
+                  path="/clients"
+                  element={
+                    <ClientsView
+                      onNew={handleNewInvoice}
+                      onEdit={handleEditInvoice}
+                      onDuplicate={handleDuplicateInvoice}
+                    />
+                  }
+                />
+                <Route path="/products" element={<InventoryView />} />
+                <Route path="/expenses" element={<ExpenseTracker key={businessKey} />} />
+                <Route path="/purchases" element={<PurchaseBills key={businessKey} />} />
+                <Route
+                  path="/recurring"
+                  element={<RecurringInvoices key={businessKey} onEdit={handleEditInvoice} />}
+                />
+                <Route path="/receipts" element={<ReceiptVoucher key={businessKey} />} />
+                <Route path="/reports" element={<ReportsView key={businessKey} />} />
+                <Route path="/gst-returns" element={<Navigate to="/gst-returns/gstr1" replace />} />
+                <Route path="/gst-returns/:tab" element={<GstReturnsPage key={businessKey} />} />
+                <Route
+                  path="/income-tax"
+                  element={
+                    hasFeature('income-tax') ? (
+                      <IncomeTax key={businessKey} />
+                    ) : (
+                      <LockedFeature name="Income tax" />
+                    )
+                  }
+                />
+                <Route path="/settings" element={<Navigate to="/settings/business" replace />} />
+                {['business', 'documents', 'features', 'data'].map((tab) => (
+                  <Route
+                    key={tab}
+                    path={`/settings/${tab}`}
+                    element={
+                      <SettingsLayout>
+                        <SettingsView
+                          tab={tab}
+                          onSaved={(p) => setProfile(p)}
+                          me={me}
+                          branches={branches}
+                          canManageBranches={canManageBranches}
+                          onAddBranch={() => setShowBranchModal(true)}
+                        />
+                      </SettingsLayout>
+                    }
+                  />
+                ))}
+                <Route
+                  path="/settings/team"
+                  element={
+                    <SettingsLayout>
+                      <TeamPage />
+                    </SettingsLayout>
+                  }
+                />
+                <Route
+                  path="/settings/security"
+                  element={
+                    <SettingsLayout>
+                      <SecurityPage />
+                    </SettingsLayout>
+                  }
+                />
+                <Route path="/accept-invite/:id" element={<AcceptInvitePage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </ScreenBoundary>
           )}
         </Suspense>
         {/* Version + ledgora line: Dashboard only, so it never takes space on working screens. */}
         {currentView === 'dashboard' && <AppFooter />}
       </div>
 
-      {/* Notification popover — rendered as a click-out modal so it works on
-          tablets too. Grouped by category with a navigate-to button per group. */}
       {showNotifs && (
-        <div className="modal-overlay" onClick={() => setShowNotifs(false)}>
-          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>Notifications</h3>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                {/* v1.10.62 (#53) — clears everything currently shown. Each
-                    section remembers exactly WHAT was cleared, so a genuinely
-                    new overdue invoice or a different product running low
-                    brings the alert back by itself. */}
-                {dismissableCount > 0 && (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={markAllNotifsRead}
-                    style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}
-                    title="Clear these notifications. They return if something new happens.">
-                    Mark all as read
-                  </button>
-                )}
-                <button className="icon-btn" onClick={() => setShowNotifs(false)} title="Close"><X size={18} /></button>
-              </span>
-            </div>
-            {notifTotal === 0 ? (
-              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem 0', margin: 0 }}>
-                All clear ✨ — nothing needs your attention right now.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {isLive('autoFire') && (
-                  <button type="button" className="notice notice-info" onClick={() => { setShowNotifs(false); setCurrentView('dashboard'); }} style={{ cursor: 'pointer', border: 'none', textAlign: 'left' }}>
-                    <span className="notice-icon">🔁</span>
-                    <div style={{ flex: 1 }}>
-                      <strong>{notifications.autoFire.count} recurring invoice{notifications.autoFire.count !== 1 ? 's' : ''} auto-generated today</strong>
-                      <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                        Check the Dashboard for the new bills · review and download PDFs as needed
-                      </div>
-                    </div>
-                  </button>
-                )}
-                {isLive('overdue') && (
-                  <button type="button" className="notice notice-danger" onClick={() => { setShowNotifs(false); setCurrentView('dashboard'); }} style={{ cursor: 'pointer', border: 'none', textAlign: 'left' }}>
-                    <span className="notice-icon">⚠</span>
-                    <div style={{ flex: 1 }}>
-                      <strong>{notifications.overdue.length} overdue invoice{notifications.overdue.length !== 1 ? 's' : ''}</strong>
-                      <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                        {notifications.overdue.slice(0, 3).map(b => b.invoiceNumber).join(' · ')}{notifications.overdue.length > 3 ? ` · +${notifications.overdue.length - 3} more` : ''}
-                      </div>
-                    </div>
-                  </button>
-                )}
-                {isLive('dueSoon') && (
-                  <button type="button" className="notice notice-warn" onClick={() => { setShowNotifs(false); setCurrentView('dashboard'); }} style={{ cursor: 'pointer', border: 'none', textAlign: 'left' }}>
-                    <span className="notice-icon">⏰</span>
-                    <div style={{ flex: 1 }}>
-                      <strong>{notifications.dueSoon.length} invoice{notifications.dueSoon.length !== 1 ? 's' : ''} due in next 3 days</strong>
-                      <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                        {notifications.dueSoon.slice(0, 3).map(b => `${b.invoiceNumber} (${b.clientName})`).join(' · ')}
-                      </div>
-                    </div>
-                  </button>
-                )}
-                {isLive('filings') && (
-                  <button type="button" className="notice notice-info" onClick={() => { setShowNotifs(false); setCurrentView('filing'); }} style={{ cursor: 'pointer', border: 'none', textAlign: 'left' }}>
-                    <span className="notice-icon">📋</span>
-                    <div style={{ flex: 1 }}>
-                      <strong>{notifications.filings.length} GST filing{notifications.filings.length !== 1 ? 's' : ''} due in next 10 days</strong>
-                      <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                        {notifications.filings.slice(0, 3).map(f => `${f.label} (${f.daysAway === 0 ? 'today' : f.daysAway + 'd'})`).join(' · ')}
-                      </div>
-                    </div>
-                  </button>
-                )}
-                {isLive('lowStock') && (
-                  <button type="button" className="notice notice-note" onClick={() => { setShowNotifs(false); setCurrentView('inventory'); }} style={{ cursor: 'pointer', border: 'none', textAlign: 'left' }}>
-                    <span className="notice-icon">📦</span>
-                    <div style={{ flex: 1 }}>
-                      <strong>{notifications.lowStock.length} product{notifications.lowStock.length !== 1 ? 's' : ''} low on stock</strong>
-                      <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '0.2rem' }}>
-                        {notifications.lowStock.slice(0, 3).map(p => `${p.name} (${p.stock} left)`).join(' · ')}
-                      </div>
-                    </div>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <NotificationPopover
+          notifications={notifications}
+          isLive={isLive}
+          notifTotal={notifTotal}
+          dismissableCount={dismissableCount}
+          onMarkAll={markAllNotifsRead}
+          onClose={() => setShowNotifs(false)}
+          go={setCurrentView}
+        />
       )}
 
-      {/* Command palette — Ctrl/Cmd+K. Spotlight-style: type to filter actions,
-          ↑/↓ to navigate, Enter to run, Esc to close. */}
-      {showPalette && (
-        <div className="modal-overlay" onClick={() => setShowPalette(false)}>
-          <div className="modal-content" style={{ maxWidth: '520px', padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)' }}>
-              <Search size={16} style={{ color: 'var(--text-muted)' }} />
-              <input autoFocus type="text" placeholder="Type a command or page name…"
-                value={paletteQuery}
-                onChange={e => { setPaletteQuery(e.target.value); setPaletteIdx(0); }}
-                className="form-input" style={{ border: 0, background: 'transparent', flex: 1, fontSize: '0.95rem' }} />
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Esc</span>
-            </div>
-            <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-              {filteredPalette.length === 0 && (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.25rem', margin: 0, fontSize: '0.85rem' }}>
-                  Nothing matches "{paletteQuery}".
-                </p>
-              )}
-              {filteredPalette.map((a, i) => (
-                <button key={a.label} type="button"
-                  onClick={() => { a.run(); setShowPalette(false); }}
-                  onMouseEnter={() => setPaletteIdx(i)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    width: '100%', padding: '0.6rem 1rem', border: 0, cursor: 'pointer',
-                    background: i === paletteIdx ? 'var(--bg-tertiary)' : 'transparent',
-                    color: 'var(--text-primary)', textAlign: 'left', fontSize: '0.88rem',
-                  }}>
-                  <span>{a.label}</span>
-                  {a.hint && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{a.hint}</span>}
-                </button>
-              ))}
-            </div>
-            <div style={{ padding: '0.4rem 1rem', borderTop: '1px solid var(--border-color)', fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span><Command size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Ctrl+K to toggle · ↑↓ navigate · Enter run</span>
-              <button type="button" onClick={() => { setShowPalette(false); setShowShortcutsHelp(true); }} style={{ background: 'none', border: 0, color: 'var(--primary)', cursor: 'pointer', fontSize: '0.7rem' }}>
-                All shortcuts (Ctrl+/)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CommandPalette
+        open={showPalette}
+        query={paletteQuery}
+        onQuery={(q) => {
+          setPaletteQuery(q);
+          setPaletteIdx(0);
+        }}
+        actions={filteredPalette}
+        index={paletteIdx}
+        onIndex={setPaletteIdx}
+        onClose={() => setShowPalette(false)}
+        onShowShortcuts={() => {
+          setShowPalette(false);
+          setShowShortcutsHelp(true);
+        }}
+      />
 
-      {/* Keyboard-shortcuts help — Ctrl/Cmd+/. Single-pane reference. */}
-      {showShortcutsHelp && (
-        <div className="modal-overlay" onClick={() => setShowShortcutsHelp(false)}>
-          <div className="modal-content" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>Keyboard Shortcuts</h3>
-              <button className="icon-btn" onClick={() => setShowShortcutsHelp(false)} title="Close"><X size={18} /></button>
-            </div>
-            <table className="kv-list">
-              <tbody>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>K</kbd></td><td>Open command palette (jump to any page)</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>N</kbd></td><td>New invoice</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>S</kbd></td><td>Save current invoice (when on the invoice form)</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>P</kbd></td><td>Download PDF (when on the invoice form)</td></tr>
-                <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>/</kbd></td><td>Toggle this help</td></tr>
-                <tr><td><kbd>Esc</kbd></td><td>Close any open modal</td></tr>
-              </tbody>
-            </table>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
-              On macOS, use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.
-            </p>
-          </div>
-        </div>
-      )}
+      <ShortcutsHelp open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
 
       {/* Add a branch (organization accounts) — created on the account server,
           then switched into so the user is invoicing from it immediately. */}
@@ -1223,7 +1239,7 @@ function App() {
 
       <ToastContainer />
       <ConfirmModalContainer />
-    </div>
+    </AppShell>
   );
 }
 

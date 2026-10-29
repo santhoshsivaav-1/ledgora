@@ -658,6 +658,18 @@ describe('security (2.11)', () => {
     expect(lim.check('GET', '/v1/x', 'ip')).toBe(0);
   });
 
+  it('general API traffic is counted per signed-in person, not per address', () => {
+    const lim = createRateLimiter(h.env, () => 0);
+    for (let i = 0; i < h.env.RATE_LIMIT_API_PER_MIN; i++)
+      expect(lim.check('GET', '/v1/x', 'office', 'alice')).toBe(0);
+    expect(lim.check('GET', '/v1/x', 'office', 'alice')).toBeGreaterThan(0);
+    expect(lim.check('GET', '/v1/x', 'office', 'bob')).toBe(0); // same address, another person
+    // Sign-in attempts still count per address, whoever is asking.
+    for (let i = 0; i < h.env.RATE_LIMIT_LOGIN_PER_MIN; i++)
+      expect(lim.check('POST', '/v1/auth/sign-in/email', 'office', `s${i}`)).toBe(0);
+    expect(lim.check('POST', '/v1/auth/sign-in/email', 'office', 'another')).toBeGreaterThan(0);
+  });
+
   it('identity tables are out of reach of tenant queries', async () => {
     const t = await h.newTenant();
     for (const table of [
@@ -815,7 +827,7 @@ describe('audit trail (2.14)', () => {
 describe('PIN lock (2.13)', () => {
   it('the new API has no lock endpoints', async () => {
     const t = await h.newTenant();
-    for (const p of ['/api/lock', '/v1/lock', '/api/lock/verify', '/api/lock/set'])
+    for (const p of ['/v1/lock', '/v1/lock/verify', '/v1/lock/set'])
       expect((await t.call('GET', p)).status).toBe(404);
   });
 });

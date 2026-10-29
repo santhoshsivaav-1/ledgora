@@ -126,6 +126,31 @@ export function permissionFor(method: string, path: string): Permission | null {
   const m = method.toLowerCase();
   const read = m === 'get';
   const resource = (r: string): Permission => `${r}:${read ? 'read' : 'write'}` as Permission;
+  // The workspace documents the billing screens use (change 3.23): each collection follows the permission of its screen.
+  const ws = /^\/v1\/workspace\/(?:collections\/)?([a-z-]+)/.exec(path);
+  if (ws) {
+    const part = ws[1];
+    if (part === 'meta')
+      return /\/increment$/.test(path) ? 'invoice:write' : read ? null : 'settings:write';
+    if (part === 'local-prefs') return null;
+    if (part === 'export') return 'data:export';
+    if (part === 'import') return 'data:import';
+    if (part === 'trash') return 'trash:manage';
+    if (part === 'number-series') return 'settings:write';
+    if (part === 'profile' || part === 'profiles') return read ? 'business:read' : 'business:write';
+    const byCollection: Record<string, string> = {
+      bills: 'invoice',
+      clients: 'party',
+      products: 'item',
+      expenses: 'expense',
+      purchases: 'purchase',
+      receipts: 'payment',
+      recurring: 'recurring',
+      templates: 'template',
+    };
+    const resource = byCollection[part];
+    if (resource) return `${resource}:${read ? 'read' : 'write'}` as Permission;
+  }
   if (/^\/v1\/invoices\/[^/]+\/cancel$/.test(path)) return 'invoice:cancel';
   if (/^\/v1\/items\/[^/]+\/stock$/.test(path)) return 'stock:adjust';
   if (/^\/v1\/number-series/.test(path)) return read ? 'invoice:read' : 'settings:write';

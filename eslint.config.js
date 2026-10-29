@@ -48,10 +48,9 @@ export default defineConfig([
     },
   },
 
-  // Node code: the parked server, build and test scripts, tool configs.
+  // Node code: build and test scripts, tool configs.
   {
     files: [
-      'apps/legacy-server/**/*.{js,mjs}',
       'apps/web/scripts/**/*.{js,mjs}',
       'apps/web/vite.config.js',
       'apps/web/vitest.config.js',
@@ -68,9 +67,9 @@ export default defineConfig([
     },
   },
 
-  // The smoke test also runs callbacks inside the browser page (document, window, ...).
+  // The browser tests also run callbacks inside the page (document, window, ...).
   {
-    files: ['apps/legacy-server/tests/**/*.mjs'],
+    files: ['apps/web/scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
 
@@ -86,6 +85,12 @@ export default defineConfig([
         { varsIgnorePattern: '^_', argsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
     },
+  },
+
+  // The income-tax maths moved over from JavaScript unchanged and is still loosely typed (change 3.18).
+  {
+    files: ['packages/tax-engine/src/itr.ts'],
+    rules: { '@typescript-eslint/ban-ts-comment': 'off' },
   },
 
   // API tests read loosely typed JSON bodies; typing every response would only restate the contracts.

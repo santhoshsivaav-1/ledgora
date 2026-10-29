@@ -10,11 +10,11 @@
 // storage) lost them all: the wizard came back and everything reset.
 //
 // Kept local AND mirrored: reads stay instant and offline; the copy in the
-// data folder (data/local-prefs.json, server.js /api/local-prefs) is restored
-// before the app first renders, for keys the browser no longer has.
+// copy on the server (per person, /v1/workspace/local-prefs) is restored after sign-in, before the app first
+// renders, for keys the browser no longer has. Signing out clears them from this browser (clearMirroredPrefs).
 
-const MIRRORED = /^(gst_printSettings|gst_regionMode|gst_enabledModules|gst_customUnits|gst_dashboardColumns|gst_filing_status(_.*)?|gst_itr[A-Za-z]*|freegstbill_onboarded|freegstbill_theme|freegstbill_startedDismissed|freegstbill_supportNudge|freegstbill_starBanner|freegstbill_sidebarAutoHide)$/;
-const ENDPOINT = '/api/local-prefs';
+const MIRRORED = /^(gst_regionMode|gst_enabledModules|gst_customUnits|gst_dashboardColumns|gst_filing_status(_.*)?|gst_itr[A-Za-z]*|freegstbill_onboarded|freegstbill_theme|freegstbill_startedDismissed|freegstbill_supportNudge|freegstbill_starBanner|freegstbill_sidebarAutoHide)$/;
+const ENDPOINT = '/v1/workspace/local-prefs';
 
 export const isMirrored = (key) => MIRRORED.test(String(key));
 
@@ -44,23 +44,27 @@ let timer = null;
 const push = () => {
   const set = {};
   const remove = [];
+  if (dirty.size === 0) return Promise.resolve();
   try {
     for (const k of dirty) {
       const v = localStorage.getItem(k);
       if (v === null) remove.push(k); else set[k] = v;
     }
-  } catch { return; }
+  } catch { return Promise.resolve(); }
   dirty.clear();
-  fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set, remove }) }).catch(() => {});
+  return fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set, remove }) }).catch(() => {});
 };
-const touch = (k) => { dirty.add(k); clearTimeout(timer); timer = setTimeout(push, 600); };
+let paused = false;
+const touch = (k) => { if (paused) return; dirty.add(k); clearTimeout(timer); timer = setTimeout(push, 600); };
 
 // Every write or removal of a mirrored key, from anywhere in the app, updates
 // the copy in the data folder (one write per burst of changes). Only after a
 // successful restore: had the server been unreachable at start, this browser
 // may hold first-run defaults, which must never replace the saved copy.
+let installed = false;
 export function startMirroring(restored) {
-  if (!restored) return;
+  if (!restored || installed) return;
+  installed = true;
   try {
     const proto = Object.getPrototypeOf(localStorage);
     const set = proto.setItem;
@@ -74,4 +78,23 @@ export function startMirroring(restored) {
       if (isMirrored(k)) touch(k);
     }
   } catch { /* storage blocked: nothing to mirror */ }
+}
+
+// Sign-out: the next person to use this browser must not inherit this person's settings. Removing the keys must not be
+// mirrored (that would delete them from the server copy), so mirroring is paused while it happens.
+export function clearMirroredPrefs() {
+  paused = true;
+  try {
+    for (const k of Object.keys(localStorage)) if (isMirrored(k)) localStorage.removeItem(k);
+  } catch { /* storage blocked */ } finally {
+    paused = false;
+    dirty.clear();
+    clearTimeout(timer);
+  }
+}
+
+// Sign-out: send what has changed in the last moments now, instead of after the usual short delay, so nothing is lost.
+export function flushMirroredPrefs() {
+  clearTimeout(timer);
+  return push();
 }

@@ -5,6 +5,8 @@ const bool = z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' |
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   /** Not API_PORT: that name is already the legacy server's port, read by the web app's dev proxy. */
+  /** Folder of the built web app (apps/web/dist). When it exists the API serves it too, so one service is the whole product. */
+  WEB_DIST_DIR: z.string().optional(),
   API_LISTEN_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().url().default('postgres://ledgora:ledgora@localhost:5432/ledgora'),
   APP_URL: z.string().url().default('http://localhost:5173'),
@@ -27,7 +29,7 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   RATE_LIMIT_ENABLED: bool.default(true),
-  RATE_LIMIT_API_PER_MIN: z.coerce.number().int().min(1).default(300),
+  RATE_LIMIT_API_PER_MIN: z.coerce.number().int().min(1).default(1500),
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().min(1).default(10),
   RATE_LIMIT_OTP_PER_10MIN: z.coerce.number().int().min(1).default(5),
   S3_ENDPOINT: z.string().url().optional(),
@@ -48,6 +50,8 @@ export type AppEnv = z.infer<typeof schema>;
 export function loadEnv(source: Record<string, string | undefined> = process.env): AppEnv {
   // `.env.example` lists optional settings as `NAME=` (empty); an empty value means "not set".
   const cleaned = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== ''));
+  // Hosts such as Railway name the port PORT.
+  if (cleaned.API_LISTEN_PORT === undefined && cleaned.PORT) cleaned.API_LISTEN_PORT = cleaned.PORT;
   const parsed = schema.safeParse(cleaned);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`);

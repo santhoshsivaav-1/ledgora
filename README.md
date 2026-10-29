@@ -1,5 +1,5 @@
 > **Repository status (Phase 0 of the SaaS migration).** This repository is now a pnpm + Turborepo monorepo
-> (`apps/web`, `apps/legacy-server`, `packages/tax-engine`). The one-click installers, Control Panel and
+> (`apps/web`, `apps/api`, `packages/*`). The one-click installers, Control Panel and
 > in-app updater described below were removed. To run the app from source, see
 > [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md); the SaaS plan is in [BLUEPRINT.md](BLUEPRINT.md); the licence
 > and brand status is in [docs/LEGAL.md](docs/LEGAL.md).

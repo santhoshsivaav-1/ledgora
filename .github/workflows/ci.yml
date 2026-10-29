@@ -52,13 +52,30 @@ jobs:
       - run: pnpm build
 
   # Drives the real app in Firefox (slow, so not on every pull request). Runs on pushes to main
-  # and on demand: Actions > CI > Run workflow.
-  smoke:
-    name: Browser smoke test (legacy app)
+  # and on demand: Actions > CI > Run workflow. Needs the API, Postgres and the built web app, all one process.
+  browser:
+    name: Browser tests (sign-in, billing, every screen)
     if: github.event_name != 'pull_request'
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ledgora
+          POSTGRES_PASSWORD: ledgora
+          POSTGRES_DB: ledgora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledgora -d ledgora" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://ledgora:ledgora@localhost:5432/ledgora
+      API_LISTEN_PORT: 4000
+      APP_URL: http://localhost:4000
+      API_URL: http://localhost:4000
+      RUN_MIGRATIONS: 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -68,5 +85,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ledgora/web build
-      - run: pnpm --filter @ledgora/legacy-server exec playwright install --with-deps firefox
-      - run: pnpm --filter @ledgora/legacy-server test:smoke
+      - run: pnpm --filter @ledgora/web exec playwright install --with-deps firefox
+      - run: node apps/api/src/server.ts &
+      - run: npx --yes wait-on http://localhost:4000/health
+      - run: node apps/web/scripts/auth-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/phase3-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/billing-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/screens-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000

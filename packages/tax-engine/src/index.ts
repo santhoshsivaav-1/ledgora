@@ -17,3 +17,4 @@ export * from './payments.ts';
 export * from './hsn.ts';
 export * from './credit.ts';
 export * from './outstanding.ts';
+export * from './itr.ts';

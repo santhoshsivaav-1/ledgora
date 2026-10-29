@@ -55,11 +55,14 @@ export function createRateLimiter(env: AppEnv, now: () => number = Date.now) {
   ];
   return {
     /** Returns seconds to wait when the caller is over a limit, else 0. */
-    check(method: string, path: string, caller: string): number {
+    check(method: string, path: string, caller: string, session = ''): number {
       const t = now();
       for (const b of buckets) {
         if (!b.match(method, path)) continue;
-        const key = `${b.name}:${caller}`;
+        // Sign-in and code requests count per address. General API traffic counts per signed-in person at that address,
+        // so one busy user, or several people behind one office address, do not use up each other's allowance.
+        const key =
+          b.name === 'api' && session ? `${b.name}:${caller}:${session}` : `${b.name}:${caller}`;
         const cur = hits.get(key);
         if (!cur || cur.resetAt <= t) hits.set(key, { count: 1, resetAt: t + b.windowMs });
         else if (++cur.count > b.max) return Math.ceil((cur.resetAt - t) / 1000);
@@ -75,7 +78,11 @@ const rateLimit = (env: AppEnv): MiddlewareHandler => {
   const limiter = createRateLimiter(env);
   return async (c, next) => {
     if (!env.RATE_LIMIT_ENABLED) return next();
-    const wait = limiter.check(c.req.method, c.req.path, clientIp(c, env) ?? 'unknown');
+    const session =
+      (c.req.header('cookie') ?? '')
+        .match(/better-auth\.session_token=([^;]+)/)?.[1]
+        ?.slice(0, 24) ?? '';
+    const wait = limiter.check(c.req.method, c.req.path, clientIp(c, env) ?? 'unknown', session);
     if (wait > 0) {
       c.header('retry-after', String(wait));
       throw new AppError('too_many_requests', `Too many requests. Try again in ${wait} seconds.`);
@@ -112,6 +119,21 @@ const safeOrigin = (url?: string) => {
   }
 };
 
+const APP_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "frame-src 'self' blob: data:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 const PAGE_CSP =
   "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'";
 
@@ -128,12 +150,26 @@ export function applySecurity(app: Hono, env: AppEnv) {
   );
   app.use('*', async (c: Context, next) => {
     await next();
-    const page = c.req.path === '/v1/docs' || c.req.path === '/v1/console';
+    const p = c.req.path;
+    const api = p.startsWith('/v1/') && p !== '/v1/docs' && p !== '/v1/console';
+    // JSON answers can do nothing but be read. The web app and the two dev pages need scripts, styles and fonts.
     c.header(
       'content-security-policy',
-      page ? PAGE_CSP : "default-src 'none'; frame-ancestors 'none'",
+      api || p === '/health'
+        ? "default-src 'none'; frame-ancestors 'none'"
+        : p === '/v1/docs' || p === '/v1/console'
+          ? PAGE_CSP
+          : APP_CSP,
     );
-    c.header('cache-control', 'no-store');
+    // Hashed build files never change, so they may be kept for a year; everything else is checked every time.
+    c.header(
+      'cache-control',
+      p.startsWith('/assets/')
+        ? 'public, max-age=31536000, immutable'
+        : p.startsWith('/v1/') || p === '/health'
+          ? 'no-store'
+          : 'no-cache',
+    );
   });
   app.use(
     '*',

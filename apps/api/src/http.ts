@@ -138,7 +138,8 @@ export function createRegistrar(app: Hono, deps: Deps) {
           );
         } else {
           const ctx = await requireOrg(c, deps.db, session);
-          requirePermission(ctx, spec.method, spec.path, spec.permission);
+          // The real path, not the route pattern: a pattern like /v1/workspace/collections/:collection says nothing about which collection.
+          requirePermission(ctx, spec.method, c.req.path, spec.permission);
           await requireFeature(ctx, spec.feature);
           result = await withTenant(deps.db, ctx.orgId, (tx) => run(tx, ctx), {
             businessIds: ctx.businessIds,

@@ -8,7 +8,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "start": "node apps/legacy-server/server.js",
+    "start": "pnpm --filter @ledgora/api start",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "eslint .",
@@ -17,7 +17,6 @@
     "db:seed": "pnpm --filter @ledgora/db seed",
     "db:generate": "pnpm --filter @ledgora/db generate",
     "test": "turbo run test",
-    "test:smoke": "turbo run test:smoke",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:build": "node docs-site/build.mjs",
@@ -41,6 +40,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
+    "railway": "^3.16.0",
     "sharp": "^0.35.5",
     "turbo": "^2.11.10",
     "typescript": "~6.0.3",

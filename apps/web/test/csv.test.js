@@ -11,7 +11,7 @@ import {
   salesCsvToBills,
   toIsoDate,
   toNum,
-} from '../src/utils/bulkCsv.js';
+} from '../src/features/import-export/bulkCsv.js';
 
 // Same semantics as the legacy script helper (strict ===), reported through Vitest.
 const eq = (actual, expected, label) => expect.soft(actual, label).toBe(expected);

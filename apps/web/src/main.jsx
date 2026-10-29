@@ -2,8 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.jsx'
-import AuthGate from './components/auth/AuthGate.jsx'
-import { restorePrefs, startMirroring } from './utils/prefsMirror'
+import Providers from './app/providers'
+import './styles/tokens.css'
 import './index.css'
 
 // v1.10.2 — Deferred SW update. Prior code called `updateSW(true)`
@@ -131,15 +131,10 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// v1.10.77 (#84) - settings the browser has lost come back from the data
-// folder before the first render (the wizard and Region read them on start).
-restorePrefs().then((restored) => {
-  startMirroring(restored)
-  createRoot(document.getElementById('root')).render(
-    <StrictMode>
-      <AuthGate>
-        <App />
-      </AuthGate>
-    </StrictMode>,
-  )
-})
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <Providers>
+      <App />
+    </Providers>
+  </StrictMode>,
+)

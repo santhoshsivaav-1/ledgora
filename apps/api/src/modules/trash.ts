@@ -90,6 +90,12 @@ export async function purgeExpired(tx: Tx, now = new Date()) {
       }
     }
   }
+  // Workspace bills (change 3.23) are trashed the same way and leave with the same 30 days.
+  const gone = await tx
+    .delete(s.documents)
+    .where(and(isNotNull(s.documents.deletedAt), lt(s.documents.deletedAt, cutoff)))
+    .returning({ id: s.documents.id });
+  purged += gone.length;
   return purged;
 }
 

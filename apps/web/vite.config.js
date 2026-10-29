@@ -9,8 +9,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 // of where npm is invoked from.
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// The legacy Express server listens on 47371 unless API_PORT says otherwise.
-const apiPort = Number(process.env.API_PORT) || 47371;
 // The new account/billing API (apps/api). Requests to /v1 go through this proxy so the browser sees ONE origin and the
 // session cookie works without any CORS setup.
 const accountApiPort = Number(process.env.API_LISTEN_PORT) || 4000;
@@ -139,7 +137,7 @@ export default defineConfig({
           '**/assets/index.es-*.js',
         ],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/v1\//],
+        navigateFallbackDenylist: [/^\/v1\//],
         // v1.10.33 — Was `false` on both. Kept the prompt-mode reload
         // deferral in main.jsx but flipped these to true because:
         //   1. skipWaiting=true lets the new SW take over on install
@@ -156,24 +154,11 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
-          // v1.10.2 — /api/* runtime cache. Missing this rule meant the
-          // "offline billing counter" promise was broken: fetch() throws
-          // TypeError as soon as the network drops. NetworkFirst means
-          // fresh data online, cached-fallback offline. GETs only —
-          // POST/DELETE would need a background-sync queue (future).
+          // Account API answers are per person (sessions, members, invoices): never keep a copy on the device,
+          // and never serve one from a previous sign-in.
           {
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 3,
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // a week — fresh enough for offline read
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            urlPattern: ({ url }) => url.pathname.startsWith('/v1/'),
+            handler: 'NetworkOnly',
           },
           // v1.10.2 — Lazy-loaded JS chunks (pdf, qr, html2canvas ESM)
           // are NOT precached but are cached on first use so the second
@@ -243,10 +228,6 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
-        target: `http://localhost:${apiPort}`,
-        changeOrigin: true,
-      },
       '/v1': {
         target: `http://localhost:${accountApiPort}`,
         changeOrigin: true,

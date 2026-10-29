@@ -16,36 +16,35 @@ Run from the repository root.
 | Command                              | What it does                                                                |
 | ------------------------------------ | --------------------------------------------------------------------------- |
 | `pnpm install`                       | Install every workspace                                                     |
-| `pnpm dev`                           | Start the legacy server (port 47371) and the Vite app (http://localhost:5173) |
+| `pnpm dev`                           | Start the API (port 4000) and the Vite app (http://localhost:5173) |
 | `pnpm test`                          | Vitest for `packages/tax-engine` and `apps/web`                             |
 | `pnpm typecheck`                     | `tsc --noEmit` in every workspace                                           |
 | `pnpm lint`                          | ESLint for the whole repo                                                   |
 | `pnpm format:check` / `pnpm format`  | Prettier (new code only, see `.prettierignore`)                             |
 | `pnpm build`                         | Production build of the web app into `apps/web/dist`                        |
-| `pnpm test:smoke`                    | Browser smoke test of the legacy app (needs Firefox, see below)             |
 | `docker compose up -d`               | Postgres 16, Redis 7 and Mailpit on 127.0.0.1                               |
 | `pnpm db:migrate` / `pnpm db:seed`   | Apply SQL migrations / create the demo organization (needs Postgres)        |
 | `pnpm --filter @ledgora/api dev`     | The new API on http://localhost:4000 (docs at `/v1/docs`)                   |
 | `pnpm db:generate`                   | After editing `packages/db/src/schema`, write the next migration file       |
 
-First run of the smoke test: `pnpm --filter @ledgora/legacy-server exec playwright install firefox`.
-The smoke test starts the server on throwaway folders, so it never touches `data/`.
+Browser tests: `pnpm --filter @ledgora/web exec playwright install firefox` once, then see the header of
+`apps/web/scripts/auth-e2e.mjs` and `phase3-e2e.mjs`.
 
 ## Layout
 
 ```
 apps/
-  web/            React 19 + Vite app (the product UI). Still JavaScript, migrated feature by feature in Phase 3.
-  legacy-server/  The old single-user Express server that stores JSON files. Parked until the web app switches over (end of Phase 3).
-  api/            Multi-tenant REST API (Hono + Postgres). One folder per module under src/modules.
+  web/            React 19 + Vite app. src/app (shell, providers, router), src/features/<area> (one folder per screen group),
+                  src/components/ui (shared pieces and the loading, empty and error states), src/lib (API client, query cache, permissions, and
+                  lib/data: the billing screens' data layer, one file per kind of data), src/styles (tokens).
+  api/            Multi-tenant REST API (Hono + Postgres), one folder per module under src/modules. Also serves apps/web/dist.
 packages/
   db/             Drizzle schema, SQL migrations (incl. row-level security), withTenant(), seed.
-  contracts/      Zod schemas shared by the API and the web app; request and response types come from here.
+  contracts/      Zod schemas and the permission table, shared by the API and the web app.
   tax-engine/     Pure GST / invoice maths in TypeScript. No I/O, no React, no browser APIs.
   config/         Shared tsconfig and Prettier presets.
 docs/             Product and developer documentation (this file, LEGAL.md, USER_GUIDE.md, ...).
 docs-site/        Generator for the public help site.
-data/ "Saved Invoices"/ Trash/   Runtime data of the legacy app. Git-ignored. Never commit these.
 ```
 
 `apps/web/src/utils.js` re-exports `@ledgora/tax-engine`, so existing `import ... from './utils'` lines
@@ -99,12 +98,11 @@ point `DATABASE_URL` at it. The migration role needs `CREATEROLE` once, to creat
   turns on two-factor, shows who you are and what your role may do, invites teammates, lists and ends sessions,
   and shows the audit trail. Mail and SMS the API "sends" show in its outbox panel (development only), so you can
   finish a sign-up without a mail provider. With Docker, uncomment `SMTP_URL` and read mail in Mailpit instead.
-- **Sign-in in the main app:** `pnpm dev` starts the API, the legacy server and Vite together. Open
+- **Sign-in in the main app:** `pnpm dev` starts the API and Vite together. Open
   http://localhost:5173: signed-out visitors see the sign-in screen (e-mail, phone code, create account, forgot
   password, two-step code), a new account gets the business form (the GSTIN must match the state), and the sidebar has
   **Log out** at the top. Vite forwards `/v1` to the API, so the browser sees one origin and the session cookie just
-  works. `apps/web/scripts/auth-e2e.mjs` drives all of it in Firefox (read its header first: it writes to the legacy
-  server it talks to).
+  works. `apps/web/scripts/auth-e2e.mjs` drives all of it in Firefox.
 - **Who is calling:** every `/v1` route needs a session cookie (Better Auth) and an organization the user belongs
   to. The chain is `requireSession` -> `requireOrg` -> `requirePermission` -> `requireFeature`
   (`apps/api/src/middleware`). `x-org-id` may pick another organization, but only one you are a member of.
@@ -125,3 +123,21 @@ point `DATABASE_URL` at it. The migration role needs `CREATEROLE` once, to creat
 The file-copy backups of the legacy app are gone from the new API (change 1.25). Use the managed Postgres
 provider's point-in-time recovery (Neon, RDS, Supabase and Cloud SQL all offer it) and test a restore before launch.
 The full export (`POST /v1/export`) is a convenience copy for users, not a disaster-recovery tool.
+
+## One service in production
+
+The API also serves the built web app (`apps/web/dist`): `pnpm build && pnpm start` is the whole product on one port,
+one origin (so the session cookie works), with `/v1` for the API and every other path falling back to the app.
+The old single-user server (JSON files on disk) is gone; the billing screens read and write the signed-in
+organization's workspace through `/v1/workspace` (`apps/api/src/modules/workspace`), in Postgres, behind row-level
+security, roles and the audit log.
+
+## Moving data from the old desktop app
+
+The old app kept JSON files in `data/`. Make one backup file from that folder, then import it into your account:
+
+```
+node apps/web/scripts/legacy-export.mjs data > my-backup.json
+```
+
+Sign in, then **Settings > Data > Import** (or the last step of first-run setup) and choose `my-backup.json`.

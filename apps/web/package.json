@@ -13,7 +13,9 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@ledgora/contracts": "workspace:^",
     "@ledgora/tax-engine": "workspace:*",
+    "@tanstack/react-query": "^5.105.0",
     "dompurify": "^3.4.17",
     "fflate": "^0.8.3",
     "html2canvas": "^1.4.1",
@@ -22,6 +24,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-router": "^8.5.1",
     "tesseract.js": "^7.0.0",
     "workbox-window": "^7.4.1"
   },
@@ -30,6 +33,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "playwright": "^1.63.0",
     "sharp": "^0.35.5",
     "vite": "^7.3.7",
     "vite-plugin-pwa": "^1.3.0",

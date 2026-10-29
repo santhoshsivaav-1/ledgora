@@ -7,9 +7,11 @@ import { consoleHtml } from './console.ts';
 import { errorHandler, notFoundHandler } from './errors.ts';
 import { getOutbox } from './mail/index.ts';
 import { applySecurity } from './security.ts';
+import { serveWeb } from './web.ts';
 import { accountModule } from './modules/account.ts';
 import { membersModule } from './modules/members.ts';
 import { onboardingModule } from './modules/onboarding/routes.ts';
+import { workspaceModule } from './modules/workspace/routes.ts';
 import { createRegistrar, type Deps } from './http.ts';
 import { buildOpenApi, docsHtml } from './openapi.ts';
 import { businessesModule } from './modules/businesses.ts';
@@ -68,6 +70,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     accountModule,
     membersModule,
     onboardingModule,
+    workspaceModule,
     businessesModule,
     partiesModule,
     itemsModule,
@@ -90,5 +93,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     // Mail and SMS "sent" in development, so a sign-up can be finished without a mail provider.
     app.get('/v1/dev/outbox', (c) => c.json({ data: [...getOutbox()].reverse() }));
   }
+  // Last: static files and the single-page fallback must not shadow any API route.
+  serveWeb(app, deps.env);
   return app;
 }
