@@ -65,7 +65,6 @@ import {
 } from '../src/utils.js';
 import { buildXlsx, colName } from '../src/utils/xlsx.js';
 import { bulkRowToProduct, closingStock, stockValueOf } from '../src/utils/products.js';
-import { upiNote, parseSupporters, shouldShowSupportNudge } from '../src/utils/supporters.js';
 import { unzipSync, strFromU8 } from 'fflate';
 import {
   compute44AE,
@@ -1007,31 +1006,6 @@ console.log('\n[Audit 2026-10] Income tax marginal relief');
   // §234B: tax paid after 31 March is not advance tax.
   const sched = computeAdvanceTaxSchedule(100000, 0, [{ date: '2026-06-10', amount: 100000 }], 'regular', '2025-26');
   approx(compute234BInterest(sched, '2026-06-10'), 3000, '234B: ₹1L all paid in June -> 1% x 3 months (paying late no longer wipes it out)');
-}
-
-console.log('\n[V80] Support page: UPI payment note and the supporters tracker');
-{
-  eq(upiNote('Kaveri Stationers'), 'Free GST Billing support - Kaveri Stationers', 'The payment note names the business that paid');
-  eq(upiNote(''), 'Free GST Billing support', 'No business name: the plain note');
-  eq(upiNote('M/S Sharma & Sons #12'), 'Free GST Billing support - M S Sharma Sons 12', 'Characters some UPI apps refuse are dropped');
-  eq(upiNote('A Very Long Business Name Private Limited Company of India').length <= 50, true, 'The note is kept to 50 characters');
-
-  const t = parseSupporters({ totalReceived: 12450.4, supporters: 37, goal: { amount: 50000, label: 'Balance sheet' }, thanks: ['Asha', '  Ravi  ', 42, ''], updated: '2026-10-19' });
-  eq([t.totalReceived, t.supporters, t.goal, t.thanks, t.updated], [12450, 37, { amount: 50000, label: 'Balance sheet' }, ['Asha', 'Ravi'], '2026-10-19'], 'The tracker file is read: total, supporters, goal, names');
-  eq([parseSupporters(null), parseSupporters([]), parseSupporters({ totalReceived: -5 }), parseSupporters({ totalReceived: 'lots' })], [null, null, null, null], 'A missing or broken file shows nothing');
-  const odd = parseSupporters({ totalReceived: 10, supporters: 'many', goal: { amount: 0 }, thanks: 'Asha', updated: 'yesterday' });
-  eq([odd.supporters, odd.goal, odd.thanks, odd.updated], [null, null, [], ''], 'Odd values are left out, never shown as they are');
-  eq(parseSupporters({ totalReceived: 1, thanks: ['<img src=x onerror=alert(1)>'.repeat(5)] }).thanks[0].length, 60, 'Names are cut to 60 characters (and shown as text, never HTML)');
-
-  // Daily support card on the Dashboard.
-  const day = new Date(2026, 9, 24, 10, 0);
-  const show = (n, st, at = day) => shouldShowSupportNudge(n, st, at);
-  eq([show(9, {}), show(10, {})], [false, true], 'The daily card waits for 10 invoices');
-  eq(show(50, { hiddenOn: '2026-10-24' }), false, '"Not today" hides it for the rest of the day');
-  eq(show(50, { hiddenOn: '2026-10-24' }, new Date(2026, 9, 25, 0, 5)), true, 'It is back the next morning (local date, not UTC)');
-  eq([show(50, { snoozedUntil: day.getTime() + 1 }), show(50, { snoozedUntil: day.getTime() - 1 })], [false, true], '"Hide for 30 days" holds until the date passes');
-  eq(show(500, { never: true }), false, 'The old "Don\'t show again" is still honoured');
-  eq(show(50, { snoozedAt: day.getTime() }), true, 'The old 120-day snooze no longer hides it');
 }
 
 console.log('\n────────────────────────────────────────');

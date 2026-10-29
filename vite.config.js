@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import path from 'path'
-import fs from 'fs'
 import { fileURLToPath } from 'url'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -10,19 +9,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 // of where npm is invoked from.
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// v1.10.6 — audit L20: read `data/port.txt` when it exists so the dev
-// proxy tracks whatever port Express landed on (Express drifts off the
-// default when EADDRINUSE bumps it to 47372, 47373, …). Falls back to
-// the historical 47371 default if the file's missing.
-const readActivePort = () => {
-  try {
-    const p = path.join(__dirname, 'data', 'port.txt');
-    if (!fs.existsSync(p)) return 47371;
-    const n = parseInt(fs.readFileSync(p, 'utf-8').trim(), 10);
-    return (isFinite(n) && n >= 1024 && n <= 65535) ? n : 47371;
-  } catch { return 47371; }
-};
-const activeExpressPort = readActivePort();
+// The legacy Express server listens on 47371 unless API_PORT says otherwise.
+const apiPort = Number(process.env.API_PORT) || 47371;
 
 export default defineConfig({
   // Vite source root lives in src/ rather than the project root. Reason:
@@ -146,17 +134,7 @@ export default defineConfig({
           '**/assets/pdf-*.js',
           '**/assets/qr-*.js',
           '**/assets/index.es-*.js',
-          // v1.10.33 — Tesseract worker + core + traineddata (~22MB total).
-          // Excluded from precache — cached on demand by the runtime rule
-          // below so the initial SW install stays ~1MB, and the OCR
-          // dependency is downloaded once when the user actually opens
-          // the OCR modal.
-          '**/tesseract/**',
         ],
-        // v1.10.33 — allow the 3.9MB traineddata and 3.3MB wasm cores to
-        // enter the runtime cache. Workbox's default 2MB cap would
-        // silently skip them and offline-second-use OCR would break.
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         // v1.10.33 — Was `false` on both. Kept the prompt-mode reload
@@ -231,20 +209,6 @@ export default defineConfig({
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
-          // v1.10.33 — OCR assets. CacheFirst so second-time OCR is
-          // instant and works offline once the user has opened the
-          // modal once online. maxAgeSeconds is a year — these files
-          // are versioned in-place by scripts/bundle-tesseract-assets.mjs
-          // and don't change without a redeploy.
-          {
-            urlPattern: /\/tesseract\/.*\.(?:js|wasm|traineddata)$/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'tesseract-cache',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
         ],
       },
     }),
@@ -276,11 +240,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // v1.10.6 — audit L20: was hardcoded 47371. Now reads
-      // `data/port.txt` at Vite start (see `activeExpressPort` at top
-      // of file). Restart Vite if the server rebooted onto a new port.
       '/api': {
-        target: `http://localhost:${activeExpressPort}`,
+        target: `http://localhost:${apiPort}`,
         changeOrigin: true,
       }
     }

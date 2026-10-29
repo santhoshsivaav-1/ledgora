@@ -28,7 +28,8 @@ function getAccentRGB() {
 // v1.10.22 — Purchase-bill OCR modal. Lazy-loaded because tesseract.js is
 // ~2MB gzipped; we only pay the download cost when the user actually
 // opens the OCR flow.
-const BillOCR = lazy(() => import('./BillOCR'));
+import { FEATURES } from '../config/featureFlags';
+const BillOCR = FEATURES.billScan ? lazy(() => import('./BillOCR')) : null;
 
 const PAYMENT_STATUSES = ['Unpaid', 'Paid', 'Partial'];
 
@@ -842,16 +843,18 @@ export default function PurchaseBills() {
           </HelpButton>
         </div>
         <div className="flex gap-2">
-          <button className="btn btn-secondary" onClick={() => setShowOCR(true)} title="Extract fields from a bill photo/scan">
-            <Wand2 size={16} /> Import from image (OCR)
-          </button>
+          {FEATURES.billScan && (
+            <button className="btn btn-secondary" onClick={() => setShowOCR(true)} title="Extract fields from a bill photo/scan">
+              <Wand2 size={16} /> Import from image (OCR)
+            </button>
+          )}
           <BulkCsvImport kind="purchase" onDone={() => { loadPurchases(); loadProducts(); }} />
           <button className="btn btn-primary" onClick={openAdd}><Plus size={18} /> Add Purchase</button>
         </div>
       </div>
 
       {/* v1.10.22 — Bill OCR modal (tesseract.js, lazy-loaded). */}
-      {showOCR && (
+      {FEATURES.billScan && showOCR && (
         <Suspense fallback={<div className="modal-overlay"><div className="modal-content" style={{ maxWidth: 320, textAlign: 'center' }}>Loading OCR…</div></div>}>
           <BillOCR onClose={() => setShowOCR(false)} onExtracted={applyOCR} />
         </Suspense>

@@ -449,15 +449,6 @@ body {
 .sidebar-autohide-toggle.on { background: rgba(37, 99, 235, 0.18); border-color: rgba(37, 99, 235, 0.45); color: #93c5fd; }
 .sidebar-autohide-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-/* Support & About stands out in the sidebar: a rose pill, solid when open. */
-.nav-btn.nav-btn-support {
-  background: rgba(225, 29, 72, 0.14); border: 1px solid rgba(225, 29, 72, 0.35); color: #fda4af;
-}
-.nav-btn.nav-btn-support:hover { background: rgba(225, 29, 72, 0.24); color: #fff; }
-.nav-btn.nav-btn-support > svg { color: #fb7185; }
-.nav-btn.nav-btn-support-active,
-.nav-btn.nav-btn-support-active:hover { background: #e11d48; border-color: #e11d48; color: #fff; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35); }
-.nav-btn.nav-btn-support-active > svg { color: #fff; fill: #fff; }
 @media (min-width: 769px) {
   .app-layout.sidebar-autohide > .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 900;
@@ -3413,12 +3404,6 @@ html:not([data-theme="dark"]) .sidebar-subtitle { color: #64748b; }
 html:not([data-theme="dark"]) .sidebar-autohide-toggle { color: #64748b; }
 html:not([data-theme="dark"]) .sidebar-autohide-toggle:hover { background: rgba(15, 23, 42, 0.06); color: #0f172a; }
 html:not([data-theme="dark"]) .sidebar-autohide-toggle.on { background: rgba(37, 99, 235, 0.10); border-color: rgba(37, 99, 235, 0.35); color: var(--primary); }
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support:hover { background: #ffe4e6; color: #9f1239; }
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support > svg { color: #e11d48; }
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support-active,
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support-active:hover { background: #e11d48; border-color: #e11d48; color: #fff; }
-html:not([data-theme="dark"]) .nav-btn.nav-btn-support-active > svg { color: #fff; }
 html:not([data-theme="dark"]) .nav-btn { color: #475569; }
 html:not([data-theme="dark"]) .nav-btn:hover { background: rgba(15, 23, 42, 0.06); color: #0f172a; }
 html:not([data-theme="dark"]) .profile-switcher-btn,

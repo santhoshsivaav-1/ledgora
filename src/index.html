@@ -12,44 +12,9 @@
       tags can't execute, and connect-src is limited to localhost + Google
       services (only place we make outbound calls).
     -->
-  <!--
-      v1.10.33 — Tesseract assets now bundled into public/tesseract/ by
-      scripts/bundle-tesseract-assets.mjs. That means:
-        - script-src no longer needs https://cdn.jsdelivr.net (worker
-          serves from same-origin)
-        - connect-src no longer needs jsdelivr or tessdata.projectnaptha
-          (traineddata + core WASM serve from same-origin)
-      What STAYS wide:
-        - 'wasm-unsafe-eval' in script-src → tesseract-core compiles a
-          WebAssembly module, which requires this outside of a fresh
-          instantiation flow
-        - worker-src 'self' blob: → tesseract creates its worker from a
-          blob URL. Without an explicit worker-src, it falls back to
-          script-src (which excludes blob:) and blocks the worker.
-        - style-src http://localhost:* → html2canvas clones the invoice
-          into an ABOUT:BLANK iframe before rasterising it. Firefox
-          inherits the CSP into that iframe but resolves 'self' against
-          about:blank's NULL origin, so 'self' matches nothing and the
-          app's own stylesheet is refused — the PDF then renders
-          UNSTYLED. Chrome resolves 'self' to the inherited origin, which
-          is why this never showed up in Chrome testing. Naming the real
-          origin sidesteps the 'self' resolution entirely; connect-src
-          already lists http://localhost:* for a comparable reason.
-          Reported as "pdf save as thermal printer" — it was not thermal,
-          it was an invoice with no CSS.
-          v1.10.77: http://127.0.0.1:* as well, for the app opened by that
-          address (the PDF lost its stylesheet there).
-        - frame-src 'self' blob: → Print and Save-as-PDF render the
-          generated PDF into a hidden iframe via createObjectURL (see
-          printViaIframe in InvoiceGenerator.jsx and the same pattern in
-          PrintSettings.jsx). Without blob: here the iframe is blocked
-          outright and Print silently does nothing. Reported on Firefox,
-          which enforces frame-src against blob: strictly; Chrome was
-          laxer, which is why this survived to v1.10.46 unnoticed.
-    -->
   <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src  'self' 'wasm-unsafe-eval' https://accounts.google.com https://apis.google.com;
+      script-src  'self' https://accounts.google.com https://apis.google.com;
       worker-src  'self' blob:;
       style-src   'self' 'unsafe-inline' http://localhost:* http://127.0.0.1:* https://fonts.googleapis.com;
       font-src    'self' https://fonts.gstatic.com data:;

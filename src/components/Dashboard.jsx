@@ -9,7 +9,6 @@ import LockButton from './LockButton';
 import ActionsMenu from './ActionsMenu';
 import BulkCsvImport from './BulkCsvImport';
 import PrintPreviewModal from './PrintPreviewModal';
-import SupportNudge from './SupportNudge';
 import { toast } from './Toast';
 import { confirmAction } from './ConfirmModal';
 
@@ -201,7 +200,7 @@ function ReceiptModal({ target, onClose }) {
   );
 }
 
-export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, onOpenGuide, onOpenSupport, activeProfile }) {
+export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, onOpenGuide, activeProfile }) {
   // v1.10.64 — requested (#55, @sangwanmail-eng): "An invoice belonging to one
   // company should not appear under the other."
   //
@@ -1282,8 +1281,6 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
           </div>
         </div>
       )}
-
-      {!startedSteps && onOpenSupport && <SupportNudge invoiceCount={bills.length} onOpen={onOpenSupport} />}
 
       {overdueBills.length > 0 && (
         <div className="overdue-banner" onClick={() => { setStatusFilter('overdue'); }}

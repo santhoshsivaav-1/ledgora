@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Home, FileText, Settings, Plus, Users, Package, BarChart3, Wallet, RefreshCw, Receipt, BookOpen, Moon, Sun, Download, X, ShoppingCart, ChevronDown, Building2, Pencil, HelpCircle, Search, Command, Bell, Calculator, HardDrive, Menu, Heart } from 'lucide-react';
-import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, runUpdateNow, getLockStatus } from './store';
+import { getAllProfiles, saveProfile, getEnabledModules, getAllBills, getAllProducts, getStockAlertSettings, getAllClients, getLockStatus } from './store';
 import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate, DOCS_URL } from './utils';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
@@ -19,7 +19,7 @@ import { isModuleEnabled, getUpcomingFilings, countsAsSales, localToday, toLocal
 import Dashboard from './components/Dashboard';
 import InvoiceGenerator from './components/InvoiceGenerator';
 import SetupWizard from './components/SetupWizard';
-import ToastContainer, { toast } from './components/Toast';
+import ToastContainer from './components/Toast';
 import ConfirmModalContainer from './components/ConfirmModal';
 import WelcomeGuide from './components/WelcomeGuide';
 const SettingsView = lazy(() => import('./components/SettingsView'));
@@ -32,9 +32,6 @@ const ReceiptVoucher = lazy(() => import('./components/ReceiptVoucher'));
 const GSTReturns = lazy(() => import('./components/GSTReturns'));
 const IncomeTax = lazy(() => import('./components/IncomeTax'));
 const PurchaseBills = lazy(() => import('./components/PurchaseBills'));
-const ControlPanel = lazy(() => import('./components/ControlPanel'));
-const SupportView = lazy(() => import('./components/SupportView'));
-import StarBanner from './components/StarBanner';
 import AppFooter from './components/AppFooter';
 import LockButton from './components/LockButton';
 import { lockNow } from './utils/appLock';
@@ -71,8 +68,7 @@ function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const v = params.get('view');
-      // v1.10.74 - 'controlpanel' added so ?view=controlpanel deep links work too.
-      const valid = ['dashboard', 'new', 'clients', 'inventory', 'expenses', 'purchases', 'recurring', 'receipts', 'reports', 'filing', 'incometax', 'settings', 'controlpanel', 'support'];
+      const valid = ['dashboard', 'new', 'clients', 'inventory', 'expenses', 'purchases', 'recurring', 'receipts', 'reports', 'filing', 'incometax', 'settings'];
       if (v && valid.includes(v)) {
         // Strip the query string so a refresh doesn't keep snapping back to
         // the shortcut target — only the *first* navigation honours it.
@@ -105,31 +101,6 @@ function App() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
-
-  // Update notification state. Auto-checks GitHub on mount + every 6h.
-  // The user can dismiss a specific version (stored in localStorage) so the
-  // banner doesn't keep nagging once they've seen it. A NEW version released
-  // after that dismissal will re-show the banner.
-  const [updateInfo, setUpdateInfo] = useState(null);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const updateBannerVisible = updateInfo?.updateAvailable
-    && localStorage.getItem('freegstbill_dismissedUpdate') !== updateInfo.latest;
-
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const res = await fetch('/api/check-update');
-        const data = await res.json();
-        if (!cancelled) setUpdateInfo(data);
-      } catch { /* offline — quietly skip */ }
-    };
-    // First check ~5 seconds after mount so it doesn't fight the initial load.
-    const initial = setTimeout(check, 5000);
-    // Then re-check every 6 hours while the app is open.
-    const interval = setInterval(check, 6 * 60 * 60 * 1000);
-    return () => { cancelled = true; clearTimeout(initial); clearInterval(interval); };
-  }, []);
 
   // ---- Notification centre ----
   // Computed from server data on app boot + every 10 minutes; tucked under a
@@ -274,32 +245,6 @@ function App() {
   // `navItems` and `handleNewInvoice` exist. Declaring them up here would
   // throw "Cannot access 'X' before initialization" at render time because
   // useMemo's dependency array is evaluated synchronously every render.
-
-  // v1.10.69 - see runUpdateNow() in store.js for why this is no longer a link.
-  const [updating, setUpdating] = useState(false);
-  const handleUpdateNow = async () => {
-    setUpdating(true);
-    toast('Updating… your data is backed up first. This takes about a minute.', 'info', 8000);
-    const result = await runUpdateNow();
-    setUpdating(false);
-    if (result.ok) {
-      setShowUpdateModal(false);
-      toast('Update finished. Reload the page to use the new version.', 'success', 10000);
-    } else {
-      toast(`Update failed — ${result.error}`, 'error', 10000);
-    }
-  };
-
-  const dismissUpdate = () => {
-    if (updateInfo?.latest) {
-      localStorage.setItem('freegstbill_dismissedUpdate', updateInfo.latest);
-      // v1.10.6 — audit L10: was `setUpdateInfo(prev => prev ? { ...prev }
-      // : prev)` "to trigger re-render". No-op — `setShowUpdateModal(false)`
-      // below already re-renders, and `updateBannerVisible` reads
-      // localStorage every render so the new dismissal is picked up.
-    }
-    setShowUpdateModal(false);
-  };
 
   // Check if server is running — continuously monitors
   useEffect(() => {
@@ -555,14 +500,8 @@ function App() {
       acts.push({ label: `Go to ${item.label}`, hint: '', category: 'nav', run: item.onClick || (() => setCurrentView(item.id)) });
     });
     acts.push({ label: 'Go to Settings', hint: '', category: 'nav', run: () => setCurrentView('settings') });
-    // v1.10.74 - Control Panel has its own sidebar button but was missing here.
-    acts.push({ label: 'Go to Control Panel', hint: '', category: 'nav', run: () => setCurrentView('controlpanel') });
-    acts.push({ label: 'Go to Support & About', hint: '', category: 'nav', run: () => setCurrentView('support') });
     acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: () => setDarkMode(d => !d) });
     acts.push({ label: 'Show keyboard shortcuts', hint: 'Ctrl+/', category: 'help', run: () => setShowShortcutsHelp(true) });
-    if (updateInfo?.updateAvailable) {
-      acts.push({ label: `View update — v${updateInfo.latest}`, hint: '', category: 'update', run: () => setShowUpdateModal(true) });
-    }
     // v1.9.4 — cross-app search: invoices, clients, products
     // v1.10.5 — audit H24 fix. Prior code dispatched
     // `CustomEvent('fgsb-open-bill', { detail: b.id })` but no one
@@ -616,13 +555,13 @@ function App() {
       ['Watermarks', 'section-print'], ['Multi-copy print', 'section-print'],
       ['Digital signature', 'section-company'], ['Company letterhead', 'section-print'],
       ['Modules', 'section-modules'], ['Region preference', 'section-region'],
-      ['Google Drive backup', 'section-cloud'], ['App updates', 'section-updates'],
+      ['Google Drive backup', 'section-cloud'],
     ];
     settingsJumps.forEach(([s, sectionId]) => {
       acts.push({ label: `⚙️ Settings → ${s}`, hint: '', category: 'settings', run: () => openSettingsAt(sectionId) });
     });
     return acts;
-  }, [navItems, updateInfo, handleNewInvoice, searchCorpus]);
+  }, [navItems, handleNewInvoice, searchCorpus]);
 
   const filteredPalette = paletteActions.filter(a =>
     !paletteQuery.trim() || a.label.toLowerCase().includes(paletteQuery.toLowerCase())
@@ -886,33 +825,6 @@ function App() {
             </button>
           ))}
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            {/* Update-available banner — only shows when GitHub has a newer version
-                AND the user hasn't already dismissed THIS specific version. New
-                releases re-show the banner. Click to view notes + update. */}
-            {updateBannerVisible && (
-              <button
-                className="nav-btn"
-                onClick={() => setShowUpdateModal(true)}
-                title={`v${updateInfo.latest} is available`}
-                style={{
-                  background: 'var(--info-bg)',
-                  borderColor: 'var(--info-border)',
-                  color: 'var(--info-text)',
-                  fontWeight: 600,
-                  position: 'relative',
-                }}
-              >
-                <Download size={18} />
-                <span style={{ flex: 1, textAlign: 'left' }}>
-                  Update to v{updateInfo.latest}
-                </span>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: '#f59e0b', boxShadow: '0 0 0 3px rgba(245,158,11,0.25)',
-                  flexShrink: 0,
-                }} />
-              </button>
-            )}
             {/* Notification bell — opens a popover listing overdue / due-soon
                 invoices, GST filing deadlines, and low-stock items. Each row
                 is a single click away from the page that fixes it. */}
@@ -945,32 +857,10 @@ function App() {
               {darkMode ? 'Light Mode' : 'Dark Mode'}
             </button>
             <button
-              className={`nav-btn nav-btn-support${currentView === 'support' ? ' nav-btn-support-active' : ''}`}
-              onClick={() => setCurrentView('support')}
-              title="Who makes this app, and how to help"
-            >
-              <Heart size={18} /> Support &amp; About
-            </button>
-            <button
-              className={`nav-btn ${currentView === 'controlpanel' ? 'nav-btn-active' : ''}`}
-              onClick={() => setCurrentView('controlpanel')}
-              title="Update, backup, restore, move to another PC"
-            >
-              <HardDrive size={18} /> Control Panel
-            </button>
-            <button
               className={`nav-btn ${currentView === 'settings' ? 'nav-btn-active' : ''}`}
               onClick={() => setCurrentView('settings')}
-              style={updateBannerVisible ? { position: 'relative' } : undefined}
             >
               <Settings size={18} /> Settings
-              {updateBannerVisible && (
-                <span className="nav-badge" style={{
-                  position: 'absolute', top: '8px', right: '12px',
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: '#f59e0b',
-                }} title="Update available" />
-              )}
             </button>
             <div className={`server-status server-status-${serverStatus}`}>
               <span className="server-status-dot" />
@@ -991,9 +881,8 @@ function App() {
         </div>
       )}
       <div className="main-content">
-        {currentView !== 'new' && <StarBanner />}
         {currentView === 'dashboard' && (
-          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={openDocs} onOpenSupport={() => setCurrentView('support')} activeProfile={profile} />
+          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={openDocs} activeProfile={profile} />
         )}
         {currentView === 'new' && (
           <InvoiceGenerator
@@ -1040,18 +929,11 @@ function App() {
           {currentView === 'settings' && (
             <SettingsView onSaved={(p) => setProfile(p)} />
           )}
-          {currentView === 'controlpanel' && (
-            <ControlPanel />
-          )}
-          {currentView === 'support' && (
-            <SupportView />
-          )}
         </Suspense>
         {/* Version + ledgora line: Dashboard only, so it never takes space on working screens. */}
-        {currentView === 'dashboard' && <AppFooter onOpenSupport={() => setCurrentView('support')} />}
+        {currentView === 'dashboard' && <AppFooter />}
       </div>
 
-      {/* Update modal — release notes + Export-backup-first nudge + Update Now */}
       {/* Notification popover — rendered as a click-out modal so it works on
           tablets too. Grouped by category with a navigate-to button per group. */}
       {showNotifs && (
@@ -1209,72 +1091,6 @@ function App() {
             </table>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
               On macOS, use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showUpdateModal && updateInfo && (
-        <div className="modal-overlay" onClick={() => setShowUpdateModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div>
-                <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.25rem' }}>
-                  Update available — v{updateInfo.latest}
-                </h3>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
-                  You're on v{updateInfo.current}
-                  {updateInfo.releasePublishedAt && ` · released ${new Date(updateInfo.releasePublishedAt).toLocaleDateString()}`}
-                </p>
-              </div>
-              <button className="icon-btn" onClick={() => setShowUpdateModal(false)} title="Close"><X size={18} /></button>
-            </div>
-
-            {/* Data-safety reassurance — explicit, prominent. Same .notice-info style
-                as the Data Management privacy card so users learn one visual pattern. */}
-            <div className="notice notice-info" style={{ marginBottom: '0.85rem' }}>
-              <span className="notice-icon">🔒</span>
-              <div>
-                <strong>Your data is safe.</strong> Updates only refresh the app code and dependencies — your <code>data/</code> folder (invoices, clients, products, settings) and <code>Saved Invoices/</code> PDF archive are <strong>never touched</strong>. The updater pulls the latest source from GitHub and rebuilds, then restarts.
-              </div>
-            </div>
-
-            {/* Release notes */}
-            <div className="surface-card" style={{ maxHeight: '320px', overflowY: 'auto', whiteSpace: 'pre-wrap', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '0.85rem' }}>
-              {updateInfo.releaseNotes || (
-                <span style={{ color: 'var(--text-muted)' }}>
-                  No release notes available — see the full changelog at{' '}
-                  <a href={updateInfo.releaseUrl || 'https://github.com/IamRamgarhia/Free-GST-Billing-Software/releases'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)' }}>GitHub Releases</a>.
-                </span>
-              )}
-            </div>
-
-            {/* Suggested pre-update step: export a backup */}
-            <div className="notice notice-warn" style={{ marginBottom: '1rem' }}>
-              <span className="notice-icon">💡</span>
-              <div>
-                <strong>Recommended:</strong> export a backup before updating, just in case. <button type="button" className="btn-link" onClick={() => { setShowUpdateModal(false); setCurrentView('settings'); }} style={{ background: 'none', border: 0, color: 'var(--primary)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>Open Settings → Data Management</button> and click <em>Export Backup…</em>.
-              </div>
-            </div>
-
-            <div className="flex gap-2 justify-end" style={{ flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-secondary" onClick={dismissUpdate}>
-                Skip this version
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowUpdateModal(false)}>
-                Remind me later
-              </button>
-              {updateInfo.releaseUrl && (
-                <a href={updateInfo.releaseUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-                  View on GitHub
-                </a>
-              )}
-              <button type="button" className="btn btn-primary" disabled={updating} onClick={handleUpdateNow}>
-                <Download size={16} /> {updating ? 'Updating…' : 'Update Now'}
-              </button>
-            </div>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
-              <em>Update Now</em> backs up your data, then fetches the newest release. It takes about a minute — leave this window open, then reload the page when it finishes.
             </p>
           </div>
         </div>

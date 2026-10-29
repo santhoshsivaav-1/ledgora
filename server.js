@@ -17,28 +17,10 @@ import { templateTotals, clientYearToDate, nextCounterValue, startFor, numberSer
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
 
-// Port choice — we deliberately default to a high, unusual number rather than
-// the conventional 3001. The 3000-range is heavily used by every other Node /
-// Vite / React / Express app, dev servers, Grafana, etc., which means every
-// other install would land on 3002 / 3003 / etc. and the user would be left
-// guessing which URL is "theirs". 47371 is in IANA's unassigned range
-// (between registered 1024-49151 and dynamic 49152-65535) and isn't claimed
-// by any common software we could find. The persisted `data/port.txt` always
-// wins over this default — so a single user who genuinely needs 47371 for
-// something else can edit that file and we'll respect it forever.
-const DEFAULT_PORT = 47371;
-const PORT_FILE = path.join(__dirname, 'data', 'port.txt');
-
-// Read the persisted port (if any) — written once on first successful start
-// and every time we get bumped off our preferred port by EADDRINUSE.
-const persistedPort = (() => {
-  try {
-    if (!fs.existsSync(PORT_FILE)) return null;
-    const n = parseInt(fs.readFileSync(PORT_FILE, 'utf-8').trim(), 10);
-    return (isFinite(n) && n >= 1024 && n <= 65535) ? n : null;
-  } catch { return null; }
-})();
-const STARTING_PORT = persistedPort || DEFAULT_PORT;
+// 47371 is in IANA's unassigned range and is not claimed by common software.
+// PORT overrides it; if it is busy the next free port up to +50 is used.
+const DEFAULT_PORT = Number(process.env.PORT) || 47371;
+const STARTING_PORT = DEFAULT_PORT;
 const MAX_PORT_SCAN = 50; // 47371 → 47420 is enough headroom for any conceivable collision
 
 const app = express();
@@ -1040,215 +1022,6 @@ app.get('/api/version', (req, res) => {
   res.json({ current: pkg.version });
 });
 
-// Naive semver compare — returns +1 if a > b, -1 if a < b, 0 if equal.
-// "1.4.10" > "1.4.2" correctly (numeric parts), unlike a string compare.
-function compareSemver(a, b) {
-  const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
-  const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
-  }
-  return 0;
-}
-
-app.get('/api/check-update', async (req, res) => {
-  try {
-    // Two parallel fetches: package.json (definitive version source) and the
-    // GitHub Releases API (for release notes). Both have a 4s timeout so a
-    // flaky network can't lock the UI.
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const [pkgRes, relRes] = await Promise.all([
-      fetch('https://raw.githubusercontent.com/IamRamgarhia/Free-GST-Billing-Software/main/package.json', { signal: ctrl.signal }).catch(() => null),
-      fetch('https://api.github.com/repos/IamRamgarhia/Free-GST-Billing-Software/releases/latest', {
-        signal: ctrl.signal,
-        headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'FreeGSTBill-update-check' },
-      }).catch(() => null),
-    ]);
-    clearTimeout(t);
-
-    let releaseNotes = null;
-    let releaseUrl = null;
-    let releasePublishedAt = null;
-    let releaseTag = null;
-    if (relRes && relRes.ok) {
-      const rel = await relRes.json();
-      releaseNotes = rel.body || null;
-      releaseUrl = rel.html_url || null;
-      releasePublishedAt = rel.published_at || null;
-      releaseTag = rel.tag_name || null;
-    }
-
-    // #105: the updater installs the latest RELEASE, so its tag is the version
-    // on offer. main's package.json can be ahead of it (merged, not released
-    // yet) and then offered an update that re-installed the same version.
-    // package.json is only the fallback when the Releases API can't be read.
-    let latest = /^v?\d+\.\d+\.\d+$/.test(releaseTag || '') ? releaseTag.replace(/^v/, '') : null;
-    if (!latest) {
-      if (!pkgRes?.ok) throw new Error('GitHub fetch failed');
-      latest = (await pkgRes.json()).version;
-    }
-    const updateAvailable = compareSemver(latest, pkg.version) > 0;
-
-    res.json({
-      current: pkg.version,
-      latest,
-      updateAvailable,
-      releaseNotes,
-      releaseUrl,
-      releasePublishedAt,
-      releaseTag,
-    });
-  } catch {
-    res.json({ current: pkg.version, latest: null, updateAvailable: false, error: 'Could not check for updates' });
-  }
-});
-
-// ============================================================
-// v1.10.44 — In-app Control Panel API
-// Powers /control-panel in the app. Each endpoint shells out to
-// a platform-appropriate script under `_system-scripts/` — the copy inside
-// `_system/` in a release install, or `release-templates/_system-scripts/`
-// when running from the source repo.
-// ============================================================
-import { spawn } from 'child_process';
-
-const isWindows = process.platform === 'win32';
-const isMac = process.platform === 'darwin';
-
-// Where the launcher scripts live. In a release-ZIP install the app
-// is under `_system/` so `..` gets us to the launcher's script dir;
-// in dev the same relative path lands us at `release-templates/_system-scripts/`
-// which also holds them. If neither exists we degrade gracefully —
-// the Control Panel just shows the buttons as disabled.
-// v1.10.72 (#73) — the release ZIP has always FLATTENED the scripts into
-// _system/, right next to this file (build-release-zip.mjs copies
-// _system-scripts/* into _system/). None of the old candidates existed in a
-// ZIP install, so every user since v1.10.44 got "Launcher scripts not
-// detected", and Update / Backup / Restore / Move / Stop failed with
-// "Script not found". A folder now only counts if it really holds the update
-// script, so an unrelated folder with the right name can't be picked either.
-const SCRIPT_SUFFIX = isWindows ? '-windows.ps1' : '-unix.sh';
-const CONTROL_SCRIPT_CANDIDATES = [
-  __dirname,                                                     // release ZIP: _system/
-  path.join(__dirname, 'release-templates', '_system-scripts'), // source repo
-  path.join(__dirname, '_system-scripts'),                       // older layouts
-  path.join(__dirname, '..', '_system-scripts'),
-];
-const controlScriptDir = CONTROL_SCRIPT_CANDIDATES.find(
-  p => fs.existsSync(path.join(p, `update${SCRIPT_SUFFIX}`)),
-) || null;
-
-function pickScript(name) {
-  if (!controlScriptDir) return null;
-  const p = path.join(controlScriptDir, name + SCRIPT_SUFFIX);
-  return fs.existsSync(p) ? p : null;
-}
-
-// Which Control Panel actions have a script on this platform. Linux / macOS
-// ship update + backup only, so Restore / Move / Stop are shown as not
-// available there instead of failing when clicked.
-const CONTROL_ACTIONS = ['update', 'backup', 'restore', 'move', 'stop'];
-const controlActions = () => Object.fromEntries(CONTROL_ACTIONS.map(a => [a, !!pickScript(a)]));
-
-function runControlScript(scriptPath) {
-  return new Promise((resolve) => {
-    if (!scriptPath) { resolve({ ok: false, error: 'Not available here: the script for this action is not in the app folder. Download the latest ZIP to get it.' }); return; }
-    // v1.10.66 (#59) — update-unix.sh is plain POSIX sh, so it runs under `sh`
-    // and therefore also where bash does not exist (Alpine / BusyBox NAS
-    // images). The other Unix scripts use bash features and keep running under
-    // bash, found on PATH as before — /usr/local/bin/bash on TrueNAS CORE,
-    // /run/current-system/sw/bin/bash on NixOS.
-    const unixShell = path.basename(scriptPath) === 'update-unix.sh' ? 'sh' : 'bash';
-    const [cmd, args] = isWindows
-      ? ['powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath]]
-      : [unixShell, [scriptPath]];
-    let out = '', err = '';
-    try {
-      const child = spawn(cmd, args, { detached: false, windowsHide: false });
-      child.stdout?.on('data', d => { out += d.toString(); });
-      child.stderr?.on('data', d => { err += d.toString(); });
-      child.on('error', e => resolve({ ok: false, error: e.message }));
-      child.on('exit', code => resolve({ ok: code === 0, exitCode: code, stdout: out.slice(-4000), stderr: err.slice(-2000) }));
-    } catch (e) {
-      resolve({ ok: false, error: e.message });
-    }
-  });
-}
-
-app.get('/api/control-panel/status', (req, res) => {
-  const dataSize = (() => {
-    try {
-      let total = 0;
-      const walk = (dir) => {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const p = path.join(dir, entry.name);
-          if (entry.isDirectory()) walk(p);
-          else { try { total += fs.statSync(p).size; } catch { /* ignore */ } }
-        }
-      };
-      if (fs.existsSync(DATA_DIR)) walk(DATA_DIR);
-      return total;
-    } catch { return 0; }
-  })();
-  // Port is bound in startServer() below; read it back from the socket
-  // address at request time rather than relying on a module-level const
-  // that doesn't exist. Falls back to the persisted preference for the
-  // edge case where the request arrives before activeServer is set.
-  let activePort = STARTING_PORT;
-  try {
-    const addr = activeServer && activeServer.address();
-    if (addr && typeof addr === 'object' && addr.port) activePort = addr.port;
-  } catch { /* keep fallback */ }
-  res.json({
-    platform: process.platform,
-    node: process.version,
-    controlScriptsAvailable: !!controlScriptDir,
-    actions: controlActions(),
-    dataFolder: DATA_DIR,
-    dataSizeBytes: dataSize,
-    port: activePort,
-    launcherType: controlScriptDir ? (isWindows ? 'hta' : (isMac ? 'command' : 'sh')) : 'none',
-  });
-});
-
-app.post('/api/control-panel/backup', async (req, res) => {
-  const script = pickScript('backup');
-  const result = await runControlScript(script);
-  res.json(result);
-});
-
-app.post('/api/control-panel/open-data-folder', (req, res) => {
-  try {
-    if (isWindows) spawn('explorer.exe', [DATA_DIR], { detached: true }).unref();
-    else if (isMac) spawn('open', [DATA_DIR], { detached: true }).unref();
-    else spawn('xdg-open', [DATA_DIR], { detached: true }).unref();
-    res.json({ ok: true });
-  } catch (e) { res.json({ ok: false, error: e.message }); }
-});
-
-app.post('/api/control-panel/open-backups-folder', (req, res) => {
-  const backupsHome = path.join(process.env.USERPROFILE || process.env.HOME || '', 'Documents', 'FreeGSTBill Backups');
-  try {
-    if (!fs.existsSync(backupsHome)) fs.mkdirSync(backupsHome, { recursive: true });
-    if (isWindows) spawn('explorer.exe', [backupsHome], { detached: true }).unref();
-    else if (isMac) spawn('open', [backupsHome], { detached: true }).unref();
-    else spawn('xdg-open', [backupsHome], { detached: true }).unref();
-    res.json({ ok: true, path: backupsHome });
-  } catch (e) { res.json({ ok: false, error: e.message }); }
-});
-
-app.post('/api/control-panel/launch-script', async (req, res) => {
-  // Whitelisted script actions the Control Panel exposes.
-  const allowed = new Set(['update', 'restore', 'move', 'stop']);
-  const action = String(req.body?.action || '');
-  if (!allowed.has(action)) { res.status(400).json({ ok: false, error: 'Unknown action' }); return; }
-  const script = pickScript(action);
-  const result = await runControlScript(script);
-  res.json(result);
-});
-
 // ========================
 // Serve production build
 // ========================
@@ -1352,7 +1125,7 @@ function runDailyBackup() {
       // Previously excluded → users restoring last week's backup lost every
       // bill they'd trashed since, breaking the 30-day soft-delete promise.
       // We still skip `backups` (no recursion) and log files.
-      if (entry.name === 'backups' || entry.name === 'errors.log' || entry.name === 'port.txt') continue;
+      if (entry.name === 'backups' || entry.name === 'errors.log') continue;
       const src = path.join(DATA_DIR, entry.name);
       const dst = path.join(target, entry.name);
       if (entry.isDirectory()) copyDirRecursive(src, dst);
@@ -1451,7 +1224,7 @@ app.post('/api/backups/:date/restore', (req, res) => {
     ensureDir(snapshotDir);
     const liveEntries = fs.readdirSync(DATA_DIR, { withFileTypes: true });
     for (const entry of liveEntries) {
-      if (entry.name === 'backups' || entry.name === 'errors.log' || entry.name === 'port.txt') continue;
+      if (entry.name === 'backups' || entry.name === 'errors.log') continue;
       const src = path.join(DATA_DIR, entry.name);
       const dst = path.join(snapshotDir, entry.name);
       if (entry.isDirectory()) copyDirRecursive(src, dst);
@@ -1770,11 +1543,6 @@ let activeServer = null;
 function startServer(port) {
   const server = app.listen(port, '127.0.0.1', () => {
     activeServer = server;
-    // Persist the chosen port — the .bat launcher reads this for the browser URL.
-    // Writing on EVERY successful boot means: if our preferred 47371 was busy and
-    // we landed on 47372 instead, next launch tries 47372 first (cuts collision
-    // scans in half on repeated reboots of whatever was holding 47371).
-    try { fs.writeFileSync(PORT_FILE, String(port), 'utf-8'); } catch { /* ignore */ }
     console.log(`\n  Free GST Billing Software running at http://localhost:${port}`);
     console.log(`  Data stored in: ${DATA_DIR}\n`);
   });
