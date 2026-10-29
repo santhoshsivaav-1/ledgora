@@ -1,0 +1,48 @@
+# Local development services. Not for production: the passwords below are public on purpose.
+#
+#   docker compose up -d      start everything in the background
+#   docker compose ps         see what is healthy
+#   docker compose down       stop (add -v to also delete the database volume)
+#
+# Everything binds to 127.0.0.1 so nothing is reachable from the local network.
+name: ledgora-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ledgora
+      POSTGRES_PASSWORD: ledgora
+      POSTGRES_DB: ledgora
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ledgora -d ledgora']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Catches every e-mail the app sends (OTP fallbacks, invites, invoices) so nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:1025:1025' # SMTP
+      - '127.0.0.1:8025:8025' # web inbox: http://localhost:8025
+
+volumes:
+  postgres-data:

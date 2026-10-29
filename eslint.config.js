@@ -20,14 +20,21 @@ export default defineConfig([
   // Browser app. Still plain JS/JSX; migrated to TypeScript feature by feature in Phase 3.
   {
     files: ['apps/web/src/**/*.{js,jsx}'],
-    extends: [js.configs.recommended, reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
       parserOptions: { ecmaVersion: 'latest', ecmaFeatures: { jsx: true }, sourceType: 'module' },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', ignoreRestSiblings: true, caughtErrors: 'none' }],
+      'no-unused-vars': [
+        'error',
+        { varsIgnorePattern: '^[A-Z_]', ignoreRestSiblings: true, caughtErrors: 'none' },
+      ],
       // React-Compiler diagnostics shipped in eslint-plugin-react-hooks v7. The legacy UI predates
       // them (they were already failing before the monorepo move), so they stay visible as
       // warnings and are fixed as each feature is rewritten in Phase 3.

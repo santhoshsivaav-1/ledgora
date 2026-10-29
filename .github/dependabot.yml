@@ -20,26 +20,30 @@
 #   If those ever get turned off, this file will not save us.
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    # pnpm workspace: the root plus every app and package.
+    directories:
+      - '/'
+      - '/apps/*'
+      - '/packages/*'
     schedule:
       # Monthly, not weekly. Routine version updates are not urgent here;
       # security updates bypass this schedule entirely (see above).
-      interval: "monthly"
+      interval: 'monthly'
     open-pull-requests-limit: 3
     commit-message:
-      prefix: "build(deps)"
-      prefix-development: "build(deps-dev)"
+      prefix: 'build(deps)'
+      prefix-development: 'build(deps-dev)'
     groups:
       # Everything routine arrives as at most two PRs a month.
       production-minor-patch:
         applies-to: version-updates
-        dependency-type: "production"
-        update-types: ["minor", "patch"]
+        dependency-type: 'production'
+        update-types: ['minor', 'patch']
       dev-minor-patch:
         applies-to: version-updates
-        dependency-type: "development"
-        update-types: ["minor", "patch"]
+        dependency-type: 'development'
+        update-types: ['minor', 'patch']
     ignore:
       # No automated major-version PRs at all. Majors are a deliberate
       # decision — ESLint 10 drops config formats and rules, and
@@ -47,15 +51,15 @@ updates:
       # Dependabot's timetable rather than our own is how a release gets
       # broken. A security advisory on a major still comes through the
       # security channel, which this does not block.
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
       # 0.x packages treat MINOR as breaking (semver allows it), so
       # eslint-plugin-react-refresh 0.4 -> 0.5 is a breaking change that
       # Dependabot files as "minor". Review those by hand too.
-      - dependency-name: "eslint-plugin-react-refresh"
-        update-types: ["version-update:semver-minor"]
+      - dependency-name: 'eslint-plugin-react-refresh'
+        update-types: ['version-update:semver-minor']
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "monthly"
+      interval: 'monthly'
