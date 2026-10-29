@@ -7,10 +7,8 @@ import { createRateLimiter } from '../src/security.ts';
 import { line, makeHarness } from './helpers.ts';
 
 const h = makeHarness();
-const strict = makeHarness({ env: { REQUIRE_EMAIL_VERIFICATION: 'true' } });
 afterAll(async () => {
   await h.close();
-  await strict.close();
 });
 
 // ---- helpers ---------------------------------------------------------------------------------------------------------
@@ -21,10 +19,6 @@ const mailsTo = (to: string) =>
     { kind: 'mail' }
   >[];
 const smsTo = (to: string) => getOutbox().filter((m) => m.kind === 'sms' && m.to === to);
-const pathOf = (url: string) => {
-  const u = new URL(url);
-  return u.pathname + u.search;
-};
 const linkIn = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 
 const b32 = (s: string) => {
@@ -110,25 +104,16 @@ describe('sign-up (2.1, 2.4, 2.6)', () => {
 // ---- 2.3 e-mail + password -----------------------------------------------------------------------------------------------
 
 describe('e-mail login (2.3)', () => {
-  it('blocks sign-in until the e-mail is verified, then signs in through the link', async () => {
-    const s = await strict.signUp();
-    const direct = await strict.app.request('/v1/auth/sign-in/email', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: s.email, password: s.password }),
-    });
-    expect(direct.status).toBe(403);
-    const mail = mailsTo(s.email).at(-1)!;
-    expect(mail.subject).toMatch(/Confirm/);
-    const verified = await strict.app.request(pathOf(linkIn(mail.text)));
-    expect([200, 302]).toContain(verified.status);
-    const ok = await strict.app.request('/v1/auth/sign-in/email', {
+  it('marks a new account as verified, sends no confirmation mail and signs in straight away', async () => {
+    const s = await h.signUp();
+    expect(mailsTo(s.email)).toHaveLength(0);
+    const ok = await h.app.request('/v1/auth/sign-in/email', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: s.email, password: s.password }),
     });
     expect(ok.status).toBe(200);
-    const call = strict.client(strict.cookieOf(ok));
+    const call = h.client(h.cookieOf(ok));
     expect((await call('GET', '/v1/me')).body.role).toBe('owner');
   });
 

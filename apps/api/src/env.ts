@@ -62,8 +62,8 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     if (env.AUTH_SECRET.startsWith('dev-only'))
       throw new Error('Invalid environment:\n  AUTH_SECRET must be set in production');
     if (!env.REQUIRE_EMAIL_VERIFICATION)
-      throw new Error(
-        'Invalid environment:\n  REQUIRE_EMAIL_VERIFICATION must stay on in production',
+      console.warn(
+        '[env] REQUIRE_EMAIL_VERIFICATION is off: new accounts sign in without confirming their e-mail',
       );
     if (env.FILE_SIGNING_SECRET.startsWith('dev-only')) {
       throw new Error('Invalid environment:\n  FILE_SIGNING_SECRET must be set in production');

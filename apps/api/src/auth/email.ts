@@ -7,7 +7,7 @@ export const emailAuth = (env: AppEnv) => ({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
-    requireEmailVerification: env.REQUIRE_EMAIL_VERIFICATION,
+    requireEmailVerification: false,
     resetPasswordTokenExpiresIn: 3600,
     sendResetPassword: async ({
       user,
@@ -18,7 +18,7 @@ export const emailAuth = (env: AppEnv) => ({
     }) => void (await sendMail(env, resetPassword(user.email, user.name, url))),
   },
   emailVerification: {
-    sendOnSignUp: true,
+    sendOnSignUp: false,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({
       user,

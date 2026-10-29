@@ -69,9 +69,9 @@ export default function LoginScreen({ onSignedIn }) {
 
   const signUp = (e) => { e.preventDefault(); run(async () => {
     if (f.password.length < 8) throw new ApiError('Use a password of at least 8 characters.');
-    const r = await signUpEmail({ name: f.name.trim() || f.email.split('@')[0], email: f.email.trim(), password: f.password });
-    // With verification on, no session yet: the user must open the link we mailed.
-    if (r?.token) goHome(); else go('check-mail');
+    await signUpEmail({ name: f.name.trim() || f.email.split('@')[0], email: f.email.trim(), password: f.password });
+    // E-mail confirmation is off: sign-up starts a session, so go straight on (the app opens onboarding).
+    goHome();
   }); };
 
   const resend = () => run(async () => { await resendVerification(f.email.trim()); setNotice('We sent the link again.'); });

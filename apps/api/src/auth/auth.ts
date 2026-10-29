@@ -68,6 +68,8 @@ export function createAuth(db: Database, env: AppEnv) {
     databaseHooks: {
       user: {
         create: {
+          // E-mail confirmation is switched off for now: every new account counts as verified.
+          before: async (u) => ({ data: { ...u, emailVerified: true } }),
           // 2.6: workspace, first business and trial exist before the first session does.
           after: async (u) => void (await onboardNewUser(db, u)),
         },
