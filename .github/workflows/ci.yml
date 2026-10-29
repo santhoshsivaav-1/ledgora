@@ -19,6 +19,20 @@ jobs:
     name: Format, lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The API tests run against a real Postgres (row-level security can not be mocked).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ledgora
+          POSTGRES_PASSWORD: ledgora
+          POSTGRES_DB: ledgora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledgora -d ledgora" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://ledgora:ledgora@localhost:5432/ledgora
     steps:
       - uses: actions/checkout@v7
 

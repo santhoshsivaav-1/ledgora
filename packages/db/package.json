@@ -1,0 +1,29 @@
+{
+  "name": "@ledgora/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle schema, migrations, tenant-scoped client and seed for the Ledgora Postgres database.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "node src/migrate.ts",
+    "seed": "node src/seed.ts",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@ledgora/config": "workspace:*",
+    "@types/node": "^26.6.6",
+    "drizzle-kit": "^0.31.11",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@ledgora/contracts": "workspace:^",
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.9"
+  }
+}

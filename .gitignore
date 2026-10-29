@@ -14,6 +14,9 @@ data/
 Saved Invoices/
 Trash/
 
+# files uploaded in development (apps/api uses the disk when S3 is not configured)
+.local-files/
+
 # environment files (use .env.example as the template)
 .env
 .env.*

@@ -81,6 +81,16 @@ export default defineConfig([
     languageOptions: { globals: { ...globals.node } },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { varsIgnorePattern: '^_', argsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
     },
+  },
+
+  // API tests read loosely typed JSON bodies; typing every response would only restate the contracts.
+  {
+    files: ['apps/api/test/**/*.ts'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
   },
 ]);
