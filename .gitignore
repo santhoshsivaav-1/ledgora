@@ -10,9 +10,9 @@ dist/
 public/tesseract/
 
 # runtime data from the local-first legacy app: customer records stay out of git
-data/
-Saved Invoices/
-Trash/
+/data/
+/Saved Invoices/
+/Trash/
 
 # files uploaded in development (apps/api uses the disk when S3 is not configured)
 .local-files/
