@@ -18,5 +18,15 @@
     "test:smoke": {
       "cache": false
     }
-  }
+  },
+  "globalPassThroughEnv": [
+    "PORT",
+    "API_PORT",
+    "DATA_DIR",
+    "INVOICES_DIR",
+    "TRASH_DIR",
+    "VITE_ENABLE_BILL_SCAN",
+    "SMOKE_FAIL_SHOT",
+    "APP_URL"
+  ]
 }
