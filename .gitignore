@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.turbo/
+*.tsbuildinfo
+
+# generated assets (rebuilt by scripts, never committed)
+public/tesseract/
+
+# runtime data from the local-first legacy app: customer records stay out of git
+data/
+"Saved Invoices/"
+Trash/
+
+# environment files (use .env.example as the template)
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+coverage/
+test-results/
+playwright-report/
