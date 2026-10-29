@@ -59,7 +59,7 @@ export default function UnassignedBanner({ count, businessName, noun, onAssign }
         marginBottom: '1rem',
         borderRadius: 10,
         border: '1px solid var(--border)',
-        background: 'rgba(59, 130, 246, 0.07)',
+        background: 'rgba(22, 163, 74, 0.08)',
       }}
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.88rem' }}>

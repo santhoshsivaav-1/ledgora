@@ -2,21 +2,22 @@
    Components read these variables; nothing else should hard-code a theme colour. */
 
 :root {
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-light: rgba(37, 99, 235, 0.08);
+  /* White & green theme — emerald as the single accent, near-white canvas. */
+  --primary: #16a34a;
+  --primary-hover: #15803d;
+  --primary-light: rgba(22, 163, 74, 0.10);
   /* v1.10.40 — RGB channels of --primary for rgba() composition.
      html2canvas (which rasterizes the invoice for the PDF) does NOT
      support color-mix(in oklab, …) — reported as "Attempting to parse
      an unsupported color function oklab" on Save & Download. So all
      dynamic tints that used to be color-mix now use rgba(var(--primary-rgb), α). */
-  --primary-rgb: 37, 99, 235;
-  --primary-darker: #1e3a8a;
-  --bg: #f0f2f5;
-  --bg-primary: #f0f2f5;
+  --primary-rgb: 22, 163, 74;
+  --primary-darker: #14532d;
+  --bg: #f6f8f6;
+  --bg-primary: #f6f8f6;
   --bg-secondary: #f8fafc;       /* card / inset surface — light grey on light, dark slate on dark */
-  --bg-tertiary: #f1f5f9;        /* hover / selected inset */
-  --card-bg: rgba(255, 255, 255, 0.92);
+  --bg-tertiary: #eef2ee;        /* hover / selected inset — faint green-grey so it doesn't look blue */
+  --card-bg: rgba(255, 255, 255, 0.95);
   --text: #111827;
   --text-primary: #111827;       /* alias used by newer components */
   --text-secondary: #6b7280;
@@ -45,11 +46,11 @@
 
 /* Dark Mode */
 [data-theme="dark"] {
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --primary-light: rgba(59, 130, 246, 0.12);
-  --primary-rgb: 59, 130, 246;
-  --primary-darker: #1e3a8a;
+  --primary: #22c55e;
+  --primary-hover: #16a34a;
+  --primary-light: rgba(34, 197, 94, 0.14);
+  --primary-rgb: 34, 197, 94;
+  --primary-darker: #15803d;
   --bg: #0f172a;
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;       /* card / inset surface in dark mode */

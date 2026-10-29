@@ -50,7 +50,7 @@ export default function FilingGuidePage({
 
                     <div className="glass-panel p-4 mb-4" style={{ background: '#eff6ff' }}>
                       <h4 style={{ color: 'var(--primary)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>GSTR-3B Pro Tips</h4>
-                      <ul style={{ fontSize: '0.82rem', color: '#1e40af', lineHeight: 1.8, paddingLeft: '1.25rem' }}>
+                      <ul style={{ fontSize: '0.82rem', color: 'var(--primary-darker)', lineHeight: 1.8, paddingLeft: '1.25rem' }}>
                         <li><strong>From July 2025:</strong> Table 3 auto-populates from GSTR-1 — just VERIFY, don't re-enter values.</li>
                         <li><strong>ITC matching:</strong> Always check GSTR-2B statement BEFORE claiming ITC. Go to Returns → GSTR-2B → Download. Only claim ITC that appears in GSTR-2B.</li>
                         <li><strong>ITC utilization order (Section 49):</strong> IGST credit first (against IGST → CGST → SGST), then CGST (against CGST → IGST), then SGST (against SGST → IGST).</li>

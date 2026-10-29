@@ -912,7 +912,7 @@ function App() {
     return (
       <div className="server-down-overlay">
         <div className="server-down-modal">
-          <FileText size={48} color="#3b82f6" />
+          <FileText size={48} color="#16a34a" />
           <h2>Free GST Billing Software Needs a Quick Start</h2>
           <p>
             Your data is <strong>100% safe</strong> on your computer — nothing is lost. The app just
