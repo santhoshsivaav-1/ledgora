@@ -1,29 +1,34 @@
 import { Check } from 'lucide-react';
-import { getStatesForCountry, ORDER_DETAIL_FIELDS } from '../../../utils';
+import { getStatesForCountry, ORDER_DETAIL_FIELDS, INVOICE_TYPES } from '../../../utils';
+import { copyFor } from '../../sales/salesFlow';
 
 // The number, date, due date and place of supply.
 export default function InvoiceDetailsPanel({
   details, invoiceOptions, invoiceType, profile, setDetails,
 }) {
+  const copy = copyFor(invoiceType);
   return (
           <div className="glass-panel p-6 mb-6">
-            <h3 className="section-title">Invoice Details</h3>
+            <h3 className="section-title">{INVOICE_TYPES[invoiceType]?.label || 'Invoice'} Details</h3>
+            {copy.tip && <p className="type-desc" style={{ marginTop: 0 }}>{copy.tip}</p>}
             <div className="grid grid-cols-2 gap-4">
               <div className="form-group">
-                <label className="form-label">Invoice Number</label>
+                <label className="form-label">{copy.number}</label>
                 <input type="text" className="form-input" value={details.invoiceNumber}
                   onChange={(e) => setDetails({ ...details, invoiceNumber: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Invoice Date</label>
+                <label className="form-label">{copy.date}</label>
                 <input type="date" className="form-input" value={details.invoiceDate}
                   onChange={(e) => setDetails({ ...details, invoiceDate: e.target.value })} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Due Date</label>
-                <input type="date" className="form-input" value={details.dueDate}
-                  onChange={(e) => setDetails({ ...details, dueDate: e.target.value })} />
-              </div>
+              {copy.due && (
+                <div className="form-group">
+                  <label className="form-label">{copy.due}</label>
+                  <input type="date" className="form-input" value={details.dueDate}
+                    onChange={(e) => setDetails({ ...details, dueDate: e.target.value })} />
+                </div>
+              )}
               {invoiceOptions.showPlaceOfSupply && (() => {
                 const posOpts = getStatesForCountry(profile?.country);
                 return (

@@ -1,16 +1,17 @@
 import { STATUS_CONFIG } from './statusConfig';
-import { FileText, Plus, IndianRupee, Edit3, Search, Copy, X, CheckCircle, Clock, AlertTriangle, MessageCircle, Mail, StickyNote, Send, Download, Printer, Ban, Undo2, Eye } from 'lucide-react';
+import { FileText, Plus, IndianRupee, Edit3, Search, Copy, X, CheckCircle, Clock, AlertTriangle, MessageCircle, Mail, StickyNote, Send, Download, Printer, Ban, Undo2, Eye, ArrowRightCircle } from 'lucide-react';
 import { formatCurrency, INVOICE_TYPES, isCancelledBill, SALES_INVOICE_TYPES, amountDue } from '../../../utils';
 import ActionsMenu from './ActionsMenu';
+import { nextStepsFor } from '../../sales/salesFlow';
 
 // The invoice list (change 3.10): the filters, the quick-print and bulk actions, and the table with its row actions.
 // The Dashboard and the Invoices page both show it. It only draws; the page that holds it owns the data and the handlers.
 export default function InvoiceTable({
-  bills, bulkBusy, bulkCancel, bulkExportJSON, bulkExportPDF, bulkMarkStatus, bulkPrintByFilter, changeStatus, clearFilters, clearSelection, dateFrom, dateTo, filtered, fyFilter, fyOptions, getClientPhone, handleCancelInvoice, handleView, hasFilters, onConvert, onDuplicate, onNew, onPrint, openPaymentModal, search, selectedIds, sendReminder, setDateFrom, setDateTo, setFyFilter, setSearch, setShowColumnPicker, setStatusFilter, setTypeFilter, setViewBill, setVisibleColumns, shareEmail, shareWhatsApp, showColumnPicker, statusFilter, toggleSelect, toggleSelectAllVisible, typeFilter, undoCancel, visibleColumns,
+  scope, tracksPayments = true, bills, bulkBusy, bulkCancel, bulkExportJSON, bulkExportPDF, bulkMarkStatus, bulkPrintByFilter, changeStatus, clearFilters, clearSelection, dateFrom, dateTo, filtered, fyFilter, fyOptions, getClientPhone, handleCancelInvoice, handleView, hasFilters, onConvert, onDuplicate, onNew, onPrint, openPaymentModal, search, selectedIds, sendReminder, setDateFrom, setDateTo, setFyFilter, setSearch, setShowColumnPicker, setStatusFilter, setTypeFilter, setViewBill, setVisibleColumns, shareEmail, shareWhatsApp, showColumnPicker, statusFilter, toggleSelect, toggleSelectAllVisible, typeFilter, undoCancel, visibleColumns,
 }) {
   return (
         <div className="glass-panel">
-          <div className="table-header"><h3>Invoices</h3></div>
+          <div className="table-header"><h3>{scope ? scope.label : 'Invoices'}</h3></div>
           <div className="filters-bar">
             <div className="search-box">
               <Search size={16} className="search-icon" />
@@ -21,16 +22,21 @@ export default function InvoiceTable({
               <option value="all">All Years</option>
               {fyOptions.map(fy => <option key={fy.value} value={fy.value}>{fy.label}</option>)}
             </select>
-            <select className="filter-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            {(!scope || scope.types.length > 1) && <select className="filter-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
               <option value="all">All Types</option>
-              {Object.entries(INVOICE_TYPES).map(([key, val]) => <option key={key} value={key}>{val.label}</option>)}
-            </select>
+              {Object.entries(INVOICE_TYPES).filter(([key]) => !scope || scope.types.includes(key)).map(([key, val]) => <option key={key} value={key}>{val.label}</option>)}
+            </select>}
             <select className="filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="all">All Status</option>
+              {tracksPayments ? <>
               <option value="unpaid">Unpaid</option>
               <option value="partial">Partial</option>
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>
+              </> : <>
+              <option value="open">Open</option>
+              <option value="converted">Converted</option>
+              </>}
               {/* v1.10.74 - rows can be Cancelled, so the filter needs it too */}
               <option value="cancelled">Cancelled</option>
             </select>
@@ -87,6 +93,7 @@ export default function InvoiceTable({
               title="Combine all filtered invoices into one PDF">
               <Download size={12} /> All shown ({filtered.length})
             </button>
+            {tracksPayments && <>
             <button type="button" className="btn btn-secondary" disabled={bulkBusy}
               style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
               onClick={() => bulkPrintByFilter('unpaid')}
@@ -104,6 +111,7 @@ export default function InvoiceTable({
               onClick={() => bulkPrintByFilter('paid')}>
               <CheckCircle size={12} /> Paid ({filtered.filter(b => b.status === 'paid').length})
             </button>
+            </>}
           </div>
 
           {/* Bulk-action toolbar — only renders when at least one row is ticked. */}
@@ -115,12 +123,14 @@ export default function InvoiceTable({
               borderRadius: '8px', color: 'var(--info-text)',
             }}>
               <strong style={{ fontSize: '0.88rem' }}>{selectedIds.size} selected</strong>
+              {tracksPayments && <>
               <button type="button" className="btn btn-secondary" disabled={bulkBusy} onClick={() => bulkMarkStatus('paid')}
                 style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}><CheckCircle size={13} /> Mark paid</button>
               <button type="button" className="btn btn-secondary" disabled={bulkBusy} onClick={() => bulkMarkStatus('unpaid')}
                 style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}><Clock size={13} /> Mark unpaid</button>
               <button type="button" className="btn btn-secondary" disabled={bulkBusy} onClick={() => bulkMarkStatus('overdue')}
                 style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}><AlertTriangle size={13} /> Mark overdue</button>
+              </>}
               <button type="button" className="btn btn-secondary" disabled={bulkBusy} onClick={bulkExportJSON}
                 style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}><FileText size={13} /> Export JSON</button>
               <button type="button" className="btn btn-secondary" disabled={bulkBusy} onClick={() => bulkExportPDF()}
@@ -185,6 +195,11 @@ export default function InvoiceTable({
                     // Paid / Unpaid / Partial menu (and can be overdue).
                     const tracksPayment = SALES_INVOICE_TYPES.includes(bill.invoiceType || 'tax-invoice');
                     const readOnly = status === 'cancelled' || !!bill.convertedTo;
+                    // What can be raised from this document (quotation -> sales order -> challan -> invoice -> credit note).
+                    // The first step that closes the document is the button; the others sit in the menu.
+                    const steps = readOnly ? [] : nextStepsFor(bill);
+                    const primaryStep = steps.find((st) => !st.linkOnly) || null;
+                    const menuSteps = steps.filter((st) => st !== primaryStep);
                     const isOverdue = tracksPayment && status !== 'paid' && status !== 'cancelled' && bill.data?.details?.dueDate && new Date(bill.data.details.dueDate) < new Date();
                     const daysOverdue = isOverdue ? Math.floor((new Date() - new Date(bill.data.details.dueDate)) / 86400000) : 0;
                     const billCurrency = bill.currency || bill.data?.invoiceOptions?.currency || 'INR';
@@ -196,7 +211,15 @@ export default function InvoiceTable({
                             style={{ width: 15, height: 15, accentColor: 'var(--primary)', cursor: 'pointer' }} />
                         </td>
                         {visibleColumns.date && <td className="text-muted">{new Date(bill.invoiceDate).toLocaleDateString('en-IN')}</td>}
-                        {visibleColumns.invoice && <td><span className="invoice-badge">{bill.invoiceNumber}</span></td>}
+                        {visibleColumns.invoice && <td>
+                          <span className="invoice-badge">{bill.invoiceNumber}</span>
+                          {/* where it came from in the sales flow (quotation -> sales order -> ...) */}
+                          {bill.data?.sourceDoc?.number && (
+                            <span className="flow-ref" title={`Raised from ${INVOICE_TYPES[bill.data.sourceDoc.type]?.label || 'document'} ${bill.data.sourceDoc.number}`}>
+                              from {bill.data.sourceDoc.number}
+                            </span>
+                          )}
+                        </td>}
                         {visibleColumns.type && <td><span className="type-badge">{(INVOICE_TYPES[bill.invoiceType || 'tax-invoice'])?.label}</span></td>}
                         {visibleColumns.client && <td className="font-medium td-client" title={bill.clientName}>
                           {bill.clientName}
@@ -220,9 +243,12 @@ export default function InvoiceTable({
                           {status === 'cancelled' ? (
                             <span className="type-badge" style={{ background: sc.bg, color: sc.color }}>Cancelled</span>
                           ) : !tracksPayment ? (
-                            <span className="type-badge" title={bill.convertedTo ? `Converted to ${bill.convertedTo}` : ''}>
-                              {bill.convertedTo ? 'Converted' : bill.invoiceType === 'credit-note' ? 'Issued' : 'Open'}
-                            </span>
+                            <>
+                              <span className="type-badge" title={bill.convertedTo ? `Converted to ${bill.convertedTo}` : ''}>
+                                {bill.convertedTo ? 'Converted' : bill.invoiceType === 'credit-note' ? 'Issued' : 'Open'}
+                              </span>
+                              {bill.convertedTo && <span className="flow-ref">to {bill.convertedTo}</span>}
+                            </>
                           ) : <>
                           <select className="status-select" value={isOverdue && status !== 'overdue' ? 'overdue' : status}
                             style={{ background: sc.bg, color: sc.color, borderColor: sc.color + '44' }}
@@ -258,12 +284,14 @@ export default function InvoiceTable({
                                 title={tracksPayment && !readOnly ? 'Payment' : 'Payment history'}><IndianRupee size={15} /></button>
                             )}
                             {/* v1.10.76 (#83) - gone once it has been converted (bill.convertedTo) */}
-                            {!readOnly && ['quotation', 'proforma', 'delivery-challan'].includes(bill.invoiceType) && !bill.convertedTo && (
-                              <button className="icon-btn icon-btn-green" onClick={() => onConvert(bill)} title="Convert to Tax Invoice"><FileText size={15} /></button>
+                            {primaryStep && (
+                              <button className="icon-btn icon-btn-green" onClick={() => onConvert(bill, primaryStep)} title={primaryStep.label}
+                                aria-label={`${primaryStep.label} from ${bill.invoiceNumber}`}><ArrowRightCircle size={15} /></button>
                             )}
                             {/* v1.10.77 (#86) - cancelled and converted documents are read-only:
                                 View and Duplicate only (Undo is in the Status column). */}
                             <ActionsMenu label={`More actions for ${bill.invoiceNumber}`} items={[
+                              ...menuSteps.map((step) => ({ label: step.label, icon: ArrowRightCircle, tone: 'green', onClick: () => onConvert(bill, step) })),
                               { label: 'Duplicate', icon: Copy, onClick: () => onDuplicate(bill) },
                               { label: 'Print', icon: Printer, onClick: () => onPrint(bill), hidden: readOnly },
                               { label: 'WhatsApp', icon: MessageCircle, tone: 'green', onClick: () => shareWhatsApp(bill), hidden: readOnly,

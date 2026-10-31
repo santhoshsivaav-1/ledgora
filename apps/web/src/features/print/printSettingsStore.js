@@ -242,6 +242,7 @@ export const DEFAULT_PRINT_SETTINGS = {
   customPrefixes: {
     'tax-invoice': '',      // default 'INV'
     'quotation': '',        // default 'QUO'
+    'sales-order': '',      // default 'SO'
     'proforma': '',         // default 'EST'
     'bill-of-supply': '',   // default 'BOS'
     'composition': '',      // default 'COMP'

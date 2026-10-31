@@ -3,34 +3,47 @@ import { getRegionMode } from '../../../lib/data';
 import { INVOICE_TYPES, getCountriesForRegion, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, getActiveAccounts, getAccountById, PAPER_SIZES, getPaperSize, invoiceOptionOn, DEFAULT_DECLARATION, localToday, toLocalIsoDate, parseLocalDate } from '../../../utils';
 import InvoicePreview from '../../print/InvoicePreview';
 import { ACCENT_PRESETS, DEFAULT_OPTIONS, PDF_STYLES } from './editorConstants';
+import DocFlowTracker from '../../sales/DocFlowTracker';
 
 // Which document this is (tax invoice, quotation, credit note, ...), and goods or services.
 export default function InvoiceTypePanel({
-  details, handleTypeChange, invoiceOptions, invoiceType, isIssuedInvoice, profile, setInvoiceOptions, showOptions, toggleOption, typeConfig,
+  details, handleTypeChange, invoiceOptions, invoiceType, isIssuedInvoice, profile, setInvoiceOptions, showOptions, toggleOption, typeConfig, lockedType = false, sourceDoc = null,
 }) {
   return (
           <div className="glass-panel p-6 mb-6">
             {/* v1.10.69 (#71 item 1) - Customize moved up to the sticky
                 toolbar. Two buttons doing the same thing would only raise the
                 question of whether they do. */}
+            {lockedType ? (
+              /* Opened from a sales page: the document type is already chosen, so there is no list of types to pick from. */
+              <>
+                <h3 className="section-title" style={{ margin: 0 }}>{typeConfig?.label || 'Document'}</h3>
+                <p className="type-desc" style={{ marginBottom: '0.6rem' }}>{typeConfig?.description}</p>
+                <DocFlowTracker type={invoiceType} sourceDoc={sourceDoc} />
+              </>
+            ) : (
+              <>
             <div className="flex justify-between items-center">
-              <h3 className="section-title" style={{ margin: 0 }}>Invoice Type</h3>
-            </div>
-            <div className="type-selector" style={{ marginTop: '0.75rem' }}>
-              {Object.entries(INVOICE_TYPES).map(([key, val]) => (
-                <button key={key} type="button"
-                  className={`type-chip ${invoiceType === key ? 'type-chip-active' : ''}`}
-                  disabled={isIssuedInvoice && invoiceType !== key}
-                  title={isIssuedInvoice ? 'The type cannot change once an invoice is saved. Duplicate it to make a different document.' : val.description}
-                  onClick={() => handleTypeChange(key)}>{val.label}</button>
-              ))}
-            </div>
-            {isIssuedInvoice && (
-              <p className="type-desc" style={{ color: 'var(--text-muted)' }}>
-                Saved as a {typeConfig?.label || invoiceType}. The type stays fixed so the number series and tax treatment keep matching what the customer already has - use Duplicate to raise a different document.
-              </p>
+                <h3 className="section-title" style={{ margin: 0 }}>Invoice Type</h3>
+              </div>
+              <div className="type-selector" style={{ marginTop: '0.75rem' }}>
+                {Object.entries(INVOICE_TYPES).map(([key, val]) => (
+                  <button key={key} type="button"
+                    className={`type-chip ${invoiceType === key ? 'type-chip-active' : ''}`}
+                    disabled={isIssuedInvoice && invoiceType !== key}
+                    title={isIssuedInvoice ? 'The type cannot change once an invoice is saved. Duplicate it to make a different document.' : val.description}
+                    onClick={() => handleTypeChange(key)}>{val.label}</button>
+                ))}
+              </div>
+              {isIssuedInvoice && (
+                <p className="type-desc" style={{ color: 'var(--text-muted)' }}>
+                  Saved as a {typeConfig?.label || invoiceType}. The type stays fixed so the number series and tax treatment keep matching what the customer already has - use Duplicate to raise a different document.
+                </p>
+              )}
+              <p className="type-desc">{typeConfig?.description}</p>
+  
+                </>
             )}
-            <p className="type-desc">{typeConfig?.description}</p>
 
             {/* Goods / Services / Mixed selector — drives default line-item unit
                 (Hrs vs Nos) and filters the unit dropdown. Stays out of the way

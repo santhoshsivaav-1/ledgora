@@ -9,7 +9,14 @@ export interface ViewRoute {
 
 export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'dashboard', path: '/', title: 'Dashboard' },
-  { id: 'invoices', path: '/invoices', title: 'Invoices' },
+  { id: 'sales', path: '/sales', title: 'Sales overview' },
+  { id: 'sales-quotes', path: '/sales/quotations', title: 'Quotations' },
+  { id: 'sales-orders', path: '/sales/orders', title: 'Sales orders' },
+  { id: 'sales-challans', path: '/sales/challans', title: 'Delivery challans' },
+  { id: 'sales-invoices', path: '/sales/invoices', title: 'Invoices' },
+  { id: 'sales-proforma', path: '/sales/proforma', title: 'Proforma' },
+  { id: 'sales-credit', path: '/sales/credit-notes', title: 'Credit notes' },
+  { id: 'invoices', path: '/invoices', title: 'All documents' },
   { id: 'new', path: '/invoices/new', title: 'New invoice' },
   { id: 'clients', path: '/clients', title: 'Clients' },
   { id: 'inventory', path: '/products', title: 'Products' },

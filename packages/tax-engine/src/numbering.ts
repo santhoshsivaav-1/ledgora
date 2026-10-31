@@ -25,7 +25,7 @@ export const startFor = (invoiceType: string, numberSettings: Rec | null | undef
 // Each business can have its own series (own prefix, start, counters) or use
 // the shared one. Invoices are stored under their number, so a business with
 // its own series must print a prefix no other series uses.
-export const DOC_TYPE_PREFIXES = ['INV', 'QUO', 'EST', 'BOS', 'COMP', 'CN', 'DC', 'RCP'];
+export const DOC_TYPE_PREFIXES = ['INV', 'QUO', 'SO', 'EST', 'BOS', 'COMP', 'CN', 'DC', 'RCP'];
 
 export const DEFAULT_NUMBER_SETTINGS = {
   format: 'branded',

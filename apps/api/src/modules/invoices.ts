@@ -559,7 +559,7 @@ export function invoicesModule({ route }: Registrar) {
     response: okBody,
     handler: async ({ tx, orgId, params }) => {
       const { row } = await loadInvoice(tx, params.id);
-      if (!['quotation', 'proforma'].includes(row.invoiceType)) {
+      if (!['quotation', 'sales-order', 'proforma'].includes(row.invoiceType)) {
         throw new AppError(
           'unprocessable',
           'Tax documents can not be deleted. Cancel the invoice instead (POST /v1/invoices/:id/cancel)',

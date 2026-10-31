@@ -4,12 +4,12 @@ import { formatCurrency, getCountryConfig, getStatesForCountry, getCountriesForR
 
 // Who the invoice is for: search or add a client, their address, GSTIN and place of supply (change 3.9).
 export default function PartyPicker({
-  client, clientCredit, clientNameRef, clientPickerIdx, clientSuggestionsRef, creditToApply, editingBill, filteredClients, gstinHint, handleClientGstinBlur, invoiceOptions, openAddClientModal, openEditClientModal, profile, savedClients, selectSavedClient, selectedClientId, setClient, setClientPickerIdx, setCreditToApply, setGstinHint, setInvoiceOptions, setSelectedClientId, setShowClientSuggestions, showClientSuggestions, totals,
+  client, clientCredit, clientNameRef, clientPickerIdx, clientSuggestionsRef, creditToApply, editingBill, filteredClients, gstinHint, handleClientGstinBlur, invoiceOptions, openAddClientModal, openEditClientModal, profile, savedClients, selectSavedClient, selectedClientId, setClient, setClientPickerIdx, setCreditToApply, setGstinHint, setInvoiceOptions, setSelectedClientId, setShowClientSuggestions, showClientSuggestions, totals, partyLabel = 'Billed To',
 }) {
   return (
           <div className="glass-panel p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="section-title" style={{ margin: 0 }}>Billed To</h3>
+              <h3 className="section-title" style={{ margin: 0 }}>{partyLabel}</h3>
             </div>
 
             {/* v1.10.24 — Client credit banner. Shows when the picked

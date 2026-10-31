@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, EyeOff } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { saveBill, deleteBill, applyStockChanges, getNextInvoiceNumber, getTermsTemplates, getAllClients, saveClient, getAllProducts, getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getAllProfiles, saveRecurring, getAllRecurring, getAllBills } from '../../../lib/data';
@@ -24,15 +24,23 @@ import TermsPanel from './TermsPanel';
 import ExtraSectionsPanel from './ExtraSectionsPanel';
 import { DEFAULT_OPTIONS, ACCENT_PRESETS, PDF_STYLES, fitSpacersToOnePage } from './editorConstants';
 import { useInvoiceTotals } from './hooks/useInvoiceTotals';
-import { useInvoiceDraft, loadDraft } from './hooks/useInvoiceDraft';
+import { useInvoiceDraft, loadDraft, clearDraft } from './hooks/useInvoiceDraft';
+import { copyFor } from '../../sales/salesFlow';
 
 
-export default function InvoiceEditorPage({ onBack, profile: profileProp, editingBill }) {
+const DOC_STEPS = [
+  { key: 'customer', label: 'Customer' },
+  { key: 'details', label: 'Details' },
+  { key: 'items', label: 'Items' },
+  { key: 'terms', label: 'Terms & notes' },
+];
+
+export default function InvoiceEditorPage({ onBack, profile: profileProp, editingBill, initialType = null }) {
   const draft = loadDraft();
   const [allProfiles, setAllProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(profileProp);
   const profile = activeProfile || profileProp;
-  const [invoiceType, setInvoiceType] = useState(draft?.invoiceType || 'tax-invoice');
+  const [invoiceType, setInvoiceType] = useState(draft?.invoiceType || (INVOICE_TYPES[initialType] && !editingBill ? initialType : 'tax-invoice'));
   // email/phone/isSEZ must be part of initial state — otherwise the SEZ flag
   // set inside ClientModal is silently discarded on save, and reopening the
   // bill can never restore contact fields even if the saved client has them.
@@ -227,7 +235,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // the original's record (so a challan's or an old quotation's stock is
   // counted once, not again); a duplicate or a new bill, nothing. Once the
   // bill is on the server, every save works from the server's record instead.
-  const stockStart = useRef(editingBill && (!editingBill._isDuplicate || editingBill._convertToType) ? appliedStock(editingBill) : {});
+  const stockStart = useRef(editingBill && (!editingBill._isDuplicate || editingBill._convertToType) && !editingBill._linkOnly ? appliedStock(editingBill) : {});
   const conversionMarked = useRef(false);
   // v1.10.76 (#83) - has this invoice been downloaded or printed? Then a plain
   // Save refreshes its PDF in Saved Invoices too.
@@ -261,6 +269,14 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const warnedLongNumber = useRef(false);
 
   const typeConfig = INVOICE_TYPES[invoiceType];
+  // A new document started from a sales page (New quotation, New delivery challan...) opens as that type, with the
+  // GST columns that type shows; switching type in the editor does the same in handleTypeChange.
+  useEffect(() => {
+    if (draft || editingBill || !initialType || initialType === 'tax-invoice') return;
+    const config = INVOICE_TYPES[initialType];
+    if (config) setInvoiceOptions(prev => ({ ...prev, showGST: config.showGST, showPlaceOfSupply: config.showGST }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const showGST = invoiceOptions.showGST;
   // Tax label and rate presets follow the seller's country, not the client's, since
   // the seller charges and remits the tax. Sellers without a country fall back to India.
@@ -512,10 +528,6 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     return () => window.removeEventListener('beforeunload', handler);
   }, [isMeaningfulInvoice]);
 
-  const clearDraft = () => {
-    clearDraft();
-  };
-
   // v1.10.16 — reported: user adds a 2nd business profile in Settings, comes
   // back to the invoice generator, but the "Billing From (Business Profile)"
   // chip row (which only renders when allProfiles.length > 1) doesn't
@@ -645,7 +657,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
         getNextInvoiceNumber(prefix, { peek: true, explicitPrefix: !!overridePrefix, invoiceType: type, businessKey: businessKeyOf(profile) }).then(num => {
           if (seq !== peekSeq.current) return;
           peekedNumber.current = num;
-          setDetails({ ...d.details, invoiceNumber: num, invoiceDate: localToday() });
+          setDetails({ ...d.details, invoiceNumber: num, invoiceDate: localToday(),
+            // A credit note names the invoice it corrects.
+            ...(convertType === 'credit-note' ? { originalInvoiceRef: d.details?.invoiceNumber || '' } : {}) });
           numberReserved.current = false;
         });
       } else {
@@ -1247,6 +1261,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       ? 'overdue'
       : computedStatus;
 
+    const sourceDoc = editingBill?._convertToType
+      ? { number: editingBill.invoiceNumber, type: editingBill.invoiceType || 'tax-invoice' }
+      : (ownBill ? editingBill.data?.sourceDoc : undefined);
     const bill = {
       id: finalInvoiceNumber,
       clientName: client.name,
@@ -1266,8 +1283,10 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       lastPrintedAt: extraPatch.lastPrintedAt ?? (ownBill ? editingBill.lastPrintedAt : null) ?? null,
       // Kept from the saved bill: rebuilt from scratch, they used to be lost.
       ...(keepCancelled ? { cancelledAt: serverCopy?.cancelledAt || editingBill.cancelledAt || null } : {}),
-      ...(isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? { convertedTo: serverCopy?.convertedTo || editingBill.convertedTo } : {}),
+      ...(isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? { convertedTo: serverCopy?.convertedTo || editingBill.convertedTo, convertedToType: serverCopy?.convertedToType || editingBill.convertedToType } : {}),
       data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive,
+        // Which document this one was raised from (quotation -> sales order -> ...), shown in the lists.
+        ...(sourceDoc ? { sourceDoc } : {}),
         // A converted quotation/proforma/challan's stock moved to its invoice:
         // its own record stays empty, or a save would take the stock twice.
         stockApplied: isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? {} : stockEffect(items, invoiceType, seedStatus) }
@@ -1514,12 +1533,12 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     // Written to a fresh copy of the original, not the one cloned when Convert
     // was clicked, so nothing done to it since is undone. Its stock record went
     // to the new invoice (stockStart), so its own is now empty.
-    if (editingBill?._convertToType && !conversionMarked.current && savedNumber) {
+    if (editingBill?._convertToType && !editingBill._linkOnly && !conversionMarked.current && savedNumber) {
       conversionMarked.current = true;
       try {
         const source = (await getAllBills()).find((b) => b.id === editingBill.id);
         if (source) {
-          await saveBill({ ...source, convertedTo: savedNumber, ...(source.data ? { data: { ...source.data, stockApplied: {} } } : {}) }, { overwrite: true });
+          await saveBill({ ...source, convertedTo: savedNumber, convertedToType: invoiceType, ...(source.data ? { data: { ...source.data, stockApplied: {} } } : {}) }, { overwrite: true });
         }
       } catch { /* the invoice itself is saved */ }
     }
@@ -2701,6 +2720,47 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     toast('E-Way Bill JSON downloaded', 'success');
   };
 
+  const stepDone = [
+    !!client?.name?.trim(),
+    !!(details.invoiceNumber && details.invoiceDate),
+    items.some((item) => (item.name || '').trim() && (item.quantity || 0) * (item.rate || 0) > 0),
+    false,
+  ];
+  // The create page works one step at a time (customer, details, items, terms), with every step still on the page
+  // underneath so nothing is lost moving between them. "Show all steps" returns to one long page, and is remembered.
+  const [step, setStep] = useState(0);
+  const [singlePage, setSinglePage] = useState(() => { try { return localStorage.getItem('ledgora_singlePageEditor') === '1'; } catch { return false; } });
+  const toggleSinglePage = () => setSinglePage((v) => { try { localStorage.setItem('ledgora_singlePageEditor', v ? '0' : '1'); } catch { /* private mode */ } return !v; });
+  const stepperRef = useRef(null);
+  const goStep = (n) => { setStep(n); stepperRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+  // A document opened from a sales page (or an existing one) keeps its type; only a plain "New invoice" can choose.
+  const lockedType = !!initialType || !!editingBill;
+  const partyLabel = copyFor(invoiceType).party;
+
+  // Save without downloading: the toolbar's Save button and the last step's button.
+  const saveOnly = async () => {
+      // v1.10.58 (#47) — refuse a blank invoice. Saving reserves an
+      // invoice number, so an empty save leaves a permanent gap in a
+      // sequence GST expects to be gapless.
+      const problem = validateForSave();
+      if (problem) { toast(problem, 'warning'); return; }
+      try {
+        setSaving(true);
+        const no = await saveInvoiceToDB();
+        if (!no) return;
+        clearDraft();
+        toast(`${typeConfig?.label || 'Invoice'} saved`, 'success');
+        await refreshSavedPdf(no);
+      } catch (err) {
+        if (err?.status !== 409) {  // 409 already handled by retry inside saveInvoiceToDB
+          console.error('Save failed', err);
+          toast('Save failed — try again', 'error');
+        }
+      } finally {
+        setSaving(false);
+      }
+  };
+
   return (
     <div className="generator-container">
       {readOnlyDoc && (
@@ -2796,28 +2856,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
               also fires the same "save to Saved Invoices/ folder"
               + auto-print + Drive sync side effects that generatePDF
               does — minus the PDF file. */}
-          <button className="btn btn-primary" onClick={async () => {
-            // v1.10.58 (#47) — refuse a blank invoice. Saving reserves an
-            // invoice number, so an empty save leaves a permanent gap in a
-            // sequence GST expects to be gapless.
-            const problem = validateForSave();
-            if (problem) { toast(problem, 'warning'); return; }
-            try {
-              setSaving(true);
-              const no = await saveInvoiceToDB();
-              if (!no) return;
-              clearDraft();
-              toast('Invoice saved', 'success');
-              await refreshSavedPdf(no);
-            } catch (err) {
-              if (err?.status !== 409) {  // 409 already handled by retry inside saveInvoiceToDB
-                console.error('Save failed', err);
-                toast('Save failed — try again', 'error');
-              }
-            } finally {
-              setSaving(false);
-            }
-          }} disabled={saving}
+          <button className="btn btn-primary" onClick={saveOnly} disabled={saving}
           title="Save the invoice without downloading (Ctrl+S)">
             <Check size={18} /> {saving ? 'Saving…' : 'Save'}
           </button>
@@ -2875,7 +2914,21 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
               already sets which business an invoice belongs to; a second
               picker here only made it possible to issue the invoice from a
               company other than the one on screen. */}
-          {/* Invoice Type */}
+          <div ref={stepperRef} className="doc-steps" role="tablist" aria-label="Steps">
+            {DOC_STEPS.map((st, i) => (
+              <button key={st.key} type="button" role="tab" aria-selected={!singlePage && step === i}
+                className={`doc-step-tab${!singlePage && step === i ? ' active' : ''}${stepDone[i] ? ' done' : ''}`}
+                onClick={() => (singlePage ? document.getElementById(`doc-step-${st.key}`)?.scrollIntoView({ behavior: 'smooth' }) : goStep(i))}>
+                <span className="doc-step-num">{stepDone[i] ? <Check size={12} /> : i + 1}</span>{st.label}
+              </button>
+            ))}
+            <button type="button" className="doc-steps-toggle" onClick={toggleSinglePage}>{singlePage ? 'One step at a time' : 'Show all steps'}</button>
+          </div>
+
+                    {/* Client Modal */}
+          <ClientModal show={showClientModal} onClose={() => setShowClientModal(false)} onSave={handleClientModalSave} client={modalClient} isEditing={isEditingClient} defaultCountry={profile?.country} />
+
+          <div id="doc-step-customer" className="doc-step" hidden={!singlePage && step !== 0}>
           <InvoiceTypePanel
             details={details}
             handleTypeChange={handleTypeChange}
@@ -2887,12 +2940,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             showOptions={showOptions}
             toggleOption={toggleOption}
             typeConfig={typeConfig}
+            lockedType={lockedType}
+            sourceDoc={editingBill?._convertToType ? { number: editingBill.invoiceNumber, type: editingBill.invoiceType || 'tax-invoice' } : editingBill?.data?.sourceDoc}
           />
-
-          {/* Client Modal */}
-          <ClientModal show={showClientModal} onClose={() => setShowClientModal(false)} onSave={handleClientModalSave} client={modalClient} isEditing={isEditingClient} defaultCountry={profile?.country} />
-
-          {/* Client Details */}
           <PartyPicker
             client={client}
             clientCredit={clientCredit}
@@ -2920,9 +2970,10 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             setShowClientSuggestions={setShowClientSuggestions}
             showClientSuggestions={showClientSuggestions}
             totals={totals}
+            partyLabel={partyLabel}
           />
-
-          {/* Invoice Details */}
+          </div>
+          <div id="doc-step-details" className="doc-step" hidden={!singlePage && step !== 1}>
           <InvoiceDetailsPanel
             details={details}
             invoiceOptions={invoiceOptions}
@@ -2930,8 +2981,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             profile={profile}
             setDetails={setDetails}
           />
-
-          {/* Line Items */}
+          </div>
+          <div id="doc-step-items" className="doc-step" hidden={!singlePage && step !== 2}>
           <LineItemsGrid
             addDeliveryCharge={addDeliveryCharge}
             addItem={addItem}
@@ -2955,8 +3006,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             taxLabel={taxLabel}
             units={units}
           />
-
-          {/* Terms */}
+          </div>
+          <div id="doc-step-terms" className="doc-step" hidden={!singlePage && step !== 3}>
           <TermsPanel
             _psPrintForRates={_psPrintForRates}
             customNotes={customNotes}
@@ -2972,12 +3023,28 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             setSelectedTermsId={setSelectedTermsId}
             termsTemplates={termsTemplates}
           />
-
-          {/* Extra Sections */}
           <ExtraSectionsPanel
             extraSections={extraSections}
             setExtraSections={setExtraSections}
           />
+          </div>
+
+          {!singlePage && (
+            <div className="doc-step-nav">
+              <button type="button" className="btn btn-secondary" disabled={step === 0} onClick={() => goStep(step - 1)}>
+                <ArrowLeft size={16} /> {step > 0 ? DOC_STEPS[step - 1].label : 'Back'}
+              </button>
+              {step < DOC_STEPS.length - 1 ? (
+                <button type="button" className="btn btn-primary" onClick={() => goStep(step + 1)}>
+                  Next: {DOC_STEPS[step + 1].label} <ArrowRight size={16} />
+                </button>
+              ) : (
+                <button type="button" className="btn btn-primary" onClick={saveOnly} disabled={saving}>
+                  <Check size={16} /> {saving ? 'Saving…' : `Save ${typeConfig?.label || 'document'}`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Live Preview — visually hidden in focus mode (v1.10.22) but

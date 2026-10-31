@@ -20,6 +20,7 @@ type Rec = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 const PREFIX_BY_TYPE: Record<string, string> = {
   proforma: 'EST',
   quotation: 'QUO',
+  'sales-order': 'SO',
   'credit-note': 'CN',
   'bill-of-supply': 'BOS',
   composition: 'COMP',

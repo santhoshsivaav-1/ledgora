@@ -22,6 +22,17 @@ export const INVOICE_TYPES: Record<string, Rec> = {
     description:
       'Priced offer for work or supply — not a tax document. Convert it to a tax invoice when accepted',
   },
+  // A client's confirmed order, raised from an accepted quotation. Like a quote
+  // it is not a sale: no GST return, no stock movement. Deliver it with a
+  // challan and/or bill it with a tax invoice.
+  'sales-order': {
+    label: 'Sales Order',
+    prefix: 'SO',
+    title: 'SALES ORDER',
+    showGST: true,
+    description:
+      'Confirms what a client has ordered — not a tax document. Follow it with a delivery challan or a tax invoice',
+  },
   proforma: {
     label: 'Proforma / Estimate',
     prefix: 'EST',

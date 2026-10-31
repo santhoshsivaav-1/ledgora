@@ -15,6 +15,7 @@ export default function TopBar({
   setShowBranchModal,
   setCurrentView,
   onNewInvoice,
+  newLabel = 'New invoice',
   onOpenPalette,
   canWrite,
 }) {
@@ -111,7 +112,7 @@ export default function TopBar({
         </button>
         {canWrite && (
           <button type="button" className="btn btn-primary topbar-new" onClick={onNewInvoice}>
-            <Plus size={16} /> New invoice
+            <Plus size={16} /> {newLabel}
           </button>
         )}
       </div>

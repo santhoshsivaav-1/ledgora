@@ -4,7 +4,7 @@ import { billIsInterstate, computeItemTaxSplit } from './gstHelpers';
 
 // GSTR-3B: the monthly summary return. One page of GST returns (change 3.17).
 export default function Gstr3bPage({
-  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff,
+  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff,
 }) {
   return (
     <>
@@ -30,7 +30,7 @@ export default function Gstr3bPage({
                 <tbody>
                   <tr><td className="font-medium">(a) Outward taxable supplies (other than zero-rated, nil-rated and exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.sgst)}</td></tr>
                   <tr><td className="font-medium">(b) Zero-rated supplies</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td></tr>
-                  <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>N/A</td></tr>
+                  <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(nilExempt.total)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{nilExempt.total > 0 ? 'Bills of supply' : 'N/A'}</td></tr>
                 </tbody>
               </table>
             </div>

@@ -30,6 +30,12 @@ import {
   Heart,
   LogOut,
   ShieldCheck,
+  Workflow,
+  ClipboardList,
+  PackageCheck,
+  Truck,
+  FileMinus,
+  FileClock,
 } from 'lucide-react';
 import {
   getAllProfiles,
@@ -107,6 +113,8 @@ const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
 const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
 import AppFooter from './app/AppFooter';
+import SalesOverview from './features/sales/SalesOverview';
+import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
 import { getPrintSettings, loadPrintSettingsFor } from './features/print/printSettingsStore';
 
 const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
@@ -610,18 +618,28 @@ function App() {
       /* private mode */
     }
   };
-  const handleNewInvoice = () => {
+  // Where the editor's Back button returns to: the page the document was opened from (a quotation list, say).
+  const [backPath, setBackPath] = useState('/invoices');
+  // The document type a fresh editor opens with (from the New button of a sales page).
+  const [newDocType, setNewDocType] = useState(null);
+  const openEditor = () => {
+    if (location.pathname !== pathForView('new')) setBackPath(location.pathname);
+    setCurrentView('new');
+  };
+  // `type` is a document type from a sales page; buttons that pass a click event just get a tax invoice.
+  const handleNewInvoice = (type) => {
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     setEditingBill(null);
-    setCurrentView('new');
+    setNewDocType(typeof type === 'string' ? type : null);
+    openEditor();
   };
 
   const handleEditInvoice = (bill) => {
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     setEditingBill(bill);
-    setCurrentView('new');
+    openEditor();
   };
 
   // v1.10.77 (#86) - Print from the Dashboard row: opens the invoice just long
@@ -631,7 +649,7 @@ function App() {
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     setEditingBill({ ...bill, _printOnOpen: true });
-    setCurrentView('new');
+    openEditor();
   };
 
   const handleDuplicateInvoice = (bill) => {
@@ -640,7 +658,7 @@ function App() {
     const clone = JSON.parse(JSON.stringify(bill));
     clone._isDuplicate = true;
     setEditingBill(clone);
-    setCurrentView('new');
+    openEditor();
   };
 
   const handleInstallPWA = async () => {
@@ -662,14 +680,17 @@ function App() {
     localStorage.setItem('freegstbill_pwa_dismissed_at', String(Date.now()));
   };
 
-  const handleConvertToInvoice = (bill) => {
+  // Raise the next document in the sales flow from `bill` (see salesFlow.js). `step` is { to, linkOnly }; with none
+  // given it is the old Convert button: a tax invoice. A linkOnly step (a credit note) leaves `bill` open.
+  const handleConvertToInvoice = (bill, step) => {
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     const clone = JSON.parse(JSON.stringify(bill));
     clone._isDuplicate = true;
-    clone._convertToType = 'tax-invoice';
+    clone._convertToType = step?.to || 'tax-invoice';
+    if (step?.linkOnly) clone._linkOnly = true;
     setEditingBill(clone);
-    setCurrentView('new');
+    openEditor();
   };
 
   // Pull the user's module preferences once per render. Re-mount happens
@@ -682,6 +703,13 @@ function App() {
   useEffect(() => {
     const map = {
       new: 'invoicing',
+      sales: 'invoicing',
+      'sales-quotes': 'invoicing',
+      'sales-orders': 'invoicing',
+      'sales-challans': 'invoicing',
+      'sales-invoices': 'invoicing',
+      'sales-proforma': 'invoicing',
+      'sales-credit': 'invoicing',
       clients: 'clients',
       inventory: 'inventory',
       expenses: 'expenses',
@@ -698,23 +726,43 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView, JSON.stringify(enabledModules)]);
 
+  // Sell is one menu with a page per stage of the sales flow (change: sales modules). Recurring and Receipts sit
+  // with it because they are the later steps of a sale.
+  const SALES_ICONS = {
+    'sales-quotes': ClipboardList,
+    'sales-orders': PackageCheck,
+    'sales-challans': Truck,
+    'sales-invoices': FileText,
+    'sales-proforma': FileClock,
+    'sales-credit': FileMinus,
+  };
+  const salesChildren = [
+    { id: 'sales', icon: Workflow, label: 'Overview', module: 'invoicing' },
+    ...SALES_PAGES.map((p) => ({ id: p.id, icon: SALES_ICONS[p.id], label: p.label, module: 'invoicing' })),
+    { id: 'receipts', icon: Receipt, label: 'Receipts', module: 'receipts' },
+    { id: 'recurring', icon: RefreshCw, label: 'Recurring', module: 'recurring' },
+  ].filter((item) => showIfModule(item.module));
   const navItems = [
     { id: 'dashboard', icon: Home, label: 'Dashboard', module: 'dashboard' },
-    { id: 'invoices', icon: FileText, label: 'Invoices', module: 'dashboard' },
-    { id: 'new', icon: Plus, label: 'New Invoice', onClick: handleNewInvoice, module: 'invoicing' },
+    { id: 'sales-menu', icon: FileText, label: 'Sales', module: 'dashboard', children: salesChildren },
     { id: 'clients', icon: Users, label: 'Clients', module: 'clients' },
     { id: 'inventory', icon: Package, label: 'Products', module: 'inventory' },
     { id: 'expenses', icon: Wallet, label: 'Expenses', module: 'expenses' },
     { id: 'purchases', icon: ShoppingCart, label: 'Purchases', module: 'purchases' },
-    { id: 'recurring', icon: RefreshCw, label: 'Recurring', module: 'recurring' },
-    { id: 'receipts', icon: Receipt, label: 'Receipts', module: 'receipts' },
     { id: 'reports', icon: BarChart3, label: 'Reports', module: 'reports' },
     { id: 'filing', icon: BookOpen, label: 'GST Returns', module: 'gstReturns' },
     { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
     // v1.10.75 - opens the online documentation, which covers every screen
     // and stays current; the old built-in guide had fallen far behind.
     { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available
-  ].filter((item) => showIfModule(item.module));
+  ].filter((item) => showIfModule(item.module) && (!item.children || item.children.length > 0));
+
+  // The editor belongs to the sales page of the document in it, so that menu entry stays lit while you work.
+  const editorType = editingBill?._convertToType || editingBill?.invoiceType || newDocType || 'tax-invoice';
+  const activeNavId = currentView === 'new' ? salesPageForType(editorType)?.id || 'sales' : currentView;
+  // The top bar's New button follows the page: "New quotation" on the quotations page, and so on.
+  const pageHere = salesPageForView(currentView);
+  const topbarNew = pageHere ? { type: pageHere.newType, label: `New ${pageHere.singular.toLowerCase()}` } : { type: null, label: 'New invoice' };
 
   // Command palette actions — declared here (not earlier) because the deps
   // array references `navItems` and `handleNewInvoice`, which are consts.
@@ -731,15 +779,24 @@ function App() {
         },
       },
     ];
-    navItems.forEach((item) => {
-      if (item.id === 'new') return; // already covered above
-      acts.push({
-        label: `Go to ${item.label}`,
-        hint: '',
-        category: 'nav',
-        run: item.onClick || (() => setCurrentView(item.id)),
+    navItems
+      .flatMap((item) => item.children || [item])
+      .forEach((item) => {
+        acts.push({
+          label: item.id === 'sales' ? 'Go to Sales overview' : `Go to ${item.label}`,
+          hint: '',
+          category: 'nav',
+          run: item.onClick || (() => setCurrentView(item.id)),
+        });
       });
-    });
+    SALES_PAGES.forEach((p) =>
+      acts.push({
+        label: `New ${p.singular}`,
+        hint: '',
+        category: 'action',
+        run: () => handleNewInvoice(p.newType),
+      }),
+    );
     acts.push({
       label: 'Go to Settings',
       hint: '',
@@ -1017,7 +1074,7 @@ function App() {
         handleSwitchOrg={handleSwitchOrg}
         profile={profile}
         navItems={navItems}
-        currentView={currentView}
+        currentView={activeNavId}
         setCurrentView={setCurrentView}
         can={can}
         notifTotal={notifTotal}
@@ -1064,7 +1121,8 @@ function App() {
           canManageBranches={canManageBranches}
           setShowBranchModal={setShowBranchModal}
           setCurrentView={setCurrentView}
-          onNewInvoice={handleNewInvoice}
+          onNewInvoice={() => handleNewInvoice(topbarNew.type)}
+          newLabel={topbarNew.label}
           onOpenPalette={() => setShowPalette(true)}
           canWrite={can('invoice:write')}
         />
@@ -1111,16 +1169,50 @@ function App() {
                   }
                 />
                 <Route
+                  path="/sales"
+                  element={
+                    <SalesOverview
+                      activeProfile={profile}
+                      onNew={handleNewInvoice}
+                      onConvert={handleConvertToInvoice}
+                      go={setCurrentView}
+                    />
+                  }
+                />
+                {SALES_PAGES.map((page) => (
+                  <Route
+                    key={page.id}
+                    path={page.path}
+                    element={
+                      <Dashboard
+                        key={page.id}
+                        mode="invoices"
+                        scope={page}
+                        onNew={handleNewInvoice}
+                        onEdit={handleEditInvoice}
+                        onPrint={handlePrintInvoice}
+                        onDuplicate={handleDuplicateInvoice}
+                        onConvert={handleConvertToInvoice}
+                        onOpenProducts={() => setCurrentView('inventory')}
+                        onOpenSettings={() => setCurrentView('settings')}
+                        onOpenGuide={openDocs}
+                        activeProfile={profile}
+                      />
+                    }
+                  />
+                ))}
+                <Route
                   path="/invoices/new"
                   element={
                     <InvoiceGenerator
                       key={editorKey}
                       onBack={() => {
                         setEditingBill(null);
-                        setCurrentView('dashboard');
+                        navigate(backPath);
                       }}
                       profile={profile}
                       editingBill={editingBill}
+                      initialType={newDocType}
                     />
                   }
                 />

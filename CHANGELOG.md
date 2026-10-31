@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Sales menu with a page for every stage of the sales flow.** Sell is now one menu: Overview, Quotations,
+  Sales Orders, Delivery Challans, Invoices, Proforma, Credit Notes, Receipts and Recurring. Each page lists only
+  its own documents, has its own New button and summary, and keeps the editor's Back button pointing at it.
+- **Sales Order** document type (prefix `SO`). Not a sale: no GST return entry and no stock movement.
+- **Sales overview** (`/sales`): the flow Quotation, Sales Order, Delivery Challan, Invoice, Payment on one screen
+  with counts, values, what needs attention, and a one-click next step for anything waiting.
+- **Raise the next document from any row:** quotation to sales order or invoice, sales order to challan or invoice,
+  challan or proforma to invoice, invoice to credit note (which leaves the invoice open). The new document records
+  where it came from, and a credit note fills in "Against Invoice".
+- **A create page per document, one step at a time.** Opened from a Sales page, a document no longer shows the list of
+  invoice types: it shows its own heading, a flow tracker (Quotation, Sales Order, Delivery Challan, Invoice, Credit Note)
+  and its own wording (Quotation Number, Valid Until, Expected Delivery, Deliver To...). The form runs as Customer,
+  Details, Items, Terms & notes with Next/Back, and "Show all steps" restores the single long page.
+- **GSTR-1 / GSTR-3B closer to upload-ready.** Bills of supply now go into GSTR-1 Table 8 (`nil`) and GSTR-3B 3.1(c);
+  export invoices go into GSTR-1 Table 6A (`exp`, WPAY / WOPAY) instead of being left out of the file. The export
+  check now stops on a missing or invalid business GSTIN and on invalid client GSTINs, before the portal does.
+
 ## [1.10.80] - 2026-10-24
 
 **Bulk CSV import / export, a Lock button, View + a tidier Actions menu,

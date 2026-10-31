@@ -4,6 +4,7 @@ import { isoDate, uuid, withStamps } from './common.ts';
 export const INVOICE_TYPES = [
   'tax-invoice',
   'quotation',
+  'sales-order',
   'proforma',
   'bill-of-supply',
   'composition',

@@ -186,6 +186,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   const accentColors = {
     'tax-invoice': '#1e40af',
     'proforma': '#7c3aed',
+    'sales-order': '#0369a1',
     'bill-of-supply': '#0f766e',
     'credit-note': '#be123c',
   };
@@ -1011,7 +1012,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
     words: (n) => (currencySymbol === 'INR' ? `INR ${numberToWords(n)}` : amountInWords(n)),
     shortDate: formatShortDate,
     isServices: (options.invoiceMode || 'goods') === 'services',
-    docLabel: ({ quotation: 'Quotation', proforma: 'Proforma', 'credit-note': 'Credit Note', 'delivery-challan': 'Challan' })[invoiceType] || 'Invoice',
+    docLabel: ({ quotation: 'Quotation', 'sales-order': 'Sales Order', proforma: 'Proforma', 'credit-note': 'Credit Note', 'delivery-challan': 'Challan' })[invoiceType] || 'Invoice',
     placeOfSupply: details?.placeOfSupply || client?.state || '',
     shipTo: shipToParty,
     sig: gridSig,

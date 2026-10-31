@@ -4,7 +4,7 @@ import { getTaxableAmount } from './gstHelpers';
 
 // GSTR-1: outward supplies, with the JSON for the portal. One page of GST returns (change 3.17).
 export default function Gstr1Page({
-  activeTab, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, exportHSN, grandTotals, hsnRows, markFiled, periodFiling,
+  activeTab, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, exportHSN, grandTotals, hsnRows, nilExempt, exportBills, markFiled, periodFiling,
 }) {
   return (
     <>
@@ -204,6 +204,40 @@ export default function Gstr1Page({
               </div>
             )}
           </div>
+
+          {/* Table 8 - bills of supply are exempt supplies; they go to the portal as one total per kind of buyer. */}
+          {nilExempt.inv.length > 0 && (
+            <div className="glass-panel mb-4">
+              <div className="table-header"><h3>Nil-rated, Exempt &amp; Non-GST Supplies — Table 8</h3></div>
+              <div className="table-scroll">
+                <table className="data-table" style={{ minWidth: '400px' }}>
+                  <thead><tr><th>Supplies to</th><th style={{ textAlign: 'right' }}>Exempted</th></tr></thead>
+                  <tbody>
+                    {nilExempt.inv.map((r) => (
+                      <tr key={r.sply_ty}>
+                        <td className="font-medium">{{ INTRB2B: 'Registered, inter-state', INTRAB2B: 'Registered, intra-state', INTRB2C: 'Unregistered, inter-state', INTRAB2C: 'Unregistered, intra-state' }[r.sply_ty]}</td>
+                        <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(r.expt_amt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ padding: '0.5rem 1.25rem 0.75rem', margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                From your bills of supply. Included in the JSON, and in GSTR-3B 3.1(c).
+              </p>
+            </div>
+          )}
+
+          {/* Exports - Table 6A */}
+          {exportBills.length > 0 && (
+            <div className="glass-panel mb-4">
+              <div className="table-header"><h3>Exports — Table 6A</h3></div>
+              <p style={{ padding: '0.5rem 1.25rem 0.75rem', margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                {exportBills.length} export invoice{exportBills.length === 1 ? '' : 's'} ({exportBills.map((b) => b.invoiceNumber).join(', ')}) are in the JSON.
+                Shipping bill number, date and port are filed with customs, not kept on the invoice: add them on the portal after uploading.
+              </p>
+            </div>
+          )}
 
           {/* Document Summary — Table 13 */}
           <div className="glass-panel mb-4">

@@ -192,7 +192,41 @@ function ReceiptModal({ target, onClose }) {
   );
 }
 
-export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, onOpenGuide, activeProfile }) {
+// The strip above a sales page's list: how many documents, their value, and how many are still waiting on a next step.
+function ScopeSummary({ scope, bills }) {
+  const live = bills.filter(b => !isCancelledBill(b));
+  const open = live.filter(b => !b.convertedTo);
+  const sum = (list) => list.reduce((t, b) => t + (Number(b.totalAmount) || 0), 0);
+  const sales = scope.types.some(t => SALES_INVOICE_TYPES.includes(t));
+  const credit = scope.types.includes('credit-note');
+  const cards = sales
+    ? [
+        ['Documents', live.length, null],
+        ['Billed', formatCurrency(sum(live)), null],
+        ['Outstanding', formatCurrency(live.reduce((t, b) => t + (b.status === 'paid' ? 0 : Math.max(0, amountDue(b) - (b.paidAmount || 0))), 0)), 'amber'],
+        ['Fully paid', live.filter(b => b.status === 'paid').length, 'green'],
+      ]
+    : credit
+      ? [['Credit notes', live.length, null], ['Value credited', formatCurrency(sum(live)), 'amber']]
+      : [
+          ['Documents', live.length, null],
+          ['Total value', formatCurrency(sum(live)), null],
+          ['Waiting for next step', open.length, 'amber'],
+          ['Converted', live.length - open.length, 'green'],
+        ];
+  return (
+    <div className="scope-summary">
+      {cards.map(([label, value, tone]) => (
+        <div key={label} className={`scope-summary-card${tone ? ` scope-summary-${tone}` : ''}`}>
+          <span className="scope-summary-label">{label}</span>
+          <span className="scope-summary-value">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Dashboard({ mode = 'home', scope = null, onNew, onEdit, onPrint, onDuplicate, onConvert, onOpenProducts, onOpenSettings, onOpenGuide, activeProfile }) {
   // v1.10.64 — requested (#55, @sangwanmail-eng): "An invoice belonging to one
   // company should not appear under the other."
   //
@@ -220,10 +254,14 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
   // paint, before the prop has arrived.
   const profile = activeProfile ?? profileState;
 
+  // A page under Sales (quotations, sales orders, ...) passes `scope` and lists only its own document types.
   const bills = useMemo(
-    () => allBills.filter(b => belongsToProfile(b, profile)),
-    [allBills, profile],
+    () => allBills.filter(b => belongsToProfile(b, profile) && (!scope || scope.types.includes(b.invoiceType || 'tax-invoice'))),
+    [allBills, profile, scope],
   );
+  // Paid / unpaid only mean something for documents that are sales; the other pages track Open / Converted instead.
+  const tracksPayments = !scope || scope.types.some(t => SALES_INVOICE_TYPES.includes(t));
+  const newDoc = () => onNew(scope?.newType);
   const [filtered, setFiltered] = useState([]);
   // v1.10.66 (#64 item 3) — the headline cards are computed from `bills`, the
   // list already narrowed to the active business. They used to be summed in
@@ -447,7 +485,9 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
       );
     }
     if (typeFilter !== 'all') result = result.filter(b => (b.invoiceType || 'tax-invoice') === typeFilter);
-    if (statusFilter !== 'all') result = result.filter(b => (b.status || 'unpaid') === statusFilter);
+    if (statusFilter === 'open') result = result.filter(b => !b.convertedTo && b.status !== 'cancelled');
+    else if (statusFilter === 'converted') result = result.filter(b => !!b.convertedTo);
+    else if (statusFilter !== 'all') result = result.filter(b => (b.status || 'unpaid') === statusFilter);
     if (fyFilter !== 'all') {
       const fy = fyOptions.find(f => f.value === fyFilter);
       if (fy) result = result.filter(b => b.invoiceDate >= fy.from && b.invoiceDate <= fy.to);
@@ -1209,9 +1249,9 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
       <PageHeader
         compact
         icon="📊"
-        title={mode === 'invoices' ? 'Invoices' : 'Dashboard'}
-        subtitle={mode === 'invoices' ? 'Every invoice, quotation and credit note' : 'Overview of your invoices'}
-        meta={`${bills.length} invoice${bills.length === 1 ? '' : 's'}`}>
+        title={scope ? scope.label : mode === 'invoices' ? 'All documents' : 'Dashboard'}
+        subtitle={scope ? scope.blurb : mode === 'invoices' ? 'Every invoice, quotation and credit note' : 'Overview of your invoices'}
+        meta={scope ? `${bills.length} ${scope.singular.toLowerCase()}${bills.length === 1 ? '' : 's'}` : `${bills.length} invoice${bills.length === 1 ? '' : 's'}`}>
         <HelpButton title="Dashboard — how to use" doc="dashboard">
           <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
             <li><strong>New Invoice</strong> — start a fresh tax invoice / proforma / credit note / bill of supply / delivery challan.</li>
@@ -1223,8 +1263,8 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
             <li><strong>Low-stock alert</strong> — appears when any product is at or below your threshold (Settings → Stock alert).</li>
           </ul>
         </HelpButton>
-        <BulkCsvImport kind="sales" onDone={loadBills} />
-        <button className="btn btn-primary" onClick={onNew}><Plus size={18} /> New Invoice</button>
+        {(!scope || scope.id === 'sales-invoices') && <BulkCsvImport kind="sales" onDone={loadBills} />}
+        <button className="btn btn-primary" onClick={newDoc}><Plus size={18} /> {scope ? `New ${scope.singular}` : 'New Invoice'}</button>
       </PageHeader>
 
       {/* The home page shows the getting-started checklist, alerts and totals above the list; the Invoices page is the list alone. */}
@@ -1399,7 +1439,11 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
         </>
       )}
 
+      {scope && <ScopeSummary scope={scope} bills={bills} />}
+
       <InvoiceTable
+        scope={scope}
+        tracksPayments={tracksPayments}
         bills={bills}
         bulkBusy={bulkBusy}
         bulkCancel={bulkCancel}
@@ -1421,7 +1465,7 @@ export default function Dashboard({ mode = 'home', onNew, onEdit, onPrint, onDup
         hasFilters={hasFilters}
         onConvert={onConvert}
         onDuplicate={onDuplicate}
-        onNew={onNew}
+        onNew={newDoc}
         onPrint={onPrint}
         openPaymentModal={openPaymentModal}
         search={search}

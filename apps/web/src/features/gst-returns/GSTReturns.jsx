@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, ChevronRight, AlertTriangle, BookOpen, BarChart3 } from 'lucide-react';
 import { getAllBills, getAllExpenses, getAllPurchases, getProfile } from '../../lib/data';
-import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
+import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
+import { nilExemptSummary, exportSection } from './gstReturnTables';
 import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
@@ -338,6 +339,11 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
     const t = b.data?.totals || {};
     return { taxable: acc.taxable + getTaxableAmount(t), igst: acc.igst + (t.igst || 0), cess: acc.cess + (t.cess || 0) };
   }, { taxable: 0, igst: 0, cess: 0 });
+  // Table 8 / 3.1(c): bills of supply, which are exempt supplies with no GST on them.
+  const nilExempt = nilExemptSummary(allFilteredBills, {
+    isInter: billIsInterstate,
+    split: (item, bill) => computeItemTaxSplit(item, billIsInterstate(bill), !!bill.data?.taxInclusive, false),
+  });
   const outputTax = { cgst: grandTotals.cgst, sgst: grandTotals.sgst, igst: grandTotals.igst + exportTotals.igst };
   // ITC from expenses — P1 #15 fix: route to IGST when the expense is
   // interstate (vendor charged IGST, e.g. AWS / Google / Adobe from an
@@ -627,7 +633,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // Matches the schema accepted by https://services.gst.gov.in/services/auth/dashboard
   // Upload via: GST portal → Returns → GSTR-3B → Prepare Offline → Upload JSON
   const exportGSTR3BJSON = () => {
-    if (filteredBills.length === 0 && filteredExpenses.length === 0) {
+    if (filteredBills.length === 0 && filteredExpenses.length === 0 && nilExempt.total === 0) {
       toast('No data to export for this period', 'warning');
       return;
     }
@@ -651,7 +657,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       },
       // v1.10.66 (#61) — exports, kept out of osup_det above.
       osup_zero: { txval: round2(exportTotals.taxable), iamt: round2(exportTotals.igst), csamt: round2(exportTotals.cess) },
-      osup_nil_exmp: { txval: 0 },
+      osup_nil_exmp: { txval: nilExempt.total },
       // v1.10.31 — GST-M10: RCM inward supplies populated from purchases
       // flagged as reverse-charge (was hardcoded 0 → self-remit RCM liability
       // never reported → interest u/s 50).
@@ -744,6 +750,12 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   const validateGSTR1 = (bills) => {
     const blocked = [];
     const warnings = [];
+    // The return is filed under the business's own GSTIN, and every B2B row under the buyer's: a wrong one is
+    // refused by the portal, so say so here rather than after the upload.
+    if (!profile.gstin) blocked.push('Your business has no GSTIN. Add it in Settings → Business.');
+    else if (!gstinChecksumOk(profile.gstin)) blocked.push(`Your business GSTIN ${profile.gstin} is not valid (check digit fails).`);
+    const badClientGstin = [...new Set(bills.filter(b => b.data?.client?.gstin && !gstinChecksumOk(b.data.client.gstin)).map(b => `${b.data.client.name || b.clientName} (${b.data.client.gstin})`))];
+    if (badClientGstin.length > 0) blocked.push(`${badClientGstin.length} client GSTIN(s) are not valid: ${badClientGstin.slice(0, 3).join(', ')}`);
     const aatoAbove5Cr = !!profile.aatoAbove5Cr;
     const minHsnDigits = aatoAbove5Cr ? 6 : 4;
 
@@ -797,7 +809,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
 
   // ========== GSTR-1 JSON Export ==========
   const exportGSTR1JSON = () => {
-    if (filteredBills.length === 0) { toast('No invoices to export', 'warning'); return; }
+    if (filteredBills.length === 0 && nilExempt.total === 0) { toast('No invoices to export', 'warning'); return; }
 
     // v1.10.43 — Pre-flight validation. Abort with a clear message if
     // any BLOCKING rule is broken (bad invoice number, non-standard
@@ -982,6 +994,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       b2b: Object.values(b2bMap), b2cs: b2csArr,
       ...(Object.keys(b2clMap).length > 0 ? { b2cl: Object.values(b2clMap) } : {}),
       ...(Object.keys(cdnrMap).length > 0 ? { cdnr: Object.values(cdnrMap) } : {}),
+      ...(exportBills.length > 0 ? { exp: exportSection(exportBills, { split: (item, bill) => computeItemTaxSplit(item, true, !!bill.data?.taxInclusive), fmtDate: formatDateGST }) } : {}),
+      ...(nilExempt.inv.length > 0 ? { nil: { inv: nilExempt.inv } } : {}),
       hsn: { data: Object.values(hsnJsonMap).map((r, i) => ({ num: i + 1, ...r, qty: roundQty(r.qty, 2), txval: round2(r.txval), iamt: round2(r.iamt), camt: round2(r.camt), samt: round2(r.samt), csamt: round2(r.csamt) })) },
       doc_issue: { doc_det: docDet },
     };
@@ -1149,6 +1163,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         exportHSN={exportHSN}
         grandTotals={grandTotals}
         hsnRows={hsnRows}
+        nilExempt={nilExempt}
+        exportBills={exportBills}
         markFiled={markFiled}
         periodFiling={periodFiling}
       />
@@ -1160,6 +1176,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         exportGSTR3B={exportGSTR3B}
         exportGSTR3BJSON={exportGSTR3BJSON}
         exportTotals={exportTotals}
+        nilExempt={nilExempt}
         grandTotals={grandTotals}
         hasCarry={hasCarry}
         itcCarry={itcCarry}

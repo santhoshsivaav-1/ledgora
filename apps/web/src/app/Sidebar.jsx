@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   FileText,
   Menu,
@@ -13,12 +13,67 @@ import {
   ShieldCheck,
   LogOut,
 } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { NotificationButton } from './NotificationBell';
 
 // The left menu and the phone top bar (change 3.5): who is signed in, the business switcher, the screens, and the
 // account shortcuts. It draws what it is given; App.jsx owns the state (profiles, branches, notifications, theme).
 // The menu is grouped by what people do: sell, stock and buying, then reports and tax (change 3.5).
-const NAV_GROUPS = { invoices: 'Sell', inventory: 'Stock and buying', reports: 'Reports and tax' };
+const NAV_GROUPS = { 'sales-menu': 'Sell', inventory: 'Stock and buying', reports: 'Reports and tax' };
+
+// The Sales entry opens into a page per stage of the sales flow. It stays open while you are on one of them, and
+// remembers whether you folded it the rest of the time.
+function NavParent({ item, currentView, setCurrentView }) {
+  const hasActive = item.children.some((c) => c.id === currentView);
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('ledgora_salesMenuOpen') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    if (hasActive) setOpen(true);
+  }, [hasActive]);
+  const toggle = (e) => {
+    e.stopPropagation(); // the menu's own click handler closes the phone menu; folding a group should not
+    setOpen((v) => {
+      try {
+        localStorage.setItem('ledgora_salesMenuOpen', v ? '0' : '1');
+      } catch {
+        /* private mode */
+      }
+      return !v;
+    });
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className={`nav-btn nav-parent${hasActive && !open ? ' nav-parent-active' : ''}`}
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        <item.icon size={18} /> <span>{item.label}</span>
+        <ChevronRight size={15} className={`nav-chevron${open ? ' nav-chevron-open' : ''}`} />
+      </button>
+      {open && (
+        <div className="nav-children">
+          {item.children.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`nav-btn nav-sub-btn ${currentView === c.id ? 'nav-btn-active' : ''}`}
+              onClick={() => setCurrentView(c.id)}
+            >
+              <c.icon size={16} /> <span>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function Sidebar({
   me,
@@ -129,12 +184,16 @@ export default function Sidebar({
           {navItems.map((item) => (
             <Fragment key={item.id}>
               {NAV_GROUPS[item.id] && <div className="nav-group-label">{NAV_GROUPS[item.id]}</div>}
-              <button
-                className={`nav-btn ${currentView === item.id ? 'nav-btn-active' : ''}`}
-                onClick={item.onClick || (() => setCurrentView(item.id))}
-              >
-                <item.icon size={18} /> {item.label}
-              </button>
+              {item.children ? (
+                <NavParent item={item} currentView={currentView} setCurrentView={setCurrentView} />
+              ) : (
+                <button
+                  className={`nav-btn ${currentView === item.id ? 'nav-btn-active' : ''}`}
+                  onClick={item.onClick || (() => setCurrentView(item.id))}
+                >
+                  <item.icon size={18} /> {item.label}
+                </button>
+              )}
             </Fragment>
           ))}
           <div

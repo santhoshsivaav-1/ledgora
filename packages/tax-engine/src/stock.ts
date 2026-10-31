@@ -16,6 +16,7 @@ export const STOCK_SIGN: Record<string, number> = {
   'delivery-challan': -1,
   'credit-note': 1,
   quotation: 0,
+  'sales-order': 0,
   proforma: 0,
 };
 
