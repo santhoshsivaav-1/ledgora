@@ -71,6 +71,7 @@ import { listBusinesses, switchOrganization } from './services/session';
 // Result: smaller initial JS payload; each heavy view chunk-caches
 // once fetched.
 import Dashboard from './features/dashboard/Dashboard';
+import AnalyticsDashboard from './features/dashboard/AnalyticsDashboard';
 import InvoiceGenerator from './features/invoices/editor/InvoiceEditorPage';
 import SetupWizard from './features/onboarding/SetupWizard';
 import BranchModal from './features/settings/BranchModal';
@@ -1138,15 +1139,11 @@ function App() {
                 <Route
                   path="/"
                   element={
-                    <Dashboard
+                    <AnalyticsDashboard
                       onNew={handleNewInvoice}
                       onEdit={handleEditInvoice}
-                      onPrint={handlePrintInvoice}
-                      onDuplicate={handleDuplicateInvoice}
-                      onConvert={handleConvertToInvoice}
                       onOpenProducts={() => setCurrentView('inventory')}
                       onOpenSettings={() => setCurrentView('settings')}
-                      onOpenGuide={openDocs}
                       activeProfile={profile}
                     />
                   }
