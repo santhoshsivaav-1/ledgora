@@ -5,6 +5,15 @@ import App from './App.jsx'
 import Providers from './app/providers'
 import './styles/tokens.css'
 import './index.css'
+// Vyapar parity Phase 0: the new look's palette, shell and component library. All of it is scoped to
+// <html data-ui="vyapar"> or to new class names, so the classic look is unchanged while the flag is off.
+import './styles/theme-vyapar.css'
+import './styles/shell.css'
+import './styles/components.css'
+import { applyUiAttributes } from './app/uiMode'
+
+// Before the first paint, so the new look never flashes the classic colours.
+applyUiAttributes()
 
 // v1.10.2 — Deferred SW update. Prior code called `updateSW(true)`
 // inside `onNeedRefresh` which triggers `location.reload()` immediately.

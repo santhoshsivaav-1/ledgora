@@ -1,0 +1,84 @@
+/* The Vyapar-style look (P0-S1), switched on by <html data-ui="vyapar"> (app/uiMode.ts). Two jobs:
+   1. give the four names the classic set shares with the new one (--bg, --border, --text, --text-muted) their new
+      values;
+   2. point every classic token at the new set, so existing screens change colour, never layout.
+   Nothing here adds a rule for a new component: those live in shell.css and components.css. */
+
+:root[data-ui='vyapar'] {
+  --bg: #f4f5f9;
+  --border: #e3e6ee;
+  --text: #1f2437;
+  --text-muted: #6b7280;
+
+  /* classic names, now aliases */
+  --primary: var(--cta);
+  --primary-hover: var(--cta-hover);
+  --primary-rgb: var(--cta-rgb);
+  --primary-light: rgba(var(--cta-rgb), 0.1);
+  --primary-darker: var(--cta-hover);
+  --accent: var(--cta);
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--surface-2);
+  --bg-tertiary: #eceef4;
+  --card-bg: var(--surface);
+  --card: var(--surface);
+  --bg-card: var(--surface);
+  --text-primary: var(--text);
+  --text-secondary: #4b5263;
+  --border-color: var(--border);
+  --success: var(--pos);
+  --success-light: rgba(22, 163, 74, 0.08);
+  --success-bg: var(--tint-pos);
+  --danger: var(--neg);
+  --danger-light: rgba(220, 38, 38, 0.08);
+  --info-bg: var(--tint-info);
+  --info-border: #c7d7fb;
+  --info-text: #1e40af;
+  --warn-bg: var(--tint-warn);
+  --warn-border: #fcd9a6;
+  --warn-text: #92400e;
+  --glass-shadow: var(--shadow-1);
+  --radius-lg: var(--r-lg);
+}
+
+:root[data-ui='vyapar'][data-theme='dark'] {
+  --bg: #0f1220;
+  --border: #2a2f4a;
+  --text: #e8eaf3;
+  --text-muted: #9aa1b9;
+  --bg-tertiary: #262a44;
+  --text-secondary: #b8bdd2;
+  --success-light: rgba(74, 222, 128, 0.12);
+  --danger-light: rgba(248, 113, 113, 0.12);
+  --info-border: #284a86;
+  --info-text: #93c5fd;
+  --warn-border: #6b4a12;
+  --warn-text: #fcd34d;
+}
+
+/* Colour-only touches on classic classes whose colours were hard-coded instead of read from a token. */
+:root[data-ui='vyapar'] body {
+  font-family: var(--font);
+}
+:root[data-ui='vyapar'] .btn-primary {
+  box-shadow: 0 1px 2px rgba(var(--cta-rgb), 0.25);
+}
+:root[data-ui='vyapar'] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 2px 6px rgba(var(--cta-rgb), 0.3);
+}
+:root[data-ui='vyapar'] .page-header {
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+:root[data-ui='vyapar'] .modal-content {
+  background: var(--surface);
+  color: var(--text);
+}
+:root[data-ui='vyapar'] :focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+/* Classic rules with a hard-coded white background and no dark-mode override (the invoice-type chips). */
+:root[data-ui='vyapar'][data-theme='dark'] .type-chip:not(.type-chip-active) {
+  background: var(--surface-2);
+}

@@ -1,7 +1,16 @@
 import { X } from 'lucide-react';
 
+// The extra keys of the new shell (Vyapar parity P0-S2), listed only while it is on.
+const VYAPAR_KEYS = [
+  [['Ctrl', 'F'], 'Open Anything (search screens, parties, items, invoices)'],
+  [['Ctrl', 'Shift', 'S'], 'Save and start a new one (on forms that have it)'],
+  [['Alt', 'N'], 'New: the document of the page you are on'],
+  [['Alt', 'B'], 'Shrink or open the menu'],
+  [['?'], 'This help'],
+];
+
 // Ctrl/Cmd+/ : the keyboard reference (change 3.5).
-export default function ShortcutsHelp({ open, onClose }) {
+export default function ShortcutsHelp({ open, onClose, vyapar = false }) {
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={() => onClose()}>
@@ -63,6 +72,20 @@ export default function ShortcutsHelp({ open, onClose }) {
               </td>
               <td>Close any open modal</td>
             </tr>
+            {vyapar &&
+              VYAPAR_KEYS.map(([keys, what]) => (
+                <tr key={what}>
+                  <td>
+                    {keys.map((k, i) => (
+                      <span key={k}>
+                        {i > 0 && <>&nbsp;+&nbsp;</>}
+                        <kbd>{k}</kbd>
+                      </span>
+                    ))}
+                  </td>
+                  <td>{what}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
         <p

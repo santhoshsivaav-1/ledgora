@@ -1,0 +1,162 @@
+/* The new shell (Vyapar parity P0-S2): navy 240px sidebar, light top bar, the page underneath. Only drawn when
+   <html data-ui="vyapar">; every class starts with vy- so the classic shell is untouched.
+   Breakpoints: >= 1280 full sidebar; 1024-1279 the 64px icon rail that opens on hover or focus; < 1024 the
+   off-canvas drawer behind a menu button, as the classic phone layout. */
+
+.app-layout.vy-shell { display: flex; height: 100vh; overflow: hidden; background: var(--bg); }
+
+/* ---------- Sidebar ---------- */
+.vy-sidebar {
+  width: var(--sidebar-w); flex-shrink: 0; display: flex; flex-direction: column; height: 100vh;
+  background: var(--sidebar-bg); color: var(--sidebar-fg); overflow: hidden; z-index: 900;
+  transition: width 0.18s ease, box-shadow 0.18s ease;
+}
+.vy-brand { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-4) var(--s-4) var(--s-3); }
+.vy-logo { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--r-md); background: var(--cta); color: #fff; }
+.vy-brand-name { font: 700 16px var(--font); white-space: nowrap; }
+.vy-brand-sub { font-size: 11px; color: var(--sidebar-muted); white-space: nowrap; }
+.vy-rail-toggle { margin-left: auto; }
+.vy-side-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--sidebar-muted); cursor: pointer;
+}
+.vy-side-btn:hover { background: var(--sidebar-active); color: var(--sidebar-fg); }
+.vy-side-btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.vy-search {
+  display: flex; align-items: center; gap: var(--s-2); margin: 0 var(--s-3) var(--s-3); padding: 0 var(--s-3); height: 38px;
+  border: 0; border-radius: var(--r-pill); background: var(--sidebar-search-bg); color: var(--sidebar-muted);
+  font: 400 13px var(--font); cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden;
+}
+.vy-search:hover { color: var(--sidebar-fg); }
+.vy-search:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.vy-search kbd { margin-left: auto; padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); font: 500 11px var(--font); color: var(--sidebar-muted); }
+.vy-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 var(--s-2) var(--s-3); scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.vy-nav ul { list-style: none; margin: 0; padding: 0; }
+.vy-item {
+  position: relative; display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: 44px; padding: 0 var(--s-3);
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--sidebar-fg);
+  font: 400 15px var(--font); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.vy-item > svg { flex-shrink: 0; opacity: 0.9; }
+.vy-item:hover { background: rgba(255, 255, 255, 0.06); }
+.vy-item:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
+.vy-item[aria-current='page'] { background: var(--sidebar-active); font-weight: 500; }
+.vy-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vy-chevron { flex-shrink: 0; transition: transform 0.15s ease; opacity: 0.7; }
+.vy-item[aria-expanded='true'] .vy-chevron { transform: rotate(180deg); }
+.vy-item-quick { flex-shrink: 0; }
+.vy-item-dot { position: absolute; top: 10px; left: 26px; width: 8px; height: 8px; border-radius: 50%; background: var(--neg); box-shadow: 0 0 0 2px var(--sidebar-bg); }
+.vy-sub { margin: 2px 0 var(--s-1); }
+.vy-sub .vy-item { min-height: 36px; padding-left: 44px; font-size: 14px; color: var(--sidebar-muted); }
+.vy-sub .vy-item:hover, .vy-sub .vy-item[aria-current='page'] { color: var(--sidebar-fg); }
+.vy-group-lit > .vy-item { color: var(--sidebar-fg); font-weight: 500; }
+.vy-side-foot { padding: var(--s-3); border-top: 1px solid rgba(255, 255, 255, 0.08); }
+
+/* Company switcher (bottom of the sidebar) */
+.vy-company { position: relative; }
+.vy-company-btn {
+  display: flex; align-items: center; gap: var(--s-2); width: 100%; height: 44px; padding: 0 var(--s-3);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--r-md); background: rgba(255, 255, 255, 0.04);
+  color: var(--sidebar-fg); font: 500 14px var(--font); cursor: pointer; text-align: left; white-space: nowrap;
+}
+.vy-company-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.vy-company-btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.vy-company-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vy-company-menu {
+  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; z-index: 950; max-height: 60vh; overflow-y: auto;
+  padding: var(--s-1) 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2);
+}
+.vy-company-item { display: block; width: 100%; padding: var(--s-2) var(--s-3); border: 0; background: none; color: var(--text); font: 400 14px var(--font); text-align: left; cursor: pointer; }
+.vy-company-item:hover, .vy-company-item:focus-visible { background: var(--surface-2); outline: none; }
+.vy-company-item[aria-current='true'] { color: var(--link); font-weight: 600; }
+.vy-company-item-sub { display: block; font-size: 12px; color: var(--text-muted); }
+.vy-company-sep { height: 1px; margin: var(--s-1) 0; background: var(--border); }
+
+/* ---------- Main column ---------- */
+.vy-main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.vy-shell .vy-main > .main-content { padding: var(--s-5); }
+.vy-shell .settings-bar { top: calc(-1 * var(--s-5)); }
+.vy-shell .settings-savebar { left: var(--sidebar-w); }
+.vy-shell .pwa-install-banner { left: var(--sidebar-w); }
+
+.vy-topbar {
+  display: flex; align-items: center; gap: var(--s-3); flex-shrink: 0; height: var(--topbar-h); padding: 0 var(--s-5);
+  background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text);
+}
+.vy-topbar .vy-topbar-menu { display: none; }
+.vy-biz { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.vy-biz-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neg); flex-shrink: 0; border: 0; padding: 0; cursor: pointer; }
+.vy-biz-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: 600 16px var(--font); cursor: pointer; }
+.vy-biz-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vy-biz-name:hover { background: var(--surface); }
+.vy-biz-name:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.vy-biz-input { width: 240px; height: 32px; padding: 0 var(--s-2); border: 1px solid var(--link); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: 600 15px var(--font); }
+.vy-biz-input::placeholder { color: var(--text-muted); font-weight: 500; }
+.vy-crumb { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: var(--s-3); margin-left: var(--s-1); border-left: 1px solid var(--border); color: var(--text-muted); font-size: 14px; white-space: nowrap; overflow: hidden; }
+.vy-crumb b { color: var(--text); font-weight: 500; }
+.vy-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); }
+.vy-fy { min-height: 32px; width: auto; padding: 0 var(--s-2); border-radius: var(--r-pill); font-size: 13px; }
+.vy-icon-wrap { position: relative; display: inline-flex; }
+.vy-icon-wrap .ui-badge { position: absolute; top: -4px; right: -4px; pointer-events: none; }
+.vy-status-dot { position: absolute; bottom: 0; right: 0; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--topbar-bg); background: var(--warn); }
+.vy-status-dot[data-status='online'] { background: var(--pos); }
+.vy-status-dot[data-status='offline'] { background: var(--neg); }
+.vy-avatar-btn { padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; }
+.vy-avatar-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.vy-account-head { padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--border); margin-bottom: var(--s-1); }
+.vy-account-head b { display: block; color: var(--text); }
+.vy-account-head span { font-size: 12px; color: var(--text-muted); }
+.vy-backdrop { display: none; }
+
+/* ---------- Icon rail (Alt+B, or the button by the logo; at 1280px and up, below that it is automatic) ---------- */
+@media (min-width: 1280px) {
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) { width: var(--rail-w); }
+  .vy-shell.vy-rail .vy-sidebar { position: fixed; left: 0; top: 0; bottom: 0; }
+  .vy-shell.vy-rail .vy-sidebar:hover, .vy-shell.vy-rail .vy-sidebar:has(:focus-visible) { width: var(--sidebar-w); box-shadow: 8px 0 30px rgba(20, 21, 42, 0.3); }
+  .vy-shell.vy-rail .vy-main { margin-left: var(--rail-w); }
+  .vy-shell.vy-rail .settings-savebar, .vy-shell.vy-rail .pwa-install-banner { left: var(--rail-w); }
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) :is(.vy-brand-text, .vy-rail-toggle, .vy-item-label, .vy-chevron, .vy-item-quick, .vy-search-text, .vy-search kbd, .vy-company-name, .vy-sub) { display: none; }
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) :is(.vy-item, .vy-search, .vy-company-btn) { justify-content: center; padding: 0; }
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-search { margin-left: var(--s-2); margin-right: var(--s-2); }
+  .vy-shell.vy-rail .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-item-dot { left: auto; right: 14px; }
+}
+
+/* 1024-1279: the rail, whatever the toggle says */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .vy-shell .vy-sidebar { position: fixed; left: 0; top: 0; bottom: 0; }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) { width: var(--rail-w); }
+  .vy-shell .vy-sidebar:hover, .vy-shell .vy-sidebar:has(:focus-visible) { width: var(--sidebar-w); box-shadow: 8px 0 30px rgba(20, 21, 42, 0.3); }
+  .vy-shell .vy-main { margin-left: var(--rail-w); }
+  .vy-shell .settings-savebar, .vy-shell .pwa-install-banner { left: var(--rail-w); }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) :is(.vy-brand-text, .vy-rail-toggle, .vy-item-label, .vy-chevron, .vy-item-quick, .vy-search-text, .vy-search kbd, .vy-company-name, .vy-sub) { display: none; }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) :is(.vy-item, .vy-search, .vy-company-btn) { justify-content: center; padding: 0; }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-search { margin-left: var(--s-2); margin-right: var(--s-2); }
+  .vy-shell .vy-sidebar:not(:hover):not(:has(:focus-visible)) .vy-item-dot { left: auto; right: 14px; }
+  .vy-rail-toggle { display: none; }
+}
+
+/* < 1024: the drawer */
+@media (max-width: 1023px) {
+  .vy-shell .vy-sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 1200; width: min(280px, 85vw);
+    transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+  }
+  .vy-shell .vy-sidebar.vy-open { transform: none; }
+  .vy-shell .vy-main { margin-left: 0; }
+  .vy-backdrop { display: block; position: fixed; inset: 0; z-index: 1150; background: rgba(20, 21, 42, 0.55); }
+  .vy-topbar { padding: 0 var(--s-3); gap: var(--s-2); }
+  .vy-topbar .vy-topbar-menu { display: inline-flex; }
+  .vy-crumb { display: none; }
+  .vy-rail-toggle { display: none; }
+  .vy-shell .vy-main > .main-content { padding: var(--s-4); }
+  .vy-shell .settings-savebar, .vy-shell .pwa-install-banner { left: 0; }
+}
+@media (max-width: 600px) {
+  .vy-fy, .vy-topbar .vy-new-label { display: none; }
+  .vy-biz-input { width: 160px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vy-sidebar, .vy-chevron { transition: none; }
+}

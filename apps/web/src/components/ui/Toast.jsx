@@ -18,9 +18,10 @@ const COLORS = {
 let toastId = 0;
 let addToastFn = null;
 
-export function toast(message, type = 'info', duration = 3500) {
+// `action` (Vyapar parity P0-S3.4) adds one button to the toast, for "Deleted. Undo": { label, onClick }.
+export function toast(message, type = 'info', duration = 3500, { action } = {}) {
   if (addToastFn) {
-    addToastFn({ id: ++toastId, message, type, duration });
+    addToastFn({ id: ++toastId, message, type, duration, action });
   }
 }
 
@@ -65,6 +66,11 @@ export default function ToastContainer() {
           }}>
             <Icon size={18} style={{ color: color.icon, flexShrink: 0 }} />
             <span className="toast-message">{t.message}</span>
+            {t.action && (
+              <button className="toast-action" onClick={() => { dismiss(t.id); t.action.onClick?.(); }}>
+                {t.action.label}
+              </button>
+            )}
             <button className="toast-close" onClick={() => dismiss(t.id)}>
               <X size={14} />
             </button>

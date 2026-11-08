@@ -14,14 +14,32 @@
 //   children    right-hand slot for action buttons, HelpButton, etc.
 //   compact     v1.10.77 (#84): a slim title row, no card, icon or subtitle,
 //               for screens where the table needs the room (the Dashboard).
+//   breadcrumb  Vyapar parity P0-S2: [{ label, to? }] shown small above the title ("Sale › Invoices").
+//   actions     the page's primary action (top right); the same slot as children, named for new screens.
 
-export default function PageHeader({ icon, title, subtitle, meta, children, compact = false }) {
+function Breadcrumb({ items }) {
+  if (!items?.length) return null;
+  return (
+    <nav className="ui-crumbs" aria-label="Breadcrumb">
+      {items.map((b, i) => (
+        <span key={b.label} style={{ display: 'inline-flex', gap: 4 }}>
+          {i > 0 && <span aria-hidden="true">›</span>}
+          {b.to ? <a href={b.to}>{b.label}</a> : <span aria-current={i === items.length - 1 ? 'page' : undefined}>{b.label}</span>}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+export default function PageHeader({ icon, title, subtitle, meta, children, actions, breadcrumb, compact = false }) {
+  const slot = actions ? <>{children}{actions}</> : children;
   if (compact) {
     return (
       <div className="page-header page-header-compact" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+        {breadcrumb && <div style={{ flexBasis: '100%' }}><Breadcrumb items={breadcrumb} /></div>}
         <h1 className="page-title" style={{ margin: 0, fontSize: '1.3rem' }}>{title}</h1>
         {meta && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{meta}</span>}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{children}</div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{slot}</div>
       </div>
     );
   }
@@ -47,6 +65,7 @@ export default function PageHeader({ icon, title, subtitle, meta, children, comp
           }}>{icon}</div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
+          <Breadcrumb items={breadcrumb} />
           <h1 className="page-title" style={{ margin: 0 }}>{title}</h1>
           {(subtitle || meta) && (
             <p className="page-subtitle" style={{ margin: '0.15rem 0 0', display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
@@ -65,7 +84,7 @@ export default function PageHeader({ icon, title, subtitle, meta, children, comp
             </p>
           )}
         </div>
-        {children}
+        {slot}
       </div>
     </div>
   );

@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New layout, beta (Vyapar parity Phase 0, flag `ui.vyapar`, off by default).** A navy sidebar grouped the way
+  Vyapar's is (Home, Parties, Items, Sale, Purchase & Expense, Reports, Taxes, Sync & Backup, Utilities, Settings), a
+  light top bar with the business name, a financial-year switcher, the page's New button, notifications and an
+  account menu, and the business switcher at the foot of the sidebar. Turn it on from the command palette
+  (Ctrl+K → "Try the new layout (beta)"), turn it off from the account menu ("Use the classic layout"). A build can
+  default to it with `VITE_UI_VYAPAR=true`. With the flag off the app looks and works exactly as before.
+- **Open Anything (Ctrl+F, new layout).** Searches screens, parties, items, invoice numbers and settings, best match
+  first, with the last eight things you opened at the top.
+- **Keys in the new layout:** Alt+N for the page's New document, Alt+B to shrink the menu to icons, `?` for the
+  shortcut list. Under 1280px the menu becomes an icon rail; under 1024px it is a slide-in drawer.
+- **`/parties` and `/sales/payment-in`** open Clients and Receipts (the classic `/clients` and `/receipts` still work
+  in both layouts); `/inventory` goes to Products.
+- **Shared component library** (`apps/web/src/components/ui/`) for the screens Phases 1-11 build: DataTable (sort,
+  sticky totals, row selection, column picker, row menu, paging, loading/empty/error), FilterBar with period presets
+  and summary chips, form fields (money, quantity, date, searchable picker, mobile, GSTIN with state and check digit,
+  state, switches, radio cards, file drop), Modal and Drawer, Menu, Tabs, Stepper, status chips, Export menu,
+  LinesGrid, LivePreview, ReportShell, settings rows. A gallery of all of them is at `/dev/ui` in development builds.
+- Toasts can carry one action button (for "Undo").
+
 - **Sales menu with a page for every stage of the sales flow.** Sell is now one menu: Overview, Quotations,
   Sales Orders, Delivery Challans, Invoices, Proforma, Credit Notes, Receipts and Recurring. Each page lists only
   its own documents, has its own New button and summary, and keeps the editor's Back button pointing at it.

@@ -1,42 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router';
-import {
-  Home,
-  FileText,
-  Settings,
-  Plus,
-  Users,
-  Package,
-  BarChart3,
-  Wallet,
-  RefreshCw,
-  Receipt,
-  BookOpen,
-  Moon,
-  Sun,
-  Download,
-  X,
-  ShoppingCart,
-  ChevronDown,
-  Building2,
-  Pencil,
-  HelpCircle,
-  Search,
-  Command,
-  Bell,
-  Calculator,
-  HardDrive,
-  Menu,
-  Heart,
-  LogOut,
-  ShieldCheck,
-  Workflow,
-  ClipboardList,
-  PackageCheck,
-  Truck,
-  FileMinus,
-  FileClock,
-} from 'lucide-react';
+import { FileText, Download, X } from 'lucide-react';
 import {
   getAllProfiles,
   saveProfile,
@@ -44,17 +8,9 @@ import {
   getEnabledModules,
   getAllBills,
   getAllProducts,
-  getStockAlertSettings,
   getAllClients,
 } from './lib/data';
-import {
-  isModuleEnabled,
-  getUpcomingFilings,
-  countsAsSales,
-  localToday,
-  toLocalIsoDate,
-  DOCS_URL,
-} from './utils';
+import { isModuleEnabled, DOCS_URL } from './utils';
 import { listBusinesses, switchOrganization } from './services/session';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
 // imported all 12 views (~15k LOC combined), so a first-paint on
@@ -84,7 +40,16 @@ import TopBar from './app/TopBar';
 import AppShell from './app/AppShell';
 import CommandPalette from './app/CommandPalette';
 import ShortcutsHelp from './app/ShortcutsHelp';
-import { viewFromPath, pathForView, legacyViewRedirect } from './app/router';
+import { viewFromPath, pathForView, legacyViewRedirect, canonicalPath, pathsForView, LEGACY_REDIRECTS } from './app/router';
+import { buildClassicNav, NAV, visibleNav, findNavEntry, navScreens, leafPath } from './app/navigation';
+import { useUiMode, setUiMode } from './app/uiMode';
+import VySidebar from './app/nav/VySidebar';
+import VyTopBar from './app/VyTopBar';
+import CompanySwitcher from './app/CompanySwitcher';
+import OpenAnything from './app/OpenAnything';
+import useNotifications from './app/useNotifications';
+import { buildPaletteActions } from './app/paletteActions';
+import { toast } from './components/ui/Toast';
 import { useEntitlements } from './features/billing/useEntitlements';
 import LockedFeature from './components/ui/LockedFeature';
 import { LoadingState } from './components/ui/States';
@@ -116,6 +81,8 @@ const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
 import AppFooter from './app/AppFooter';
 import SalesOverview from './features/sales/SalesOverview';
 import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
+// The component gallery (/dev/ui) exists in development builds only; Vite drops it from production.
+const UiGallery = import.meta.env.DEV ? lazy(() => import('./features/dev/UiGallery')) : null;
 import { getPrintSettings, loadPrintSettingsFor } from './features/print/printSettingsStore';
 
 const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
@@ -135,11 +102,14 @@ function App() {
   const currentView = viewFromPath(location.pathname);
   const setCurrentView = useCallback((id) => navigate(pathForView(id)), [navigate]);
   const { can, hasFeature } = useEntitlements();
-  // Old PWA shortcuts and bookmarks used /?view=new.
+  // Vyapar parity (Phase 0): the `ui.vyapar` flag picks the shell. Off is the classic app, unchanged.
+  const vyapar = useUiMode() === 'vyapar';
+  // Old PWA shortcuts and bookmarks used /?view=new. A screen with an address in each shell (/clients and /parties)
+  // moves to the one this shell uses, so both kinds of bookmark keep working.
   useEffect(() => {
-    const target = legacyViewRedirect(location.pathname, location.search);
-    if (target) navigate(target, { replace: true });
-  }, [location.pathname, location.search, navigate]);
+    const target = legacyViewRedirect(location.pathname, location.search) || canonicalPath(location.pathname);
+    if (target) navigate(target + (target.includes('?') ? '' : location.search), { replace: true });
+  }, [location.pathname, location.search, navigate, vyapar]);
   const [profile, setProfile] = useState(null);
   const [editingBill, setEditingBill] = useState(() => {
     try {
@@ -169,159 +139,12 @@ function App() {
   // profile for a branch is still edited here (logo, payment accounts), and a
   // branch switched to for the first time seeds a fresh profile its fields.
   const [branches, setBranches] = useState(null); // null = never fetched (no account or server offline)
+  const [branchTick, setBranchTick] = useState(0); // the new shell's company switcher asks for a fresh list on open
   const [showBranchModal, setShowBranchModal] = useState(false);
 
-  // ---- Notification centre ----
-  // Computed from server data on app boot + every 10 minutes; tucked under a
-  // bell icon next to dark-mode toggle in the sidebar. Each section is one
-  // click away from the relevant page.
-  const [notifications, setNotifications] = useState({
-    overdue: [],
-    dueSoon: [],
-    lowStock: [],
-    filings: [],
-    autoFire: null,
-  });
+  // ---- Notification centre ---- (app/useNotifications.js)
+  const { notifications, isLive, notifTotal, dismissableCount, markAllNotifsRead } = useNotifications(currentView);
   const [showNotifs, setShowNotifs] = useState(false);
-
-  // v1.10.62 — reported (#53, @sangwanmail-eng): "Notifications should clear
-  // after check."
-  //
-  // They never did, and the reason is that these are not messages — they are
-  // computed live from your data every time the app loads ("3 invoices are
-  // overdue", "2 products are low on stock"). There was no notion of having
-  // read one, so the badge simply reported what was true and stayed lit
-  // forever.
-  //
-  // Marking them read cannot just hide them, though: if an invoice goes
-  // overdue tomorrow you must be told, even if you dismissed yesterday's
-  // overdue notice. So dismissal is recorded per section as a SIGNATURE of
-  // what was actually shown — the specific invoice numbers, the specific
-  // products. Dismissing stores that signature; the section stays quiet only
-  // while the signature is unchanged. The moment the underlying facts differ
-  // — a new overdue invoice, a different product running low — the signature
-  // changes and the alert comes back on its own.
-  //
-  // Kept in localStorage: it is a per-machine reading preference, not
-  // business data, and it must not travel in a backup or sync to another PC.
-  const DISMISS_KEY = 'fgsb_dismissedNotifs';
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(DISMISS_KEY) || '{}');
-    } catch {
-      return {};
-    }
-  });
-
-  const notifSignatures = useMemo(
-    () => ({
-      overdue: notifications.overdue
-        .map((b) => b.invoiceNumber || b.id)
-        .sort()
-        .join('|'),
-      dueSoon: notifications.dueSoon
-        .map((b) => b.invoiceNumber || b.id)
-        .sort()
-        .join('|'),
-      lowStock: notifications.lowStock
-        .map((p) => `${p.id || p.name}:${p.stock ?? ''}`)
-        .sort()
-        .join('|'),
-      filings: notifications.filings
-        .map((f) => f.label || f.id || String(f))
-        .sort()
-        .join('|'),
-      autoFire: notifications.autoFire?.count > 0 ? `autofire:${notifications.autoFire.count}` : '',
-    }),
-    [notifications],
-  );
-
-  // A section counts toward the badge only when it has content AND that
-  // content is not the exact thing the user already dismissed.
-  const isLive = (key) => !!notifSignatures[key] && dismissed[key] !== notifSignatures[key];
-
-  const notifTotal =
-    (isLive('overdue') ? notifications.overdue.length : 0) +
-    (isLive('dueSoon') ? notifications.dueSoon.length : 0) +
-    (isLive('lowStock') ? notifications.lowStock.length : 0) +
-    (isLive('filings') ? notifications.filings.length : 0) +
-    (isLive('autoFire') ? 1 : 0);
-
-  // How many sections are currently showing something that could be cleared.
-  const dismissableCount = ['overdue', 'dueSoon', 'lowStock', 'filings', 'autoFire'].filter(
-    isLive,
-  ).length;
-
-  const markAllNotifsRead = () => {
-    const next = { ...dismissed, ...notifSignatures };
-    setDismissed(next);
-    try {
-      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
-    } catch {
-      /* private mode */
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    const compute = async () => {
-      try {
-        const [bills, products, stockAlertCfg] = await Promise.all([
-          getAllBills().catch(() => []),
-          getAllProducts().catch(() => []),
-          getStockAlertSettings().catch(() => ({ enabled: true, threshold: 5 })),
-        ]);
-        if (cancelled) return;
-        // Local dates: toISOString() is UTC (yesterday in India until 05:30),
-        // while the server stamps lastRecurringAutoFire with its local date.
-        const today = localToday();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 3);
-        const tomorrowStr = toLocalIsoDate(tomorrow);
-        // v1.10.67 (#66 item 12) — never chase payment for a cancelled invoice;
-        // nor for a quotation, proforma, challan or credit note (countsAsSales).
-        const overdue = bills.filter((b) => {
-          const d = b.data?.details?.dueDate;
-          return d && d < today && b.status !== 'paid' && countsAsSales(b);
-        });
-        const dueSoon = bills.filter((b) => {
-          const d = b.data?.details?.dueDate;
-          return d && d >= today && d <= tomorrowStr && b.status !== 'paid' && countsAsSales(b);
-        });
-        // Honour the user's stock-alert preferences. When disabled, the filter
-        // returns nothing — bell badge drops to 0 for the stock category.
-        // When enabled, use the configured threshold (default 5).
-        const stockThreshold = Number(stockAlertCfg?.threshold ?? 5);
-        const lowStock =
-          stockAlertCfg?.enabled === false
-            ? []
-            : products.filter((p) => (p.stock ?? 999) <= stockThreshold);
-        const filings = getUpcomingFilings().filter((f) => f.daysAway <= 10);
-        // Recurring auto-fire breadcrumb — set by server.js processDueRecurring().
-        // Only "fresh" (today's) auto-fires count as a notification; older ones
-        // would otherwise stay sticky forever.
-        let autoFire = null;
-        try {
-          const r = await fetch('/v1/workspace/meta/lastRecurringAutoFire');
-          if (r.ok) {
-            const j = await r.json();
-            if (j.value && j.value.date === today && j.value.count > 0) autoFire = j.value;
-          }
-        } catch {
-          /* fine */
-        }
-        setNotifications({ overdue, dueSoon, lowStock, filings, autoFire });
-      } catch {
-        /* offline / server down — leave previous counts */
-      }
-    };
-    compute();
-    const interval = setInterval(compute, 10 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [currentView]); // recompute on view change so the bell stays fresh after the user records a payment
 
   // ---- Keyboard shortcuts + command palette ----
   // Ctrl+K opens a Spotlight-style command palette; Ctrl+N starts a new
@@ -462,7 +285,7 @@ function App() {
     return () => {
       live = false;
     };
-  }, [me, serverStatus, showProfileMenu]);
+  }, [me, serverStatus, showProfileMenu, branchTick]);
 
   // A branch may not have a local profile yet (created on another device, or a
   // teammate's copy of this business). Its fields already live on the server,
@@ -727,36 +550,30 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentView, JSON.stringify(enabledModules)]);
 
-  // Sell is one menu with a page per stage of the sales flow (change: sales modules). Recurring and Receipts sit
-  // with it because they are the later steps of a sale.
-  const SALES_ICONS = {
-    'sales-quotes': ClipboardList,
-    'sales-orders': PackageCheck,
-    'sales-challans': Truck,
-    'sales-invoices': FileText,
-    'sales-proforma': FileClock,
-    'sales-credit': FileMinus,
-  };
-  const salesChildren = [
-    { id: 'sales', icon: Workflow, label: 'Overview', module: 'invoicing' },
-    ...SALES_PAGES.map((p) => ({ id: p.id, icon: SALES_ICONS[p.id], label: p.label, module: 'invoicing' })),
-    { id: 'receipts', icon: Receipt, label: 'Receipts', module: 'receipts' },
-    { id: 'recurring', icon: RefreshCw, label: 'Recurring', module: 'recurring' },
-  ].filter((item) => showIfModule(item.module));
-  const navItems = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard', module: 'dashboard' },
-    { id: 'sales-menu', icon: FileText, label: 'Sales', module: 'dashboard', children: salesChildren },
-    { id: 'clients', icon: Users, label: 'Clients', module: 'clients' },
-    { id: 'inventory', icon: Package, label: 'Products', module: 'inventory' },
-    { id: 'expenses', icon: Wallet, label: 'Expenses', module: 'expenses' },
-    { id: 'purchases', icon: ShoppingCart, label: 'Purchases', module: 'purchases' },
-    { id: 'reports', icon: BarChart3, label: 'Reports', module: 'reports' },
-    { id: 'filing', icon: BookOpen, label: 'GST Returns', module: 'gstReturns' },
-    { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
-    // v1.10.75 - opens the online documentation, which covers every screen
-    // and stays current; the old built-in guide had fallen far behind.
-    { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available
-  ].filter((item) => showIfModule(item.module) && (!item.children || item.children.length > 0));
+  // The classic menu; the new shell's comes from app/navigation.ts (NAV), filtered by role and modules.
+  const navItems = buildClassicNav({ showIfModule, openDocs });
+  const vyNav = useMemo(
+    () => (vyapar ? visibleNav(NAV, { can: (p) => (me ? can(p) : true), moduleOn: showIfModule }) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vyapar, me, JSON.stringify(enabledModules)],
+  );
+  const [vyDrawer, setVyDrawer] = useState(false);
+  const [vyRail, setVyRail] = useState(() => {
+    try {
+      return localStorage.getItem('ledgora_nav.rail') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleVyRail = () =>
+    setVyRail((v) => {
+      try {
+        localStorage.setItem('ledgora_nav.rail', v ? '0' : '1');
+      } catch {
+        /* private mode */
+      }
+      return !v;
+    });
 
   // The editor belongs to the sales page of the document in it, so that menu entry stays lit while you work.
   const editorType = editingBill?._convertToType || editingBill?.invoiceType || newDocType || 'tax-invoice';
@@ -769,123 +586,29 @@ function App() {
   // array references `navItems` and `handleNewInvoice`, which are consts.
   // Reading a const before its declaration triggers a Temporal Dead Zone
   // ReferenceError ("Cannot access 'X' before initialization") at runtime.
-  const paletteActions = useMemo(() => {
-    const acts = [
-      {
-        label: 'New Invoice',
-        hint: 'Ctrl+N',
-        category: 'action',
-        run: () => {
-          handleNewInvoice();
-        },
-      },
-    ];
-    navItems
-      .flatMap((item) => item.children || [item])
-      .forEach((item) => {
-        acts.push({
-          label: item.id === 'sales' ? 'Go to Sales overview' : `Go to ${item.label}`,
-          hint: '',
-          category: 'nav',
-          run: item.onClick || (() => setCurrentView(item.id)),
-        });
-      });
-    SALES_PAGES.forEach((p) =>
-      acts.push({
-        label: `New ${p.singular}`,
-        hint: '',
-        category: 'action',
-        run: () => handleNewInvoice(p.newType),
-      }),
-    );
-    acts.push({
-      label: 'Go to Settings',
-      hint: '',
-      category: 'nav',
-      run: () => setCurrentView('settings'),
-    });
-    acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: toggleDark });
-    acts.push({
-      label: 'Show keyboard shortcuts',
-      hint: 'Ctrl+/',
-      category: 'help',
-      run: () => setShowShortcutsHelp(true),
-    });
-    // v1.9.4 — cross-app search: invoices, clients, products
-    // v1.10.5 — audit H24 fix. Prior code dispatched
-    // `CustomEvent('fgsb-open-bill', { detail: b.id })` but no one
-    // listened for it — selecting an invoice in the palette silently
-    // dropped the ID and just landed on Dashboard. Now: reuse
-    // handleEditInvoice() directly, which is already the canonical way
-    // to open a bill for editing (works from Dashboard row-click too).
-    searchCorpus.bills.forEach((b) => {
-      acts.push({
-        label: `📄 ${b.invoiceNumber || 'INV-?'} — ${b.clientName || 'No client'}`,
-        hint: b.invoiceDate ? new Date(b.invoiceDate).toLocaleDateString('en-IN') : '',
-        category: 'invoice',
-        run: () => handleEditInvoice(b),
-      });
-    });
-    searchCorpus.clients.forEach((c) => {
-      acts.push({
-        label: `👤 ${c.name} — client${c.gstin ? ' · GSTIN: ' + c.gstin : ''}`,
-        hint: c.phone || c.email || '',
-        category: 'client',
-        run: () => setCurrentView('clients'),
-      });
-    });
-    searchCorpus.products.forEach((p) => {
-      acts.push({
-        label: `📦 ${p.name} — product${p.hsn ? ' · HSN: ' + p.hsn : ''}`,
-        hint: (p.stock ?? 0) + ' in stock',
-        category: 'product',
-        run: () => setCurrentView('inventory'),
-      });
-    });
-    // Settings sections (jump to specific area)
-    // v1.10.74 - these all used to just open Settings at the top. Each now
-    // names its section id; after Settings mounts (it's lazy-loaded, so retry
-    // briefly) we click that section's "Jump to" chip, which already scrolls
-    // below the sticky bars.
-    const openSettingsAt = (sectionId) => {
-      setCurrentView('settings');
-      let tries = 0;
-      const jump = () => {
-        const chip = document.querySelector(`.settings-jumpnav a[href="#${sectionId}"]`);
-        if (chip && document.getElementById(sectionId)) chip.click();
-        else if (++tries < 30) setTimeout(jump, 100);
-      };
-      setTimeout(jump, 50);
-    };
-    const settingsJumps = [
-      ['Company profile', 'section-company'],
-      ['Payment accounts', 'section-company'],
-      ['Print & PDF Settings', 'section-print'],
-      ['PDF Style Editor', 'section-print'],
-      ['Business type presets', 'section-print'],
-      ['Section labels', 'section-print'],
-      ['Watermarks', 'section-print'],
-      ['Multi-copy print', 'section-print'],
-      ['Digital signature', 'section-company'],
-      ['Company letterhead', 'section-print'],
-      ['Modules', 'section-modules'],
-      ['Region preference', 'section-region'],
-      ['Google Drive backup', 'section-cloud'],
-    ];
-    settingsJumps.forEach(([s, sectionId]) => {
-      acts.push({
-        label: `⚙️ Settings → ${s}`,
-        hint: '',
-        category: 'settings',
-        run: () => openSettingsAt(sectionId),
-      });
-    });
-    return acts;
-  }, [navItems, handleNewInvoice, searchCorpus]);
+  const paletteActions = useMemo(
+    () => buildPaletteActions({ navItems, handleNewInvoice, handleEditInvoice, setCurrentView, toggleDark, setShowShortcutsHelp, searchCorpus }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navItems, handleNewInvoice, searchCorpus],
+  );
 
   const filteredPalette = paletteActions.filter(
     (a) => !paletteQuery.trim() || a.label.toLowerCase().includes(paletteQuery.toLowerCase()),
   );
+  // Open Anything: every screen of the new menu by its breadcrumb, then the palette's actions and records (its
+  // "Go to" entries are the classic menu's, so they are left out).
+  const openAnythingActions = useMemo(() => {
+    if (!vyapar) return [];
+    const screens = navScreens(vyNav).map(({ leaf, crumb }) => ({
+      label: crumb,
+      hint: '',
+      category: 'nav',
+      run: () => (leaf.href ? window.open(leaf.href, '_blank', 'noopener,noreferrer') : navigate(leafPath(leaf))),
+    }));
+    const rest = paletteActions.filter((a) => a.category !== 'nav');
+    rest.push({ label: 'Use the classic layout', hint: '', category: 'action', run: () => setUiMode('classic') });
+    return [...screens, ...rest];
+  }, [vyapar, vyNav, paletteActions, navigate]);
 
   // Global keyboard shortcuts. Lives down here for the same TDZ reason —
   // the handler closes over `handleNewInvoice` which is declared above only.
@@ -912,6 +635,35 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The new shell's keys (Vyapar parity P0-S2): Ctrl+F Open Anything, Alt+N the page's New, Alt+B the menu rail,
+  // ? the shortcut list. Read through a ref so the handler always sees this render's New button.
+  const vyKeys = useRef({});
+  useEffect(() => {
+    vyKeys.current = { onNew: () => handleNewInvoice(topbarNew.type), canNew: can('invoice:write') };
+  });
+  useEffect(() => {
+    if (!vyapar) return undefined;
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const editable = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        setShowPalette(true);
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyN') {
+        e.preventDefault();
+        if (vyKeys.current.canNew) vyKeys.current.onNew();
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyB') {
+        e.preventDefault();
+        toggleVyRail();
+      } else if (e.key === '?' && !editable && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShowShortcutsHelp((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [vyapar]);
 
   // v1.9.4 — Accessibility hooks (v1.10.4/1.10.6 updated):
   //   1. Mirror `title` → `aria-label` on every icon button that lacks one.
@@ -1038,95 +790,38 @@ function App() {
     }
   })();
 
-  return (
-    <AppShell autoHideSidebar={sidebarAutoHide}>
-      {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
-      {showResumeSetupPill && (
-        <button
-          type="button"
-          onClick={() => setShowWizard(true)}
-          title="Come back to the setup wizard — pick a business type, paper size, and language."
-          style={{
-            // Above the docked Save bar on Settings, so it never covers Save.
-            position: 'fixed',
-            bottom: currentView.startsWith('settings') ? '5.5rem' : '1.25rem',
-            right: '1.25rem',
-            zIndex: 9998,
-            padding: '0.6rem 1rem',
-            borderRadius: 999,
-            background: 'var(--primary)',
-            color: '#fff',
-            border: 'none',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 6px 20px rgba(30,64,175,0.35), 0 2px 4px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-          }}
-        >
-          ✨ Finish setup
-        </button>
-      )}
-      <Sidebar
-        me={me}
-        signOut={signOut}
-        handleSwitchOrg={handleSwitchOrg}
-        profile={profile}
-        navItems={navItems}
-        currentView={activeNavId}
-        setCurrentView={setCurrentView}
-        can={can}
-        notifTotal={notifTotal}
-        setShowNotifs={setShowNotifs}
-        darkMode={darkMode}
-        toggleDark={toggleDark}
-        serverStatus={serverStatus}
-        sidebarAutoHide={sidebarAutoHide}
-        toggleSidebarAutoHide={toggleSidebarAutoHide}
-        navOpen={navOpen}
-        setNavOpen={setNavOpen}
-        closeNavAfterPick={closeNavAfterPick}
-      />
+  const resumePill = showResumeSetupPill && (
+    <button
+      type="button"
+      onClick={() => setShowWizard(true)}
+      title="Come back to the setup wizard — pick a business type, paper size, and language."
+      style={{
+        // Above the docked Save bar on Settings, so it never covers Save.
+        position: 'fixed',
+        bottom: currentView.startsWith('settings') ? '5.5rem' : '1.25rem',
+        right: '1.25rem',
+        zIndex: 9998,
+        padding: '0.6rem 1rem',
+        borderRadius: 999,
+        background: 'var(--primary)',
+        color: '#fff',
+        border: 'none',
+        fontSize: '0.85rem',
+        fontWeight: 600,
+        cursor: 'pointer',
+        boxShadow: '0 6px 20px rgba(30,64,175,0.35), 0 2px 4px rgba(0,0,0,0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.4rem',
+      }}
+    >
+      ✨ Finish setup
+    </button>
+  );
 
-      {showInstallBanner && (
-        <div className="pwa-install-banner">
-          <Download size={18} />
-          <span>
-            <strong>Install as Desktop App</strong> — own icon, no browser, opens instantly.
-            Right-click the icon for quick-jump to New Invoice / GST Returns.
-          </span>
-          <button className="pwa-install-btn" onClick={handleInstallPWA}>
-            Install App
-          </button>
-          <button
-            className="pwa-dismiss-btn"
-            onClick={dismissInstallBanner}
-            title="Remind me later (re-shows in 14 days)"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      <div className="main-content">
-        <TopBar
-          profile={profile}
-          allProfiles={allProfiles}
-          extraBranches={extraBranches}
-          showProfileMenu={showProfileMenu}
-          setShowProfileMenu={setShowProfileMenu}
-          profileMenuRef={profileMenuRef}
-          handleSwitchProfile={handleSwitchProfile}
-          handleSwitchBranch={handleSwitchBranch}
-          canManageBranches={canManageBranches}
-          setShowBranchModal={setShowBranchModal}
-          setCurrentView={setCurrentView}
-          onNewInvoice={() => handleNewInvoice(topbarNew.type)}
-          newLabel={topbarNew.label}
-          onOpenPalette={() => setShowPalette(true)}
-          canWrite={can('invoice:write')}
-        />
+  // The screens, drawn inside whichever shell is on.
+  const screens = (
+    <>
         {/* v1.10.4 — All lazy views under one Suspense boundary. Only the matched view's chunk actually loads.
              `key={businessKey}` remounts the screens that read the business once when they open, so a business
              switch never leaves the previous company's records on screen (v1.10.66, #64 item 1). */}
@@ -1213,16 +908,19 @@ function App() {
                     />
                   }
                 />
-                <Route
-                  path="/clients"
-                  element={
-                    <ClientsView
-                      onNew={handleNewInvoice}
-                      onEdit={handleEditInvoice}
-                      onDuplicate={handleDuplicateInvoice}
-                    />
-                  }
-                />
+                {pathsForView('clients').map((path) => (
+                  <Route
+                    key={path}
+                    path={path}
+                    element={
+                      <ClientsView
+                        onNew={handleNewInvoice}
+                        onEdit={handleEditInvoice}
+                        onDuplicate={handleDuplicateInvoice}
+                      />
+                    }
+                  />
+                ))}
                 <Route path="/products" element={<InventoryView />} />
                 <Route path="/expenses" element={<ExpenseTracker key={businessKey} />} />
                 <Route path="/purchases" element={<PurchaseBills key={businessKey} />} />
@@ -1230,7 +928,9 @@ function App() {
                   path="/recurring"
                   element={<RecurringInvoices key={businessKey} onEdit={handleEditInvoice} />}
                 />
-                <Route path="/receipts" element={<ReceiptVoucher key={businessKey} />} />
+                {pathsForView('receipts').map((path) => (
+                  <Route key={path} path={path} element={<ReceiptVoucher key={businessKey} />} />
+                ))}
                 <Route path="/reports" element={<ReportsView key={businessKey} />} />
                 <Route path="/gst-returns" element={<Navigate to="/gst-returns/gstr1" replace />} />
                 <Route path="/gst-returns/:tab" element={<GstReturnsPage key={businessKey} />} />
@@ -1280,15 +980,34 @@ function App() {
                   }
                 />
                 <Route path="/accept-invite/:id" element={<AcceptInvitePage />} />
+                {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
+                  <Route key={from} path={from} element={<Navigate to={to} replace />} />
+                ))}
+                {UiGallery && <Route path="/dev/ui" element={<UiGallery />} />}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </ScreenBoundary>
           )}
         </Suspense>
-        {/* Version + ledgora line: Dashboard only, so it never takes space on working screens. */}
-        {currentView === 'dashboard' && <AppFooter />}
-      </div>
+    </>
+  );
 
+  // Vyapar parity P0-S2: where the current page sits in the new menu (lit entry, breadcrumb).
+  const vyHere = vyapar ? findNavEntry(vyNav, location.pathname, activeNavId) : null;
+  const vyGo = (path) => navigate(path);
+  const saveBusinessName = async (businessName) => {
+    const next = { ...(profile || {}), businessName };
+    try {
+      await saveProfile(next);
+      setProfile(next);
+      toast('Business name saved', 'success');
+    } catch {
+      toast('Could not save the business name. Try again from Settings.', 'error');
+    }
+  };
+
+  const overlays = (
+    <>
       {showNotifs && (
         <NotificationPopover
           notifications={notifications}
@@ -1301,24 +1020,36 @@ function App() {
         />
       )}
 
-      <CommandPalette
-        open={showPalette}
-        query={paletteQuery}
-        onQuery={(q) => {
-          setPaletteQuery(q);
-          setPaletteIdx(0);
-        }}
-        actions={filteredPalette}
-        index={paletteIdx}
-        onIndex={setPaletteIdx}
-        onClose={() => setShowPalette(false)}
-        onShowShortcuts={() => {
-          setShowPalette(false);
-          setShowShortcutsHelp(true);
-        }}
-      />
+      {vyapar ? (
+        <OpenAnything
+          open={showPalette}
+          onClose={() => setShowPalette(false)}
+          actions={openAnythingActions}
+          onShowShortcuts={() => {
+            setShowPalette(false);
+            setShowShortcutsHelp(true);
+          }}
+        />
+      ) : (
+        <CommandPalette
+          open={showPalette}
+          query={paletteQuery}
+          onQuery={(q) => {
+            setPaletteQuery(q);
+            setPaletteIdx(0);
+          }}
+          actions={filteredPalette}
+          index={paletteIdx}
+          onIndex={setPaletteIdx}
+          onClose={() => setShowPalette(false)}
+          onShowShortcuts={() => {
+            setShowPalette(false);
+            setShowShortcutsHelp(true);
+          }}
+        />
+      )}
 
-      <ShortcutsHelp open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
+      <ShortcutsHelp open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} vyapar={vyapar} />
 
       {/* Add a branch (organization accounts) — created on the account server,
           then switched into so the user is invoicing from it immediately. */}
@@ -1328,6 +1059,142 @@ function App() {
 
       <ToastContainer />
       <ConfirmModalContainer />
+    </>
+  );
+
+  const installBanner = showInstallBanner && (
+    <div className="pwa-install-banner">
+      <Download size={18} />
+      <span>
+        <strong>Install as Desktop App</strong> — own icon, no browser, opens instantly.
+        Right-click the icon for quick-jump to New Invoice / GST Returns.
+      </span>
+      <button className="pwa-install-btn" onClick={handleInstallPWA}>
+        Install App
+      </button>
+      <button
+        className="pwa-dismiss-btn"
+        onClick={dismissInstallBanner}
+        title="Remind me later (re-shows in 14 days)"
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
+
+  if (vyapar) {
+    return (
+      <AppShell vyapar rail={vyRail}>
+        {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
+        {resumePill}
+        <VySidebar
+          nav={vyNav}
+          activeId={vyHere?.leaf.id}
+          onGo={vyGo}
+          badges={{ parties: isLive('overdue') ? notifications.overdue.length : 0 }}
+          rail={vyRail}
+          onToggleRail={toggleVyRail}
+          onOpenAnything={() => setShowPalette(true)}
+          drawerOpen={vyDrawer}
+          onCloseDrawer={() => setVyDrawer(false)}
+          footer={
+            <CompanySwitcher
+              profile={profile}
+              allProfiles={allProfiles}
+              extraBranches={extraBranches}
+              handleSwitchProfile={handleSwitchProfile}
+              handleSwitchBranch={handleSwitchBranch}
+              canManageBranches={canManageBranches}
+              onAddBranch={() => setShowBranchModal(true)}
+              onManage={() => setCurrentView('settings')}
+              onOpen={() => setBranchTick((t) => t + 1)}
+            />
+          }
+        />
+        <div className="vy-main">
+          {installBanner}
+          <VyTopBar
+            profile={profile}
+            crumb={vyHere ? { group: vyHere.group?.label ?? null, label: vyHere.leaf.label } : null}
+            me={me}
+            onSaveBusinessName={saveBusinessName}
+            onEditBusiness={() => navigate('/settings/business')}
+            onSetup={() => (profile?.businessName ? navigate('/settings/business') : setShowWizard(true))}
+            onNew={() => handleNewInvoice(topbarNew.type)}
+            newLabel={topbarNew.label}
+            canWrite={can('invoice:write')}
+            notifTotal={notifTotal}
+            onBell={() => setShowNotifs((v) => !v)}
+            onGo={vyGo}
+            canTeam={can('team:read')}
+            darkMode={darkMode}
+            toggleDark={toggleDark}
+            serverStatus={serverStatus}
+            onSwitchOrg={handleSwitchOrg}
+            signOut={signOut}
+            onClassic={() => setUiMode('classic')}
+            onOpenMenu={() => setVyDrawer(true)}
+          />
+          <div className="main-content">
+            {screens}
+            {currentView === 'dashboard' && <AppFooter />}
+          </div>
+        </div>
+        {overlays}
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell autoHideSidebar={sidebarAutoHide}>
+      {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
+      {resumePill}
+      <Sidebar
+        me={me}
+        signOut={signOut}
+        handleSwitchOrg={handleSwitchOrg}
+        profile={profile}
+        navItems={navItems}
+        currentView={activeNavId}
+        setCurrentView={setCurrentView}
+        can={can}
+        notifTotal={notifTotal}
+        setShowNotifs={setShowNotifs}
+        darkMode={darkMode}
+        toggleDark={toggleDark}
+        serverStatus={serverStatus}
+        sidebarAutoHide={sidebarAutoHide}
+        toggleSidebarAutoHide={toggleSidebarAutoHide}
+        navOpen={navOpen}
+        setNavOpen={setNavOpen}
+        closeNavAfterPick={closeNavAfterPick}
+      />
+
+      {installBanner}
+      <div className="main-content">
+        <TopBar
+          profile={profile}
+          allProfiles={allProfiles}
+          extraBranches={extraBranches}
+          showProfileMenu={showProfileMenu}
+          setShowProfileMenu={setShowProfileMenu}
+          profileMenuRef={profileMenuRef}
+          handleSwitchProfile={handleSwitchProfile}
+          handleSwitchBranch={handleSwitchBranch}
+          canManageBranches={canManageBranches}
+          setShowBranchModal={setShowBranchModal}
+          setCurrentView={setCurrentView}
+          onNewInvoice={() => handleNewInvoice(topbarNew.type)}
+          newLabel={topbarNew.label}
+          onOpenPalette={() => setShowPalette(true)}
+          canWrite={can('invoice:write')}
+        />
+        {screens}
+        {/* Version + ledgora line: Dashboard only, so it never takes space on working screens. */}
+        {currentView === 'dashboard' && <AppFooter />}
+      </div>
+
+      {overlays}
     </AppShell>
   );
 }

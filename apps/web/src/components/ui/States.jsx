@@ -14,13 +14,15 @@ export function LoadingState({ label = 'Loading…' }) {
   );
 }
 
-export function EmptyState({ title, hint, action }) {
+// `illustration` replaces the inbox icon and `secondary` sits beside the main action ("Import from Excel" next to
+// "+ Add Party"), as every list's empty state has in the new layout (Vyapar parity P0-S3.5).
+export function EmptyState({ title, hint, action, secondary, illustration }) {
   return (
     <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-      <Inbox size={28} style={{ opacity: 0.5 }} aria-hidden="true" />
+      {illustration ? <div className="ui-empty-art" style={{ margin: '0 auto' }} aria-hidden="true">{illustration}</div> : <Inbox size={28} style={{ opacity: 0.5 }} aria-hidden="true" />}
       <div style={{ fontWeight: 600, marginTop: '0.5rem', color: 'var(--text)' }}>{title}</div>
       {hint && <p style={{ margin: '0.25rem 0 0.75rem', fontSize: '0.85rem' }}>{hint}</p>}
-      {action}
+      {secondary ? <div className="ui-empty-actions" style={{ justifyContent: 'center' }}>{action}{secondary}</div> : action}
     </div>
   );
 }

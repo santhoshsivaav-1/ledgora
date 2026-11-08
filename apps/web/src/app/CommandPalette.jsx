@@ -11,6 +11,8 @@ export default function CommandPalette({
   onIndex,
   onClose,
   onShowShortcuts,
+  placeholder = 'Type a command or page name…',
+  toggleHint = 'Ctrl+K to toggle',
 }) {
   // Arrow, Enter and Esc work from anywhere while it is open.
   useEffect(() => {
@@ -61,7 +63,7 @@ export default function CommandPalette({
           <input
             autoFocus
             type="text"
-            placeholder="Type a command or page name…"
+            placeholder={placeholder}
             value={query}
             onChange={(e) => onQuery(e.target.value)}
             className="form-input"
@@ -126,7 +128,7 @@ export default function CommandPalette({
         >
           <span>
             <Command size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-            Ctrl+K to toggle · ↑↓ navigate · Enter run
+            {toggleHint} · ↑↓ navigate · Enter run
           </span>
           <button
             type="button"

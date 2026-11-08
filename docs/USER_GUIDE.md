@@ -21,6 +21,7 @@ needed. If you only have 2 minutes, jump to [Quick Start](#quick-start).
 7. [Common questions (FAQ)](#faq)
 8. [Troubleshooting](#troubleshooting)
 9. [For developers](#developers)
+10. [The new layout (beta)](#new-layout)
 
 ---
 
@@ -453,3 +454,28 @@ PRs welcome. The project follows
 
 - File an issue: <https://github.com/IamRamgarhia/Free-GST-Billing-Software/issues>
 - Email ledgora: contact@ledgora.com
+
+---
+
+<a id="new-layout"></a>
+## 10. The new layout (beta)
+
+A new look is being built screen by screen. You can try it now; your data and your screens stay the same, only the
+frame around them changes.
+
+- **Turn it on:** press **Ctrl+K**, type "new layout" and pick **Try the new layout (beta)**.
+- **Turn it off:** click your initials at the top right and choose **Use the classic layout**.
+
+What changes:
+
+| Where | What you see |
+|---|---|
+| Left menu | Dark menu grouped as Home, Parties, Items, Sale, Purchase & Expense, Reports, Taxes, Sync & Backup, Utilities and Settings. Click a group to open it; the app remembers which groups you keep open. |
+| Top of the menu | **Open Anything**: search any screen, client, product, invoice number or setting. Shortcut **Ctrl+F**. |
+| Bottom of the menu | Your business. Click it to switch business or branch. |
+| Top bar | Your business name (a red dot means the business profile still needs a state or address), where you are, the financial year, the **New** button for the page you are on, notifications, settings and your account menu (team, security, dark mode, log out). |
+
+Keys: **Ctrl+F** Open Anything, **Alt+N** new document for this page, **Alt+B** shrink the menu to icons, **?** list of
+shortcuts. On a narrow window the menu shrinks to icons; on a phone it opens from the ☰ button.
+
+Addresses: Clients is at `/parties` and Receipts at `/sales/payment-in` in the new layout. Old bookmarks keep working.

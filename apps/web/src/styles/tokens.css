@@ -1,5 +1,12 @@
 /* Design tokens (change 3.4): every colour, radius and shadow the app uses, for light and dark.
-   Components read these variables; nothing else should hard-code a theme colour. */
+   Components read these variables; nothing else should hard-code a theme colour.
+
+   Two layers (Vyapar parity P0-S1):
+   1. The classic tokens below (--primary, --bg-secondary, --card-bg ...) are what every existing screen reads. Their
+      values are unchanged, so the classic look is byte-for-byte what it was.
+   2. The new token set (--cta, --surface, --sidebar-bg, --pos, --s-1 ...) further down. New components read only
+      these. styles/theme-vyapar.css, applied by <html data-ui="vyapar">, gives the new set its final values and points
+      the classic names at it, so old screens pick up the new palette without a single edit. */
 
 :root {
   /* White & green theme — emerald as the single accent, near-white canvas. */
@@ -78,6 +85,91 @@
   --danger-light: rgba(248, 113, 113, 0.12);
   --purple: #a78bfa;
   --purple-light: rgba(167, 139, 250, 0.12);
+}
+
+/* ---- New token set (P0-S1). Names that the classic set also uses (--bg, --border, --text, --text-muted) are left to
+   it here and only re-valued under data-ui="vyapar"; everything else is new and harmless in the classic look. ---- */
+:root {
+  /* brand: data-brand="ledgora" (default, decision D-01) keeps the green CTA */
+  --cta: #15803d;
+  --cta-hover: #166534;
+  --cta-rgb: 21, 128, 61;
+  --link: #2563eb;
+  /* surfaces */
+  --surface: #ffffff;
+  --surface-2: #f7f8fb;
+  --topbar-bg: #f7f8fb;
+  /* sidebar */
+  --sidebar-bg: #14152a;
+  --sidebar-fg: #ffffff;
+  --sidebar-muted: #a9adc6;
+  --sidebar-active: #262a52;
+  --sidebar-search-bg: #262a52;
+  /* status */
+  --pos: #16a34a;
+  --neg: #dc2626;
+  --warn: #d97706;
+  --info: #2563eb;
+  --tint-pos: #e8f6ef;
+  --tint-neg: #fdecec;
+  --tint-warn: #fff4e5;
+  --tint-info: #eaf1fe;
+  /* shape */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+  /* spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 40px;
+  --s-8: 48px;
+  /* type */
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fs-title: 24px;
+  --fs-section: 18px;
+  --fs-body: 14px;
+  --fs-label: 13px;
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(20, 21, 42, 0.06);
+  --shadow-2: 0 8px 24px rgba(20, 21, 42, 0.14);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--link);
+  /* layout */
+  --sidebar-w: 240px;
+  --rail-w: 64px;
+  --topbar-h: 56px;
+}
+:root[data-brand="vyapar"] {
+  /* Vyapar red. #e8294c from the screenshots measures 4.33:1 against white, under the 4.5:1 a 14px bold label needs;
+     this is the nearest red that passes (see docs/DECISIONS.md). */
+  --cta: #e0244a;
+  --cta-hover: #c81e3f;
+  --cta-rgb: 224, 36, 74;
+}
+[data-theme="dark"] {
+  --link: #60a5fa;
+  --surface: #171a2b;
+  --surface-2: #1d2136;
+  --topbar-bg: #13162a;
+  --sidebar-bg: #0b0c1a;
+  --sidebar-fg: #e8eaf3;
+  --sidebar-muted: #9aa1b9;
+  --sidebar-active: #262a52;
+  --sidebar-search-bg: #1d2040;
+  --pos: #4ade80;
+  --neg: #f87171;
+  --warn: #fbbf24;
+  --info: #60a5fa;
+  --tint-pos: #12301f;
+  --tint-neg: #3a1717;
+  --tint-warn: #3a2a10;
+  --tint-info: #14233f;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 /* A control the member's role may not use (components/ui/Can.tsx with `lock`). */
