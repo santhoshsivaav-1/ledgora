@@ -4,6 +4,7 @@ import { getAllBills, getAllExpenses, getAllPurchases, getProfile } from '../../
 import { formatCurrency } from '../../utils';
 import { getPrintSettings } from '../print/printSettingsStore';
 import HelpButton from '../../components/ui/HelpButton';
+import { BANK_STATEMENT_TEMPLATE, downloadCsv } from '../import-export/bulkCsv';
 
 // v1.10.31 — Parse the user's chosen PDF accent (hex like "#1e40af") into
 // a [r, g, b] tuple for jsPDF's setFillColor / setDrawColor. Falls back to
@@ -834,7 +835,12 @@ function BankImportTab({ bankImport, setBankImport, onCommit }) {
             <li><strong>Mobile app</strong> → Account statement → Share → Export CSV</li>
             <li>Choose a date range covering the current FY (1 Apr {parseInt(CURRENT_FY.split('-')[0], 10)} onwards)</li>
             <li>Your data is parsed in-browser — nothing is uploaded to a server</li>
+            <li>Bank not listed? Save it with the columns of the sample: Date, Narration, Withdrawal, Deposit, Balance</li>
           </ul>
+          <button type="button" className="btn btn-secondary" style={{ marginTop: '0.75rem' }}
+            onClick={() => downloadCsv(BANK_STATEMENT_TEMPLATE, 'Bank-statement-sample.csv')}>
+            <Download size={15} /> Download sample CSV
+          </button>
         </div>
       </div>
     );

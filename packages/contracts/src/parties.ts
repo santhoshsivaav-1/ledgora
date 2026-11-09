@@ -17,10 +17,35 @@ export const partyInput = z.object({
   phone: z.string().max(30).default(''),
   isSez: z.boolean().default(false),
   openingBalance: z.number().default(0),
+  /** The party's group (P1-S1); null or left out = no group. */
+  groupId: uuid.nullish(),
   extra: z.record(z.string(), z.unknown()).default({}),
 });
 export type PartyInput = z.infer<typeof partyInput>;
 export const partyPatch = patchOf(partyInput);
 export const party = partyInput.extend({ id: uuid, ...withStamps });
 export type Party = z.infer<typeof party>;
-export const partyListQuery = z.object({ kind: z.enum(PARTY_KINDS).optional() });
+export const partyListQuery = z.object({
+  kind: z.enum(PARTY_KINDS).optional(),
+  /** Parties in this group or any group below it. */
+  groupId: uuid.optional(),
+});
+
+// ---- Party groups (Vyapar parity P1-S1) ----------------------------------------------------------------------------
+
+/** A named bucket of parties ("Wholesale", "Retail > Chennai"). Names are unique per organization, ignoring case. */
+export const partyGroupInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  parentId: uuid.nullish(),
+});
+export type PartyGroupInput = z.infer<typeof partyGroupInput>;
+export const partyGroupPatch = patchOf(partyGroupInput);
+export const partyGroup = partyGroupInput.extend({
+  id: uuid,
+  /** Live parties directly in this group (not its children). */
+  partyCount: z.number().int().optional(),
+  ...withStamps,
+});
+export type PartyGroup = z.infer<typeof partyGroup>;
+/** DELETE with `moveTo` moves the group's parties (and child groups) there first; without it a used group is refused. */
+export const partyGroupDeleteQuery = z.object({ moveTo: uuid.optional() });

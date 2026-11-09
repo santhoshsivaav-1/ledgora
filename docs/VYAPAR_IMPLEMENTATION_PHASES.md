@@ -4097,7 +4097,7 @@ Copy into the PR description or keep in this file; tick as slices merge.
 - [x] P0-S3 Component library (DataTable, FilterBar, Fields, Modal, Tabs, Stepper, LinesGrid, LivePreview, ReportShell, gallery) (2026-11-08)
 
 ### Phase 1
-- [ ] P1-S1 Party groups
+- [x] P1-S1 Party groups (2026-11-09)
 - [ ] P1-S2 Party fields and addresses
 - [ ] P1-S3 Parties list and detail
 - [ ] P1-S4 Item categories and units

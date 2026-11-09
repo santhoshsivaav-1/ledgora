@@ -52,6 +52,9 @@ function fromPostgres(err: unknown): AppError | null {
     if (pg.constraint_name === 'invoices_live_number') {
       return new AppError('duplicate_number', 'An invoice with this number already exists');
     }
+    if (pg.constraint_name === 'party_groups_org_name') {
+      return new AppError('conflict', 'Group already exists', { constraint: pg.constraint_name });
+    }
     return new AppError('conflict', 'This record already exists', {
       constraint: pg.constraint_name,
     });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2 } from 'lucide-react';
+import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download } from 'lucide-react';
 import { getAllProducts, saveProduct, deleteProduct, getProfile, getStockAlertSettings } from '../../lib/data';
 import { getAllUnits, getCountryConfig, formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
@@ -7,6 +7,7 @@ import { confirmAction } from '../../components/ui/ConfirmModal';
 import HelpButton from '../../components/ui/HelpButton';
 import ProductBulkEdit from './ProductBulkEdit';
 import TableExport from '../import-export/TableExport';
+import { PRODUCT_TEMPLATE, downloadCsv, productCsvToRecords } from '../import-export/bulkCsv';
 
 // v1.10.29 — reported: "here purchase price and selling price need".
 // Product now carries BOTH: `purchasePrice` (what we paid the supplier) and
@@ -152,61 +153,25 @@ export default function InventoryView() {
 
   const csvInputRef = useRef(null);
 
-  const parseCSVLine = (line) => {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      // "" inside quotes is a literal quote (as our own exports write it).
-      if (ch === '"' && inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else if (ch === '"') { inQuotes = !inQuotes; }
-      else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
-      else { current += ch; }
-    }
-    result.push(current);
-    return result;
-  };
-
   const handleCSVImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      // Excel's "CSV UTF-8" starts with a byte-order mark, which turned the
-      // first header into "\uFEFFname" so no row had a name and nothing imported.
-      const text = (await file.text()).replace(/^\uFEFF/, '');
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { toast('CSV file is empty or has no data rows', 'warning'); return; }
-      const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-      let imported = 0;
-      // v1.10.74 - importing the same file twice made duplicates. Skip names
-      // already in the list (trimmed, any case), including repeats inside the file.
-      let skipped = 0;
-      const known = new Set(products.map(p => (p.name || '').trim().toLowerCase()));
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length === 0) continue;
-        const row = {};
-        headers.forEach((h, idx) => { row[h] = (values[idx] || '').trim(); });
-        const name = row.name || row.product || row['product name'] || '';
-        if (!name) continue;
-        if (known.has(name.toLowerCase())) { skipped++; continue; }
-        known.add(name.toLowerCase());
-        await saveProduct({
-          name,
-          hsn: row.hsn || row['hsn code'] || row['sac'] || '',
-          rate: row.rate || row.price ? parseFloat(row.rate || row.price) || 0 : 0,
-          taxPercent: row.taxpercent || row['tax%'] || row['gst%'] || row['tax'] ? parseFloat(row.taxpercent || row['tax%'] || row['gst%'] || row['tax']) || 0 : 0,
-          unit: row.unit || 'Nos',
-          stock: row.stock || row.quantity ? parseFloat(row.stock || row.quantity) || 0 : 0,
-          description: row.description || '',
-        });
-        imported++;
+      // Names already in the list (trimmed, any case) and repeats inside the file are skipped (v1.10.74).
+      const { products: rows, skipped, errors } = productCsvToRecords(await file.text(), { existing: products });
+      if (!rows.length && !skipped.length) {
+        toast(errors.length ? `No products imported: ${errors[0].message} (line ${errors[0].line})` : 'CSV file is empty or has no data rows', 'warning');
+      } else {
+        for (const row of rows) await saveProduct(row);
+        const notes = [
+          skipped.length && `skipped ${skipped.length} already in your list`,
+          errors.length && `${errors.length} row(s) without a name`,
+        ].filter(Boolean);
+        toast(`Imported ${rows.length} product(s)${notes.length ? `, ${notes.join(', ')}` : ''}`, rows.length ? 'success' : 'warning');
+        loadProducts();
       }
-      toast(`Imported ${imported} product(s)${skipped ? `, skipped ${skipped} already in your list` : ''}`, 'success');
-      loadProducts();
     } catch {
-      toast('Failed to parse CSV file', 'error');
+      toast('Failed to read the CSV file', 'error');
     }
     if (csvInputRef.current) csvInputRef.current.value = '';
   };
@@ -223,13 +188,17 @@ export default function InventoryView() {
             <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
               <li><strong>Add Product</strong>: name, HSN/SAC, purchase and selling price, GST %, unit and stock. Typing the name on an invoice fills the rest in.</li>
               <li><strong>Stock</strong> goes down when you save an invoice and up when you save a purchase bill.</li>
-              <li><strong>Import CSV</strong>: columns <code>name, hsn, rate, gst%, unit, stock</code>.</li>
+              <li><strong>Import CSV</strong>: click <strong>Template</strong> for a ready file (Name, HSN/SAC, Selling Price, Purchase Price, GST %, Unit, Opening Stock, Description). Old <code>name, hsn, rate, gst%, unit, stock</code> files still work.</li>
               <li><strong>Low stock</strong> shows in amber, none in red. Set the level in Settings → Low-stock alerts.</li>
             </ul>
           </HelpButton>
         </div>
         <div className="flex gap-2">
           <input type="file" accept=".csv" ref={csvInputRef} style={{ display: 'none' }} onChange={handleCSVImport} />
+          <button className="btn btn-secondary" onClick={() => downloadCsv(PRODUCT_TEMPLATE, 'Products-import-template.csv')}
+            title="A CSV with the columns Import CSV reads, and two example rows">
+            <Download size={16} /> Template
+          </button>
           <button className="btn btn-secondary" onClick={() => csvInputRef.current?.click()}>
             <Upload size={16} /> Import CSV
           </button>

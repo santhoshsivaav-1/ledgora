@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Party Groups (Vyapar parity P1-S1).** Clients › **Party Groups** lists your groups as a tree ("Retail › Chennai")
+  with how many parties each holds; add, rename, nest and delete them there. A group that is still used can not be
+  deleted until you pick where its parties and child groups go (**Move and delete** does both in one step). Add /
+  Edit Client has a **Party Group** field that can create a new group as you type. API: `GET/POST /v1/party-groups`,
+  `PATCH/DELETE /v1/party-groups/:id` (`?moveTo=` on delete), `groupId` on parties and `?groupId=` on
+  `GET /v1/parties` (includes child groups). Migration `0008_masters_parties.sql` (table `party_groups` with
+  row-level security, `parties.group_id`).
+- **Clients › Template** downloads a ready CSV for **Import CSV** (Name, Group, GSTIN, Phone, Email, Address, City,
+  PIN, State, Country, with two example rows). The import now also reads City, PIN, Country and Group (a name or a
+  path like `Retail > Chennai`; missing groups are created), accepts common header spellings and quoted commas, and
+  reports rows without a name. Old six-column files still import.
+- **A sample file next to every import.** Items › **Template** (Name, HSN/SAC, Selling Price, Purchase Price, GST %,
+  Unit, Opening Stock, Description; the import now also reads purchase price and saves both prices like the Add
+  Product form), Income Tax › bank import › **Download sample CSV** (Date, Narration, Withdrawal, Deposit, Balance:
+  the layout used for banks the importer does not recognise), and GST Returns › GSTR-2B › **Sample JSON** (the
+  portal's format, to try the reconciliation). Sales and purchase bulk import and Clients already had one. A test
+  runs every template through its importer.
+
 - **New layout, beta (Vyapar parity Phase 0, flag `ui.vyapar`, off by default).** A navy sidebar grouped the way
   Vyapar's is (Home, Parties, Items, Sale, Purchase & Expense, Reports, Taxes, Sync & Backup, Utilities, Settings), a
   light top bar with the business name, a financial-year switcher, the page's New button, notifications and an

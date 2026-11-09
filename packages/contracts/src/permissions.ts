@@ -167,7 +167,7 @@ export function permissionFor(method: string, path: string): Permission | null {
   if (/^\/v1\/audit/.test(path)) return 'audit:read';
   const table: [RegExp, string][] = [
     [/^\/v1\/invoices/, 'invoice'],
-    [/^\/v1\/parties/, 'party'],
+    [/^\/v1\/(parties|party-groups)/, 'party'],
     [/^\/v1\/(items|units)/, 'item'],
     [/^\/v1\/payments/, 'payment'],
     [/^\/v1\/(purchases)/, 'purchase'],

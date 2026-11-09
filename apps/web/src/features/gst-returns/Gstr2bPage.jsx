@@ -2,6 +2,7 @@ import { Download, Upload, CheckCircle } from 'lucide-react';
 import { formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import { buildReconciliation, downloadCSV } from './gstHelpers';
+import { downloadJSON, GSTR2B_SAMPLE } from './gstr2bSample';
 
 // GSTR-2B reconciliation against your purchase bills. One page of GST returns (change 3.17).
 export default function Gstr2bPage({
@@ -59,6 +60,11 @@ export default function Gstr2bPage({
               <input ref={gstr2bInputRef} type="file" accept=".json,application/json" onChange={handleImport2B} style={{ display: 'none' }} />
               <button className="btn btn-primary" onClick={() => gstr2bInputRef.current?.click()} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>
                 <Upload size={13} /> Import 2B JSON
+              </button>
+              <button className="btn btn-secondary" onClick={() => downloadJSON('GSTR-2B-sample.json', GSTR2B_SAMPLE)}
+                title="A small GSTR-2B in the portal's format, to see the layout or try the reconciliation"
+                style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>
+                <Download size={13} /> Sample JSON
               </button>
               {gstr2bData && (
                 <>

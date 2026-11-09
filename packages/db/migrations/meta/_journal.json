@@ -57,6 +57,13 @@
       "when": 1793263403342,
       "tag": "0007_workspace_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794194397386,
+      "tag": "0008_masters_parties",
+      "breakpoints": true
     }
   ]
 }

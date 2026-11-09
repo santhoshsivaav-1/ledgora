@@ -406,3 +406,143 @@ export const PURCHASE_TEMPLATE = [
   toCsvLine(PURCHASE_COLUMNS),
   toCsvLine(['SUP/552', '2026-10-03', 'Gupta Steel', '27AAACG1234K1Z2', 'Bhosari, Pune', 'Steel rod 8mm', '7214', 100, 60, 18, 0, 'No', 'Unpaid', '']),
 ].join('\n');
+
+// ---- Clients (Clients › Import CSV) ----
+// Same loose header matching as invoices, so the old "name, address, state,
+// gstin, email, phone" files still import. `Group` takes a group name or a
+// path ("Retail > Chennai"); groups that do not exist yet are created.
+export const CLIENT_COLUMNS = ['Name', 'Group', 'GSTIN', 'Phone', 'Email', 'Address', 'City', 'PIN', 'State', 'Country'];
+const CLIENT_FIELDS = {
+  name: ['name', 'client', 'client name', 'party', 'party name', 'customer', 'customer name'],
+  group: ['group', 'party group', 'group name'],
+  gstin: ['gstin', 'gst', 'gst no', 'gstin/uin'],
+  phone: ['phone', 'mobile', 'phone no', 'contact'],
+  email: ['email', 'e-mail', 'email id'],
+  address: ['address', 'billing address'],
+  city: ['city'],
+  pin: ['pin', 'pincode', 'pin code', 'zip'],
+  state: ['state', 'state of supply'],
+  country: ['country'],
+};
+
+/**
+ * Clients from a CSV, without duplicates: a name already saved (trimmed, any
+ * case) or repeated in the file is skipped. Rows with no name are reported.
+ */
+export function clientCsvToRecords(text, { existing = [] } = {}) {
+  const { records } = rowsToRecords(text, CLIENT_FIELDS);
+  const known = new Set(existing.map((c) => String(c.name || '').trim().toLowerCase()));
+  const clients = [];
+  const skipped = [];
+  const errors = [];
+  for (const r of records) {
+    if (!r.name) {
+      if (Object.keys(r).some((k) => k !== '_line' && r[k])) errors.push({ line: r._line, message: 'Name is required' });
+      continue;
+    }
+    const key = r.name.toLowerCase();
+    if (known.has(key)) {
+      skipped.push(r.name);
+      continue;
+    }
+    known.add(key);
+    clients.push({
+      name: r.name,
+      group: r.group || '',
+      gstin: (r.gstin || '').toUpperCase(),
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      city: r.city || '',
+      pin: r.pin || '',
+      state: r.state || '',
+      ...(r.country ? { country: r.country } : {}),
+    });
+  }
+  return { clients, skipped, errors };
+}
+
+export const CLIENT_TEMPLATE = [
+  toCsvLine(CLIENT_COLUMNS),
+  toCsvLine(['Sharma Traders', 'Wholesale', '27ABCDE1234F1Z5', '9876543210', 'accounts@sharma.in', 'Shop 4, MG Road', 'Pune', '411001', 'Maharashtra', 'India']),
+  toCsvLine(['Ravi Stores', 'Retail > Chennai', '', '9123456780', '', '12 Anna Salai', 'Chennai', '600002', 'Tamil Nadu', 'India']),
+].join('\n');
+
+// ---- Products (Items › Import CSV) ----
+// Same record shape the Add Product form saves: both prices, with `rate`
+// mirroring the selling price for older readers. Old "name, hsn, rate, gst%,
+// unit, stock" files still import.
+export const PRODUCT_COLUMNS = ['Name', 'HSN/SAC', 'Selling Price', 'Purchase Price', 'GST %', 'Unit', 'Opening Stock', 'Description'];
+const PRODUCT_FIELDS = {
+  name: ['name', 'product', 'product name', 'item', 'item name'],
+  hsn: ['hsn', 'hsn code', 'sac', 'hsn/sac', 'hsn sac'],
+  selling: ['selling price', 'sale price', 'rate', 'price', 'sellingprice'],
+  purchase: ['purchase price', 'cost', 'cost price', 'purchaseprice'],
+  tax: ['gst %', 'gst%', 'gst', 'tax%', 'tax', 'taxpercent', 'gst rate'],
+  unit: ['unit', 'uom'],
+  stock: ['opening stock', 'stock', 'quantity', 'qty'],
+  description: ['description', 'details'],
+};
+
+export function productCsvToRecords(text, { existing = [] } = {}) {
+  const { records } = rowsToRecords(text, PRODUCT_FIELDS);
+  const known = new Set(existing.map((p) => String(p.name || '').trim().toLowerCase()));
+  const products = [];
+  const skipped = [];
+  const errors = [];
+  for (const r of records) {
+    if (!r.name) {
+      if (Object.keys(r).some((k) => k !== '_line' && r[k])) errors.push({ line: r._line, message: 'Name is required' });
+      continue;
+    }
+    const key = r.name.toLowerCase();
+    if (known.has(key)) {
+      skipped.push(r.name);
+      continue;
+    }
+    known.add(key);
+    const num = (v) => toNum(v) || 0; // unreadable numbers count as 0, as before
+    const sellingPrice = num(r.selling);
+    products.push({
+      name: r.name,
+      hsn: r.hsn || '',
+      purchasePrice: num(r.purchase),
+      sellingPrice,
+      rate: sellingPrice,
+      taxPercent: num(r.tax),
+      unit: r.unit || 'Nos',
+      stock: num(r.stock),
+      description: r.description || '',
+    });
+  }
+  return { products, skipped, errors };
+}
+
+export const PRODUCT_TEMPLATE = [
+  toCsvLine(PRODUCT_COLUMNS),
+  toCsvLine(['Steel rod 8mm', '7214', 72, 60, 18, 'Kg', 500, 'TMT Fe500']),
+  toCsvLine(['Cutting charges', '998898', 150, 0, 18, 'Nos', 0, 'Service, no stock']),
+].join('\n');
+
+// ---- Bank statement (Income Tax › Bank import) ----
+// The importer auto-detects SBI, HDFC, ICICI, Axis, Kotak, PNB and Yes Bank
+// files; this is the plain layout its generic reader takes for any other bank.
+// "Narration", not "Description": the generic reader finds the credit column
+// by /Cr/, which "Description" would match.
+export const BANK_STATEMENT_TEMPLATE = [
+  toCsvLine(['Date', 'Narration', 'Withdrawal', 'Deposit', 'Balance']),
+  toCsvLine(['01/04/2026', 'Opening balance', '', '', '50000.00']),
+  toCsvLine(['05/04/2026', 'NEFT-SHARMA TRADERS-INV 0101', '', '8260.00', '58260.00']),
+  toCsvLine(['10/04/2026', 'UPI-ELECTRICITY BILL', '1450.00', '', '56810.00']),
+  toCsvLine(['30/04/2026', 'INT.PD SAVINGS', '', '125.00', '56935.00']),
+].join('\n');
+
+/** Saves a CSV in the browser (the "Template" buttons). */
+export function downloadCsv(text, name) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

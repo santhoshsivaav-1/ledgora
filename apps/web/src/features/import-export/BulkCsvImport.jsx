@@ -10,16 +10,9 @@ import {
 } from '../../lib/data';
 import { belongsToProfile, isCancelledBill, isInterstateSupply, roundQty, localToday } from '../../utils';
 import {
-  salesCsvToBills, billsToSalesCsv, purchaseCsvToRecords, purchasesToCsv, SALES_TEMPLATE, PURCHASE_TEMPLATE,
+  salesCsvToBills, billsToSalesCsv, purchaseCsvToRecords, purchasesToCsv, SALES_TEMPLATE, PURCHASE_TEMPLATE, downloadCsv as download,
 } from './bulkCsv';
 import { toast } from '../../components/ui/Toast';
-
-const download = (text, name) => {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }));
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
 
 export default function BulkCsvImport({ kind = 'sales', onDone }) {
   const sales = kind === 'sales';

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { getCountryConfig, getStatesForCountry, validateTaxId, detectCountryFromBrowser, getCountriesForRegion, PAPER_SIZES, decodeGstin } from '../../utils';
 import { getRegionMode } from '../../lib/data';
+import { Field } from '../../components/ui/Field';
+import PartyGroupPicker from './PartyGroupPicker';
 
 export default function ClientModal({ show, onClose, onSave, client, isEditing, defaultCountry }) {
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
@@ -9,6 +11,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
   const emptyForm = {
     name: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
     country: fallbackCountry, isSEZ: false,
+    groupId: null,            // P1-S1 party group (id from /v1/party-groups)
     // v1.9.1 — per-client print preferences. When set, they auto-populate
     // invoiceOptions when the user creates a new invoice for this client.
     // Left blank = use app-wide defaults.
@@ -26,6 +29,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         pin: client.pin || '', state: client.state || '', gstin: client.gstin || '',
         email: client.email || '', phone: client.phone || '', country: client.country || fallbackCountry,
         isSEZ: !!client.isSEZ,
+        groupId: client.groupId || null,
         preferredPaperSize: client.preferredPaperSize || '',
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
@@ -80,6 +84,11 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label">Client / Business Name *</label>
             <input type="text" className="form-input" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="e.g. Acme Corp" />
+          </div>
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <Field label="Party Group">
+              <PartyGroupPicker value={form.groupId} onChange={(groupId) => setForm(prev => ({ ...prev, groupId }))} />
+            </Field>
           </div>
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label">Address</label>

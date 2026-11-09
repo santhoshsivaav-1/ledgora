@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download } from 'lucide-react';
+import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, FolderTree } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../../lib/data';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../../utils';
@@ -24,6 +24,10 @@ function getAccentRGB() {
   return [30, 64, 175];
 }
 import ClientModal from './ClientModal';
+import PartyGroupsModal from './PartyGroupsModal';
+import { Badge } from '../../components/ui/Display';
+import { createPartyGroup, ensureGroupPath, groupPath, listPartyGroups } from '../../lib/data/partyGroups';
+import { CLIENT_TEMPLATE, clientCsvToRecords, downloadCsv } from '../import-export/bulkCsv';
 
 const STATUS_COLORS = {
   unpaid: { label: 'Unpaid', color: '#f59e0b', bg: '#fffbeb' },
@@ -44,6 +48,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   const [modalClient, setModalClient] = useState(null);
   const [editingClientId, setEditingClientId] = useState(null);
   const [profileCountry, setProfileCountry] = useState('');
+  const [showGroups, setShowGroups] = useState(false);
+  const [groups, setGroups] = useState([]);
 
   useEffect(() => {
     getProfile().then(p => { if (p?.country) setProfileCountry(p.country); }).catch(() => {});
@@ -57,6 +63,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
     } catch {
       toast('Failed to load data', 'error');
     }
+    // Groups are a label on the card; a failure here must not hide the clients.
+    listPartyGroups().then(setGroups).catch(() => {});
   };
 
   useEffect(() => {
@@ -674,54 +682,35 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { toast('CSV file is empty or has no data rows', 'warning'); return; }
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-      let imported = 0;
-      // v1.10.74 - importing the same file twice made duplicates. Skip names
-      // already saved (trimmed, any case), including repeats inside the file.
-      let skipped = 0;
-      const known = new Set(clients.map(c => (c.name || '').trim().toLowerCase()));
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length === 0) continue;
-        const row = {};
-        headers.forEach((h, idx) => { row[h] = (values[idx] || '').trim(); });
-        const name = row.name || row.client || row['client name'] || '';
-        if (!name) continue;
-        if (known.has(name.toLowerCase())) { skipped++; continue; }
-        known.add(name.toLowerCase());
-        await saveClient({
-          name,
-          address: row.address || '',
-          state: row.state || '',
-          gstin: row.gstin || '',
-          email: row.email || '',
-          phone: row.phone || '',
-        });
-        imported++;
+      const { clients: rows, skipped, errors } = clientCsvToRecords(await file.text(), { existing: clients });
+      if (!rows.length && !skipped.length) {
+        toast(errors.length ? `No clients imported: ${errors[0].message} (line ${errors[0].line})` : 'CSV file is empty or has no data rows', 'warning');
+      } else {
+        // Groups named in the file are found by name or path ("Retail > Chennai") and created when missing.
+        let known = [];
+        try { known = await listPartyGroups(); } catch { /* import without groups rather than not at all */ }
+        let imported = 0;
+        let groupFailed = 0;
+        for (const { group, ...row } of rows) {
+          let groupId = null;
+          if (group) {
+            try { groupId = await ensureGroupPath(known, group, createPartyGroup); } catch { groupFailed++; }
+          }
+          await saveClient({ ...row, ...(groupId ? { groupId } : {}) });
+          imported++;
+        }
+        const notes = [
+          skipped.length && `skipped ${skipped.length} already in your list`,
+          errors.length && `${errors.length} row(s) without a name`,
+          groupFailed && `${groupFailed} group(s) could not be set`,
+        ].filter(Boolean);
+        toast(`Imported ${imported} client(s)${notes.length ? `, ${notes.join(', ')}` : ''}`, notes.length && !imported ? 'warning' : 'success');
+        loadData();
       }
-      toast(`Imported ${imported} client(s)${skipped ? `, skipped ${skipped} already in your list` : ''}`, 'success');
-      loadData();
     } catch {
-      toast('Failed to parse CSV file', 'error');
+      toast('Failed to read the CSV file', 'error');
     }
     if (csvInputRef.current) csvInputRef.current.value = '';
-  };
-
-  const parseCSVLine = (line) => {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQuotes = !inQuotes; }
-      else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
-      else { current += ch; }
-    }
-    result.push(current);
-    return result;
   };
 
   const handleModalSave = async (formData) => {
@@ -765,15 +754,21 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
               <li><strong>Statement PDF</strong> — a full account ledger with running balance. Send it when a client disputes a bill.</li>
               <li><strong>Aging PDF</strong> — outstanding invoices bucketed by 0-30 / 31-60 / 61-90 / 90+ days. Use it for collection calls.</li>
               <li><strong>Aging strip</strong> — the same buckets inline so you can see who's slow to pay at a glance.</li>
-              <li><strong>Import CSV</strong> — bulk-load clients from a spreadsheet (columns: name, address, state, gstin, email, phone). To back up clients, use Settings → Data Management → Export Backup.</li>
+              <li><strong>Import CSV</strong> — bulk-load clients from a spreadsheet. Click <strong>Template</strong> for a ready file (Name, Group, GSTIN, Phone, Email, Address, City, PIN, State, Country). Group can be a name or a path like <em>Retail &gt; Chennai</em>; missing groups are created. To back up clients, use Settings → Data Management → Export Backup.</li>
               <li><strong>WhatsApp / Email</strong> — quick outreach without leaving the app.</li>
             </ul>
           </HelpButton>
         </div>
         <div className="flex gap-2">
           <input type="file" accept=".csv" ref={csvInputRef} style={{ display: 'none' }} onChange={handleCSVImport} />
+          <button className="btn btn-secondary" onClick={() => downloadCsv(CLIENT_TEMPLATE, 'Clients-import-template.csv')} title="A CSV with the columns Import CSV reads, and two example rows">
+            <Download size={16} /> Template
+          </button>
           <button className="btn btn-secondary" onClick={() => csvInputRef.current?.click()}>
             <Upload size={16} /> Import CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowGroups(true)}>
+            <FolderTree size={16} /> Party Groups
           </button>
           <button className="btn btn-secondary" onClick={() => openAddClient()}>
             <Plus size={18} /> Add Client
@@ -786,6 +781,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
 
       {/* Add/Edit Client Modal */}
       <ClientModal show={showForm} onClose={closeForm} onSave={handleModalSave} client={modalClient} isEditing={!!editingClientId} defaultCountry={profileCountry} />
+      <PartyGroupsModal open={showGroups} onClose={() => setShowGroups(false)} onChanged={loadData} />
 
       {/* Search */}
       <div className="glass-panel p-4 mb-6">
@@ -825,7 +821,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                       {clientName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="client-card-name">{clientName}</h3>
+                      <h3 className="client-card-name">
+                        {clientName}
+                        {savedClient?.groupId && groupPath(groups, savedClient.groupId) && (
+                          <>
+                            {' '}
+                            <Badge tone="info">{groupPath(groups, savedClient.groupId)}</Badge>
+                          </>
+                        )}
+                      </h3>
                       <p className="client-card-meta">
                         {stats.count} invoice{stats.count !== 1 ? 's' : ''}
                         {savedClient?.state ? ` | ${savedClient.state}` : ''}

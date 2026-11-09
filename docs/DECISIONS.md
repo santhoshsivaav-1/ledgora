@@ -43,3 +43,24 @@ These were judgement calls inside the guide's rules, not open decisions; listed 
 6. **Planned screens stay out of the menu.** `NAV` lists every entry of the target sidebar, but entries whose screen a
    later phase builds carry `planned: 'P<n>'` and are hidden, so the new menu never links to a page that does not
    exist.
+
+## Notes recorded during Phase 1 (2026-11-09)
+
+Judgement calls inside the guide's rules, listed so a reviewer can overturn them.
+
+1. **P1-S1: groups cover both party stores.** The Clients screen still keeps clients as workspace documents
+   (`documents`, collection `clients`), not rows in `parties`. A group lives in the typed `party_groups` table; a
+   typed party points at it with `parties.group_id` (composite FK), a client document with a `groupId` field. The
+   party count, the delete guard and **Move to** cover both, so the numbers are right whichever store the screen
+   uses. When P1-S3 moves Clients onto `/v1/parties`, the document half can go.
+2. **P1-S1: one migration per slice.** The guide's migration map puts P1-S1 and P1-S2 in `0008`. Because an applied
+   migration is never edited, `0008_masters_parties.sql` holds P1-S1 only and P1-S2 starts at `0009`.
+3. **P1-S1: permission keys follow the code, not the guide's table.** The guide writes `parties.view/create/edit/
+   delete`; the repository's keys are `party:read` and `party:write` (delete is a write). `/v1/party-groups` maps to
+   those, so roles needed no change.
+4. **P1-S1: deleting with `moveTo` also moves child groups** under the target, so a delete never leaves orphans.
+   Without `moveTo`, a group with parties **or** child groups is refused (409).
+5. **P1-S1: groups are not in the Trash screen.** They are soft-deleted (`deleted_at`), and a trashed group's name can
+   be reused, but there is no restore yet; adding them to `TRASH_ENTITIES` is left for a later slice.
+6. **P1-S1: 422 uses the existing `unprocessable` code** (the guide says `VALIDATION`), with zod-style
+   `details: [{ path, message }]` so forms can show the message under the field.

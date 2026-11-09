@@ -22,6 +22,7 @@ needed. If you only have 2 minutes, jump to [Quick Start](#quick-start).
 8. [Troubleshooting](#troubleshooting)
 9. [For developers](#developers)
 10. [The new layout (beta)](#new-layout)
+11. [Party groups](#party-groups)
 
 ---
 
@@ -479,3 +480,22 @@ Keys: **Ctrl+F** Open Anything, **Alt+N** new document for this page, **Alt+B** 
 shortcuts. On a narrow window the menu shrinks to icons; on a phone it opens from the ☰ button.
 
 Addresses: Clients is at `/parties` and Receipts at `/sales/payment-in` in the new layout. Old bookmarks keep working.
+
+---
+
+<a id="party-groups"></a>
+## 11. Party groups
+
+Groups sort your clients and suppliers into buckets such as **Wholesale**, **Retail** or **Vendors**. A group can sit
+inside another (**Retail › Chennai**), and filtering by a group includes the groups inside it.
+
+- **Manage groups:** Clients › **Party Groups**. Click **Add Group**, type a name, optionally pick a parent, and Save
+  (Ctrl+S works too). **Rename** changes the name everywhere at once; the parties stay in the group.
+- **Put a client in a group:** in Add / Edit Client, use the **Party Group** field. Type to search; if the group does
+  not exist yet, choose **Add new "…"** and it is created on the spot.
+- **Delete a group:** an empty group goes straight away. If parties or other groups are still in it, the app asks
+  where to move them; **Move and delete** moves them and removes the group together.
+- Names are unique ignoring capitals ("retail" and "Retail" are the same group). A group can not be placed inside
+  itself or one of its own groups.
+- Who can change groups: anyone whose role may edit parties (Owner, Admin, Salesman, Biller). Viewers and accountants
+  can see them.

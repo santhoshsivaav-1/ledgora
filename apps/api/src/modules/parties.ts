@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { schema } from '@ledgora/db';
+import { schema, type Tx } from '@ledgora/db';
 import {
   idParam,
   page,
@@ -12,11 +12,12 @@ import {
   partyPatch,
   type Party,
 } from '@ledgora/contracts';
+import { descendantIds } from '@ledgora/tax-engine';
 import { audit } from '../audit.ts';
-import { notFound } from '../errors.ts';
+import { AppError, notFound } from '../errors.ts';
 import { listPage, stamps, type Registrar } from '../http.ts';
 
-const { parties, invoices, payments, paymentAllocations } = schema;
+const { parties, partyGroups, invoices, payments, paymentAllocations } = schema;
 
 export const toParty = (r: typeof parties.$inferSelect): Party => ({
   id: r.id,
@@ -33,6 +34,7 @@ export const toParty = (r: typeof parties.$inferSelect): Party => ({
   phone: r.phone,
   isSez: r.isSez,
   openingBalance: r.openingBalance,
+  groupId: r.groupId,
   extra: r.extra as Record<string, unknown>,
   ...stamps(r),
 });
@@ -41,6 +43,28 @@ const values = <T extends { gstin?: string | null }>(i: T) => ({
   ...i,
   gstin: i.gstin === '' ? null : i.gstin,
 });
+
+/** The composite FK keeps a party inside its own organization's groups; this also keeps it out of trashed ones. */
+async function checkGroup(tx: Tx, groupId: string | null | undefined) {
+  if (!groupId) return;
+  const [g] = await tx
+    .select({ id: partyGroups.id })
+    .from(partyGroups)
+    .where(and(eq(partyGroups.id, groupId), isNull(partyGroups.deletedAt)));
+  if (!g)
+    throw new AppError('unprocessable', 'Party group not found', [
+      { path: 'groupId', message: 'Party group not found' },
+    ]);
+}
+
+/** A group filter takes in its child groups too ("Retail" lists Retail > Chennai). */
+async function groupAndChildren(tx: Tx, groupId: string) {
+  const all = await tx
+    .select({ id: partyGroups.id, name: partyGroups.name, parentId: partyGroups.parentId })
+    .from(partyGroups)
+    .where(isNull(partyGroups.deletedAt));
+  return [groupId, ...descendantIds(all, groupId)];
+}
 
 export function partiesModule({ route }: Registrar) {
   route({
@@ -54,9 +78,14 @@ export function partiesModule({ route }: Registrar) {
       const res = await listPage(tx, parties, {
         ...query,
         searchColumns: [parties.name, parties.gstin, parties.phone, parties.email],
-        where: query.kind
-          ? inArray(parties.kind, query.kind === 'both' ? ['both'] : [query.kind, 'both'])
-          : undefined,
+        where: and(
+          query.kind
+            ? inArray(parties.kind, query.kind === 'both' ? ['both'] : [query.kind, 'both'])
+            : undefined,
+          query.groupId
+            ? inArray(parties.groupId, await groupAndChildren(tx, query.groupId))
+            : undefined,
+        ),
       });
       return { data: res.data.map(toParty), nextCursor: res.nextCursor };
     },
@@ -88,6 +117,7 @@ export function partiesModule({ route }: Registrar) {
     response: party,
     status: 201,
     handler: async ({ tx, orgId, body }) => {
+      await checkGroup(tx, body.groupId);
       const [row] = await tx
         .insert(parties)
         .values({ ...values(body), orgId })
@@ -111,6 +141,7 @@ export function partiesModule({ route }: Registrar) {
         .from(parties)
         .where(and(eq(parties.id, params.id), isNull(parties.deletedAt)));
       if (!before) throw notFound('Party');
+      await checkGroup(tx, body.groupId);
       const [row] = await tx
         .update(parties)
         .set({ ...values(body), updatedAt: new Date() })

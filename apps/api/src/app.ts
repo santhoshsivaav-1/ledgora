@@ -19,6 +19,7 @@ import { filesModule, localFileEndpoints } from './modules/files.ts';
 import { invoicesModule } from './modules/invoices.ts';
 import { itemsModule } from './modules/items.ts';
 import { partiesModule } from './modules/parties.ts';
+import { partyGroupsModule } from './modules/partyGroups.ts';
 import { paymentsModule } from './modules/payments.ts';
 import { purchasesModule } from './modules/purchases.ts';
 import { recurringModule } from './modules/recurring.ts';
@@ -73,6 +74,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     workspaceModule,
     businessesModule,
     partiesModule,
+    partyGroupsModule,
     itemsModule,
     invoicesModule,
     paymentsModule,

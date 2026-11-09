@@ -504,6 +504,7 @@ const EXPORT_TABLES = [
   'businesses',
   'businessSettings',
   'paymentAccounts',
+  'partyGroups',
   'parties',
   'units',
   'items',
