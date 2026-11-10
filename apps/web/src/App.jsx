@@ -80,6 +80,10 @@ const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
 const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
+const PurchaseOrders = lazy(() => import('./features/purchases/PurchaseOrders'));
+const DebitNotes = lazy(() => import('./features/purchases/DebitNotes'));
+const PaymentVoucher = lazy(() => import('./features/payments/PaymentVoucher'));
+const AccountingPage = lazy(() => import('./features/accounting/AccountingPage'));
 import AppFooter from './app/AppFooter';
 import SalesOverview from './features/sales/SalesOverview';
 import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
@@ -540,6 +544,10 @@ function App() {
       inventory: 'inventory',
       expenses: 'expenses',
       purchases: 'purchases',
+      'payment-out': 'purchases',
+      'purchase-orders': 'purchases',
+      'purchase-returns': 'purchases',
+      'other-income': 'expenses',
       recurring: 'recurring',
       receipts: 'receipts',
       reports: 'reports',
@@ -926,6 +934,13 @@ function App() {
                 <Route path="/products" element={<InventoryView />} />
                 <Route path="/expenses" element={<ExpenseTracker key={businessKey} />} />
                 <Route path="/purchases" element={<PurchaseBills key={businessKey} />} />
+                <Route path={pathForView('payment-out')} element={<PaymentVoucher direction="out" key={businessKey} />} />
+                <Route path={pathForView('purchase-orders')} element={<PurchaseOrders key={businessKey} />} />
+                <Route path={pathForView('purchase-returns')} element={<DebitNotes key={businessKey} />} />
+                <Route path="/accounting" element={<Navigate to="/accounting/setup" replace />} />
+                <Route path="/accounting/:tab" element={<AccountingPage key={businessKey} />} />
+                <Route path={pathForView('verify')} element={<AccountingPage key={`${businessKey}-verify`} initialTab="verify" />} />
+                <Route path={pathForView('other-income')} element={<ExpenseTracker kind="income" key={`${businessKey}-income`} />} />
                 <Route
                   path="/recurring"
                   element={<RecurringInvoices key={businessKey} onEdit={handleEditInvoice} />}

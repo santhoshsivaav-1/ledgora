@@ -16,8 +16,8 @@ asks; the answer is written here before work continues.
 | D-08 | Credit limit semantics | warn / block default | _pending_ | | | P1, P2 |
 | D-09 | Service reminder semantics | recurring service / other | _pending_ | | | P8, P9 |
 | D-10 | Backup hosting | snapshot export / server snapshots | _pending_ | | | P7 |
-| D-11 | Stock valuation | weighted average only / FIFO | _pending_ | | | P4, P6, P8 |
-| D-12 | ITC 180-day date basis | bill-payment date / cheque clearance | _pending_ | | | P10 |
+| D-11 | Stock valuation | weighted average only / FIFO | **Weighted average only**; FIFO shown as "coming soon". Landed cost per unit is already stored on purchase lines (Phase 3) | Owner | 2026-11-10 | P4, P6, P8 |
+| D-12 | ITC 180-day date basis | bill-payment date / cheque clearance | **Payment date** (a cheque counts on its date). Cheque clearing is not tracked until Phase 5; revisit then (and with a CA) | Owner | 2026-11-10 | P10 |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
@@ -117,3 +117,124 @@ Judgement calls inside the guide's rules, listed so a reviewer can overturn them
 13. **Web Save & New reloads `/invoices/new`** rather than resetting the editor in place: the editor peeks its number
     and loads its defaults on mount, and a reload reuses that path exactly.
 
+
+## Notes recorded during Phase 3 (2026-11-10)
+
+Judgement calls inside the guide's rules, listed so a reviewer can overturn them. Items marked ⚠️ touch GST or
+income-tax treatment and need the owner's (or a CA's) confirmation.
+
+1. **One allocation engine.** `allocatePayment` (tax-engine `payments.ts`) takes a `direction` and generic documents;
+   `allocateReceipt` (sale.ts) is now a thin wrapper over it, and `splitSettlement` moved with it. Only the sign of
+   the effect on the party balance differs (`paymentBalanceEffect`). Sale and purchase orders share `orderProgress`.
+2. **Ineligible credit is shown in 4(A) and reversed in 4(B)(1)**, not reported in 4(D) as the guide says. Checked
+   2026-11-10: CBIC Circular 170/02/2022-GST (6 July 2022) puts §17(5) reversals in 4(B)(1) and says no further detail
+   is needed in 4(D)(1); the portal advisory is to avail the credit in 4(A) first and reverse it in 4(B)(1). 4(D)(2) is
+   for credit restricted by place-of-supply rules (§16(4)), which the app does not model. Blocked and exempt-use lines,
+   and expenses marked not ITC-eligible, follow the same path.
+3. ⚠️ **Reverse-charge purchases move from 4(A)(5) to 4(A)(3)** (ISRC). Net credit is unchanged; the credit is taken in
+   the same period as the 3.1(d) liability (the "claimable on payment" timing and D-12 are Phase 10).
+4. **Debit notes reverse credit in 4(B)(2)** as the guide says, line by line using the ITC status of the matching bill
+   line (credit never claimed is not reversed again).
+5. **Exempt other income goes to 3.1(c)**, not "3B 5" as the guide says: checked 2026-11-10, Table 5 is exempt,
+   nil-rated and non-GST *inward* supplies, 3.1(c) the exempt *outward* ones. Other income reaches the returns as
+   bills (`incomeAsBills`): income with GST is a tax invoice (GSTR-1 B2B with the payer's GSTIN, else B2CS; HSN
+   summary by its SAC; 3.1(a)), exempt income a bill of supply (GSTR-1 Table 8; 3.1(c)), numbered INC-n. Income with
+   no GST that is not marked exempt is not a supply and is left out. Whether a given receipt (interest, for example)
+   is an exempt supply at all stays the user's call, made with the Exempt box.
+6. **TDS defaults** (194H at 2% since 1 October 2024, not the 5% in the guide; 194J ₹50,000, 194H ₹20,000, 194I ₹50,000
+   a month, 194C ₹30,000 / ₹1,00,000, 194Q ₹50 lakh at 0.1% on the excess, no-PAN 20% / 5%). Checked 2026-11-10: from
+   tax year 2026-27 these deductions sit in the table of section 393(1) of the Income-tax Act, 2025 with the same rates
+   and thresholds for contractors, professional / technical fees, commission and rent (secondary sources; the CBDT
+   notifications and payment codes are not yet reflected). The app keeps the familiar 1961-Act section names as keys and
+   records `newAct: '393(1)'` on each; the TDS register notes the move. 194Q and 194A were not covered by the sources
+   checked. P8 makes all of them editable.
+7. **No feature flag** (the phase map lists none). GSTR-3B for data recorded before Phase 3 is unchanged to the paisa:
+   a bill without flagged lines or charges takes the old code path, the CSV and JSON add rows / keys only when there
+   is something reversed or reverse-charge credit, and other income adds zero when there is none. The fixtures in
+   `apps/web/test/gstReturnTables.test.js` hold the old computation next to the new one.
+8. **Web storage keeps the existing collections.** Purchase orders and debit notes are `purchases` documents with
+   `docType`, Payment Out vouchers are `receipts` with `direction: 'out'`, other income is `expenses` with
+   `kind: 'income'`. `getAllPurchases`, `getAllReceipts` and `getAllExpenses` filter to what they returned before, so
+   the nine existing readers (Dashboard, Reports, Income Tax, Stock, 2B match ...) see exactly the old data; new
+   getters return the new kinds. No new collection meant no change to backup, import, trash or permissions.
+9. **PaymentVoucher is new and only serves `direction="out"`.** Payment In stays on ReceiptVoucher; moving it onto
+   PaymentVoucher is a follow-up. `PaymentBlock` (P2-S2) and `ChargeRows` (P2-S3) are reused on Add Purchase
+   (`PaymentBlock` gained `direction`); `LinesGrid` (P0) edits purchase orders, debit notes and itemised expenses.
+10. **Converting a purchase order on the web opens Add Purchase pre-filled** with the pending quantities, so the bill
+    goes through the one save path that syncs product stock; that save refuses over-receiving and applies the order's
+    advance. The API has `POST /v1/purchase-orders/:id/convert`.
+11. **A web debit note's cash / bank refund is recorded on the note** (`refundMode`), not as a receipt document, so
+    the Receipts screen (customers) does not list supplier refunds. The API records it as a payment in
+    (`source: 'debit_note_refund'`).
+12. **Allocations answer with only the key they settle** (`invoiceId` or `purchaseId`), so Payment In responses are
+    byte-identical to Phase 2.
+13. **Landed cost** is stored per bill line (`purchase_lines.landed_cost`) and noted on the stock movement;
+    `stock_movements` has no cost column, so valuation (D-11) reads it from the line.
+14. **Income categories are seeded on first use** (`GET /v1/expense-categories?kind=income`), idempotently; category
+    names are unique per kind so an income and an expense category may share a name.
+15. **Permissions and errors:** existing keys (`purchase:*`, `expense:*`, `payment:*`) cover the new routes; new codes
+    `duplicate_bill` (409, saved after confirming) and `over_conversion` (422).
+16. **The new screens are in the new-shell menu only** (like Salesman in Phase 2); in the classic look they open by
+    address (`/purchases/payment-out`, `/purchases/orders`, `/purchases/returns`, `/other-income`).
+17. **Closed after the first pass (2026-11-10):** other income in GSTR-1 (item 5); web expense items and category tree
+    (kept in workspace settings, `meta/expenseSetup`; children roll up into parents); supplier statement on the web;
+    attachments on purchase bills, expenses and Payment Out (the files module: signed upload, then complete); PDFs of
+    purchase orders and debit notes (one shared `purchasePdf`); a TDS register by deductee and section per quarter
+    with CSV (the data a quarterly TDS return needs; PAN is read from the supplier's GSTIN). A browser run,
+    `apps/web/scripts/purchase-e2e.mjs`, drives PO → part delivery → debit note → Payment Out with TDS → GSTR-3B
+    Table 4 and passes (16 checks). It found two bugs, both fixed with regression tests: a Payment Out not yet saved
+    hid the advance and inline payments already on a bill, and a bill line carrying a product id did not match an
+    order (or bill) line typed by name. A refunded debit note also lowered the supplier balance without its refund;
+    fixed in both the web and API statements.
+18. **Still not done:** ledger posting (Phase 4) and the 180-day ITC timer (Phase 10, waits on D-12); the e-filing
+    format of the TDS return itself (Phase 6); editing a purchase through the API (none existed).
+
+## Notes recorded during Phase 4 and the remaining Phase 10 work (2026-11-10)
+
+Judgement calls inside the guide's rules, listed so a reviewer can overturn them. ⚠️ marks money or tax treatment.
+
+1. **Scope.** Built: all seven Phase 4 slices, the 180-day ITC rule (P10-S4), the TDS payable ledger with challans and
+   interest (P10-S5), and `PUT /v1/purchases/:id` (purchases had no edit, so the ledger had nothing to repost on edit).
+   `docs/ACCOUNTING.md` explains the design.
+2. **The ledger posts the typed tables only.** The web screens (Sales, Purchases, Receipts, Expenses) still save workspace
+   documents, so for a business using only those screens the ledger is empty until the screen moves onto the typed API.
+   A bridge that posts workspace documents was not built: the guide's design is the typed tables, and a bridge would be
+   thrown away when the screens move. This is the main limit; the Accounting screens work fully on typed data.
+3. **The period check is in each module, not inside `repost`.** The guide puts it in `repost`; that would block the
+   owner's override (invoices already have one) and a backfill of old documents. Every write path calls `guardPeriod`
+   before writing and a table-driven API test covers 12 of them. `periodLocked` gained closed financial years; the
+   lock date is the existing `transaction.lockDate` setting, so nothing existing moved.
+4. **`1190 Bank (not assigned)` was added to the chart.** UPI, bank and card money needs a home before bank accounts exist.
+   Bank accounts (`1101…`) and expense-category accounts (`5101…`) are created on first use. "Duties & taxes" holds both
+   Input GST (asset) and Output GST (liability), so Add Account asks for the kind in that group.
+5. **A reversal is dated like its original**, so a period nets to zero, and `repost` writes nothing when the postings did
+   not change (idempotent backfill, edits that change no money). The viewer hides reversed pairs unless asked.
+6. **Sales is the balancing line of a sale.** Cr Sales = total − tax − TCS − charges − round-off, so a discount on the whole
+   bill lowers Sales rather than needing an account of its own. Likewise Ineligible GST expensed is total tax − credit
+   claimed, so a paisa between the per-head credit split and the stored tax can never unbalance a voucher.
+7. **Backfill**: a dry run and a real run are the same code inside a savepoint (rolled back for a dry run or when party
+   balances differ), so they cannot disagree. It posts party opening balances (the `parties.opening_balance` sign:
+   positive = they owe us) dated the start of the first document's financial year. Changing an opening balance later is
+   flagged by Verify, fixed by posting history again. There is no CLI: the endpoint and the Accounting screen do the job.
+8. ⚠️ **D-13 (open): reverse-charge bills.** The ledger records a supplier as owed the value without the RCM tax (the tax is
+   Cr RCM Payable). Phase 3's `total`, and the amount the Payment Out screen shows as due on such a bill, include the tax.
+   Paying the full "due" therefore leaves the supplier with a ₹ advance equal to the RCM tax in the books. Verify does not
+   flag it (its document balance uses the same rule as the ledger). Recommended: make what is due on an RCM bill exclude
+   the RCM tax in `dueOfPurchase` and the web screens. Not changed here because it changes Phase 3 behaviour.
+9. ⚠️ **ITC 180 days** counts a supplier payment on its own date (D-12). Credit is reversed from the day after the deadline
+   (invoice date + 180 days) for the part unpaid at the deadline, in proportion; a later payment re-claims it, never more
+   than was reversed. On the web the return of a period shows the reversal in 4(B)(2) (with a Review list) and the re-claim
+   as "Re-claimed ITC" in 4(A)(5); fixtures in `gstReturnTables.test.js` show before and after. The rule is not applied to
+   expenses, and a debit note settled by adjustment is not counted as payment.
+10. ⚠️ **TDS payable**: due the 7th of the next month (30 April for March), interest 1.5% a month or part from the date of
+    deduction when deposited late (§201(1A)); no PAN is flagged. Government deductors and the 1% late-*deduction* rate are
+    in the engine but the screens only compute the late-deposit case. The 26Q file itself (official format) was not built.
+11. **TDS entries follow their source** (a Payment Out, a §194Q bill); a deposited entry is never changed or removed by a
+    later edit or delete of its source. The API keeps them in `tds_entries`; the web keeps the challan on the voucher or
+    bill document (`tdsChallan`).
+12. **Permissions** (new keys, checked on every route): `ledger:read` (everyone who reads the books), `journal:write` (owner,
+    admin, accountant), `accounting:manage` (owner, admin: switch the ledger on, accounts, lock, close a year),
+    `verify:run` (owner, admin, accountant). The TDS endpoints use `payment:read/write`.
+13. **Still not done:** posting from workspace documents (item 2); P4-S7's "click Ref opens the source document" goes to the
+    document's list screen, not the document; per-party statement from the ledger; FIFO (D-11); a timed run on a
+    10,000-document business (the backfill does a few queries per document and has not been profiled).

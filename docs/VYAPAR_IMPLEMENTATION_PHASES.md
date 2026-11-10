@@ -1485,6 +1485,8 @@ Put new behaviour behind the sale.inlinePayments flag until P2-S2's acceptance l
 **Goal**: complete the buy-side document set with correct ITC and stock effects.
 **Prerequisites**: P1 (masters), P2-S2 (generalised `payments` with `direction`).
 **Slices**: P3-S1 Purchase Bill upgrades · P3-S2 Payment Out · P3-S3 Purchase Order · P3-S4 Purchase Return / Debit Note · P3-S5 Expenses upgrade and expense items · P3-S6 Other Income.
+**Status (2026-11-10)**: P3-S1…P3-S6 implemented in tax engine, contracts, migration `0010`, API and web, with the gaps
+listed in `docs/DECISIONS.md` ("Notes recorded during Phase 3"). Ledger posting in the save flows is Phase 4.
 
 ## P3-S1 Purchase Bill upgrades
 
@@ -1712,6 +1714,7 @@ For any GST number that changes, add a fixture in apps/web/test/gstReturnTables.
 **Flag**: `accounting.ledger` (per business). Off: documents behave exactly as today. On: documents also post entries.
 **Slices**: P4-S1 Chart of accounts · P4-S2 Posting engine (pure) · P4-S3 Posting wiring in API · P4-S4 Backfill · P4-S5 Verify My Data (basic) · P4-S6 Period lock and FY table · P4-S7 Ledger viewer UI.
 **Open decision**: ledger-lite vs full double entry with manual journals (blueprint 4.9 #3). This guide implements **ledger-lite + optional manual journal** in P4-S7 so the table can already carry both.
+**Status (2026-11-10)**: P4-S1…S7 implemented behind `accounting.ledger` (typed API tables; see `docs/ACCOUNTING.md` and the Phase 4 notes in `docs/DECISIONS.md` for the limits).
 
 ## Concept map
 
@@ -3593,6 +3596,8 @@ Wireframe: keep existing GSTR-3B screen, add expandable rows "How is this calcul
 
 ## P10-S4 ITC 180-day rule
 
+**Status (2026-11-10)**: implemented (engine, API `GET /v1/purchases/itc-at-risk`, web chips, panel and GSTR-3B lines). D-12 decided: payment date.
+
 Rule: ITC is reversed if the supplier is not paid within 180 days of invoice date (§16(2), Rule 37); re-claimable after payment.
 Pure fn `itcAging(purchases, payments, asOf)` → `{ dueForReversal[], atRisk[] (days 150–180) }`.
 UI: Purchases list chip "ITC at risk (12 days left)"; dashboard card; GSTR-3B 4(B)(2) auto-includes reversal with a "Review" list; on payment later, a re-claim line appears in 4(A)(5) with "Re-claimed ITC" label.
@@ -3609,6 +3614,8 @@ Cheque payments count on **clearance** date (P5-S4) — ⚠️ confirm with CA; 
 2. Re-claim after payment appears in the following return period.
 
 ## P10-S5 TDS/TCS ledger and Form 26Q-style summary
+
+**Status (2026-11-10)**: TDS payable half implemented (`tds_entries`, challans, due dates, interest, CSV). TDS receivable and the 26AS comparison are not built.
 
 ### Data
 `tds_entries(id, orgId, direction: 'deducted_by_us'|'deducted_by_customer', partyId, section, baseAmount, rate, tdsAmount, date, refType, refId, challanNo null, challanDate null, status: 'accrued'|'deposited')`.

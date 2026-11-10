@@ -125,11 +125,11 @@ export const NAV: NavEntry[] = [
     icon: ShoppingCart,
     children: [
       { id: 'purchase-bills', label: 'Purchase Bills', view: 'purchases', module: 'purchases', perm: 'purchase:read' },
-      { id: 'payment-out', label: 'Payment Out', path: '/purchases/payment-out', planned: 'P3' },
-      { id: 'purchase-orders', label: 'Purchase Order', path: '/purchases/orders', planned: 'P3' },
-      { id: 'purchase-returns', label: 'Purchase Return / Debit Note', path: '/purchases/returns', planned: 'P3' },
+      { id: 'payment-out', label: 'Payment Out', view: 'payment-out', module: 'purchases', perm: 'payment:read' },
+      { id: 'purchase-orders', label: 'Purchase Order', view: 'purchase-orders', module: 'purchases', perm: 'purchase:read' },
+      { id: 'purchase-returns', label: 'Purchase Return / Debit Note', view: 'purchase-returns', module: 'purchases', perm: 'purchase:read' },
       { id: 'expenses', label: 'Expenses', view: 'expenses', module: 'expenses', perm: 'expense:read' },
-      { id: 'other-income', label: 'Other Income', path: '/other-income', planned: 'P3' },
+      { id: 'other-income', label: 'Other Income', view: 'other-income', module: 'expenses', perm: 'expense:read' },
     ],
   },
   {
@@ -161,6 +161,20 @@ export const NAV: NavEntry[] = [
   },
   { id: 'reports', label: 'Reports', icon: BarChart3, view: 'reports', module: 'reports', perm: 'report:read' },
   {
+    // Vyapar parity Phase 4: the books. Each entry is a tab of one screen (/accounting/:tab).
+    id: 'accounting',
+    label: 'Accounting',
+    icon: Landmark,
+    match: '/accounting',
+    children: [
+      { id: 'ledger-setup', label: 'Ledger Setup', path: '/accounting/setup', perm: 'ledger:read' },
+      { id: 'chart-of-accounts', label: 'Chart of Accounts', path: '/accounting/accounts', perm: 'ledger:read' },
+      { id: 'account-ledger', label: 'Ledger', path: '/accounting/ledger', perm: 'ledger:read' },
+      { id: 'trial-balance', label: 'Trial Balance', path: '/accounting/trial-balance', perm: 'ledger:read' },
+      { id: 'journal', label: 'Journal', path: '/accounting/journal', perm: 'ledger:read' },
+    ],
+  },
+  {
     id: 'taxes',
     label: 'Taxes',
     icon: Calculator,
@@ -187,7 +201,7 @@ export const NAV: NavEntry[] = [
       { id: 'import-items', label: 'Import Items', path: '/utilities/import-items', planned: 'P1' },
       { id: 'bulk-update', label: 'Bulk Update', path: '/utilities/bulk-update', planned: 'P7' },
       { id: 'barcode', label: 'Barcode Generator', path: '/utilities/barcode', planned: 'P7' },
-      { id: 'verify', label: 'Verify My Data', path: '/utilities/verify', planned: 'P4' },
+      { id: 'verify', label: 'Verify My Data', view: 'verify', perm: 'verify:run' },
       { id: 'tally', label: 'Export to Tally', path: '/utilities/tally', planned: 'P7' },
       { id: 'close-fy', label: 'Close Financial Year', path: '/utilities/close-fy', planned: 'P7' },
       { id: 'all-documents', label: 'All Documents', view: 'invoices', module: 'invoicing', perm: 'invoice:read' },

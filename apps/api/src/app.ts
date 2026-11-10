@@ -23,6 +23,9 @@ import { partyGroupsModule } from './modules/partyGroups.ts';
 import { paymentsModule } from './modules/payments.ts';
 import { staffModule } from './modules/staff.ts';
 import { purchasesModule } from './modules/purchases.ts';
+import { purchaseOrdersModule } from './modules/purchaseOrders.ts';
+import { ledgerModule } from './modules/ledger.ts';
+import { verifyModule } from './modules/verify.ts';
 import { recurringModule } from './modules/recurring.ts';
 import { templatesModule } from './modules/templates.ts';
 import { trashModule } from './modules/trash.ts';
@@ -81,6 +84,9 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     paymentsModule,
     staffModule,
     purchasesModule,
+    purchaseOrdersModule,
+    ledgerModule,
+    verifyModule,
     recurringModule,
     templatesModule,
     filesModule,

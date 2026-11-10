@@ -1,11 +1,20 @@
-// Receipt and payment vouchers.
+// Receipt and payment vouchers. Payment Out vouchers (Vyapar parity P3-S2) share the `receipts` collection with
+// `direction: 'out'`; missing means money received, as on every receipt saved before Phase 3.
 
 import { API, apiFetch } from './api';
 
+export const isPaymentOut = (r) => r?.direction === 'out';
+const allVouchers = async () => apiFetch(`${API}/collections/receipts`);
+
 // ---- Receipts / Payment Vouchers ----
+/** Money received only: what every screen read before Phase 3, so they keep reading the same thing. */
 export const getAllReceipts = async () => {
-  return apiFetch(`${API}/collections/receipts`);
+  const rows = await allVouchers();
+  return Array.isArray(rows) ? rows.filter((r) => !isPaymentOut(r)) : rows;
 };
+
+/** P3-S2 Payment Out vouchers. */
+export const getAllPaymentsOut = async () => (await allVouchers() || []).filter(isPaymentOut);
 
 export const saveReceipt = async (receipt) => {
   const res = await apiFetch(`${API}/collections/receipts`, { method: 'POST', body: JSON.stringify(receipt) });

@@ -1,29 +1,20 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { ShoppingCart, Plus, Edit3, Trash2, Search, X, Save, Download, Wand2, FileText, Eye } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
-import { getAllPurchases, savePurchase, deletePurchase, getAllProducts, saveProduct, getProfile } from '../../lib/data';
-import { formatCurrency, calculateRoundOff, getFYOptions, belongsToProfile, isUnassignedToBusiness, isInterstateSupply, localToday, roundQty } from '../../utils';
+import { getAllPurchases, getAllDebitNotes, getAllPurchaseOrders, savePurchase, deletePurchase, getAllProducts, saveProduct, getProfile, getNextInvoiceNumber } from '../../lib/data';
+import { formatCurrency, getFYOptions, belongsToProfile, isUnassignedToBusiness, isInterstateSupply, localToday, roundQty, INDIAN_STATES, businessKeyOf } from '../../utils';
+import { ITC_STATUSES, ITC_STATUS_LABELS } from '@ledgora/tax-engine';
+import ChargeRows from '../invoices/editor/ChargeRows';
+import AttachmentField from '../../components/ui/AttachmentField';
+import SupplierStatement from './SupplierStatement';
+import PaymentBlock from '../invoices/editor/PaymentBlock';
+import { getAccentRGB, purchaseDocPdf } from './purchasePdf';
+import { itcAtRisk, PURCHASE_INLINE, PURCHASE_PREFILL_KEY, advanceEntryFor, findDuplicateBill, inlineRowsOfPurchase, mergePurchasePayments, overConversionOf, purchaseFormTotals, purchaseStatus } from './purchaseExtras';
 import TableExport from '../import-export/TableExport';
 import BulkCsvImport from '../import-export/BulkCsvImport';
 import UnassignedBanner from '../../app/UnassignedBanner';
-import { getPrintSettings } from '../print/printSettingsStore';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction, promptAction } from '../../components/ui/ConfirmModal';
-
-// v1.10.31 — UI-C3: Same accent-color helper as ClientsView so the
-// Purchase Bill PDF header rule + totals line pick up the user's brand.
-function getAccentRGB() {
-  try {
-    const ps = getPrintSettings();
-    if (ps.userColorsEnabled && ps.pdfAccent) {
-      const hex = String(ps.pdfAccent).replace('#', '');
-      if (/^[0-9a-f]{6}$/i.test(hex)) {
-        return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
-      }
-    }
-  } catch { /* ignore */ }
-  return [30, 64, 175];
-}
 
 // v1.10.22 — Purchase-bill OCR modal. Lazy-loaded because tesseract.js is
 // ~2MB gzipped; we only pay the download cost when the user actually
@@ -44,7 +35,8 @@ const PAYMENT_STATUS_COLORS = {
 // cessPercent added in v1.6.8 (P1 #16) — suppliers of tobacco / aerated
 // drinks / motor vehicles / coal charge GST + Cess. Without a slot for it,
 // we couldn't reclaim ITC on the cess in GSTR-3B Table 4(A).
-const emptyItem = { name: '', hsn: '', quantity: 1, rate: 0, taxPercent: 18, cessPercent: 0 };
+// itcStatus (Vyapar parity P3-S1): how much of the line's GST is credit; eligible unless the user says otherwise.
+const emptyItem = { name: '', hsn: '', quantity: 1, rate: 0, taxPercent: 18, cessPercent: 0, itcStatus: 'eligible' };
 
 
 const emptyForm = {
@@ -60,36 +52,37 @@ const emptyForm = {
   interstate: false, // true ⇒ supplier charged IGST; false ⇒ CGST + SGST. Routes ITC correctly in GSTR-3B.
   applyRoundOff: false, // off by default — purchase bill totals are usually pre-rounded by the supplier. Users with suppliers that don't pre-round can opt in here.
   note: '',
+  // Vyapar parity P3-S1.
+  number: '', // our reference, PUR-n, given on first save
+  dueDate: '',
+  placeOfSupply: '',
+  reverseCharge: false, // RCM: we pay the GST (3B 3.1(d)) and claim it in 4(A)(3)
+  charges: [],
+  tds194QPercent: 0,
+  paymentRows: [],
+  purchaseType: 'credit',
+  poId: '', // P3-S3: set when the bill receives goods against a purchase order
+  attachment: null, // P3-S1: the supplier's original bill, { fileId, fileName }
+  poNumber: '',
 };
 
-function calcItemTax(item) {
-  const amount = (item.quantity || 0) * (item.rate || 0);
-  const tax = (amount * (item.taxPercent || 0)) / 100;
-  const cess = (amount * (Number(item.cessPercent) || 0)) / 100;
-  return { amount, tax, cess, total: amount + tax + cess };
-}
-
-function calcPurchaseTotal(items, applyRoundOff = false) {
-  const raw = (items || []).reduce((acc, item) => {
-    const { amount, tax, cess, total } = calcItemTax(item);
-    return {
-      taxable: acc.taxable + amount,
-      tax: acc.tax + tax,
-      cess: acc.cess + cess,
-      total: acc.total + total,
-    };
-  }, { taxable: 0, tax: 0, cess: 0, total: 0 });
-  // Round-off is applied to the GRAND total (taxable + tax + cess). Stored
-  // as a separate line so GSTR-3B input tax credit reflects the supplier's
-  // actual tax amount, not a rounded version.
-  const roundOff = applyRoundOff ? calculateRoundOff(raw.total) : 0;
-  return { ...raw, roundOff, finalTotal: raw.total + roundOff };
+// Totals of a purchase bill (purchaseExtras.purchaseFormTotals): the screen's long-standing line maths, plus the
+// bill's Phase 3 charges and §194Q TDS when it has them. `extra` is the bill (or form) carrying those.
+function calcPurchaseTotal(items, applyRoundOff = false, extra = {}) {
+  return purchaseFormTotals(items, { applyRoundOff, charges: extra.charges, tds194QPercent: extra.tds194QPercent });
 }
 
 // v1.10.6 — audit L4: local copy removed, imported from utils above.
 
 export default function PurchaseBills() {
   const [purchases, setPurchases] = useState([]);
+  // P3-S4: debit notes settled by adjustment lower what is due on their bill.
+  const [debitNotes, setDebitNotes] = useState([]);
+  // P3-S3: the order a bill receives goods against (over-receiving is refused; the order's advance is applied).
+  const [orders, setOrders] = useState([]);
+  const [showStatement, setShowStatement] = useState(false);
+  const risk = useMemo(() => itcAtRisk(purchases, localToday()), [purchases]);
+  const riskOf = (id) => risk.atRisk.find(r => r.id === id) || risk.dueForReversal.find(r => r.id === id);
   // v1.10.65 (#58 item 3) — the business these records belong to.
   const [ownerProfile, setOwnerProfile] = useState(null);
   // v1.10.54 (#42) — the Products & Services master, used to seed item
@@ -177,6 +170,8 @@ export default function PurchaseBills() {
       // saved before businesses were separated has no owner recorded and is
       // always shown, so nothing disappears from an existing ledger.
       setPurchases((rows || []).filter(r => belongsToProfile(r, prof)));
+      getAllDebitNotes().then(d => setDebitNotes((d || []).filter(r => belongsToProfile(r, prof)))).catch(() => {});
+      getAllPurchaseOrders().then(o => setOrders((o || []).filter(r => belongsToProfile(r, prof)))).catch(() => {});
     } catch {
       toast('Failed to load purchases', 'error');
     }
@@ -223,9 +218,33 @@ export default function PurchaseBills() {
   });
 
   const totalStats = filtered.reduce((acc, p) => {
-    const t = calcPurchaseTotal(p.items, !!p.applyRoundOff);
+    const t = calcPurchaseTotal(p.items, !!p.applyRoundOff, p);
     return { taxable: acc.taxable + t.taxable, tax: acc.tax + t.tax, total: acc.total + t.finalTotal };
   }, { taxable: 0, tax: 0, total: 0 });
+
+  // P3-S3: Purchase Orders' "Receive goods" leaves the order's pending lines here and opens this screen.
+  useEffect(() => {
+    let prefill = null;
+    try {
+      prefill = JSON.parse(sessionStorage.getItem(PURCHASE_PREFILL_KEY) || 'null');
+      sessionStorage.removeItem(PURCHASE_PREFILL_KEY);
+    } catch { /* private mode */ }
+    if (!prefill?.poId) return;
+    setForm({
+      ...emptyForm,
+      date: localToday(),
+      supplierName: prefill.supplierName,
+      supplierGstin: prefill.supplierGstin,
+      interstate: prefill.interstate,
+      charges: prefill.charges || [],
+      items: prefill.items.map(i => ({ ...emptyItem, ...i })),
+      note: `Received against ${prefill.poNumber}`,
+      poId: prefill.poId,
+      poNumber: prefill.poNumber,
+    });
+    setEditingId(null);
+    setShowForm(true);
+  }, []);
 
   const openAdd = () => {
     setForm({ ...emptyForm, date: localToday(), items: [{ ...emptyItem }] });
@@ -248,6 +267,17 @@ export default function PurchaseBills() {
       // just default to off — they won't suddenly change totals on re-save.
       applyRoundOff: !!purchase.applyRoundOff || (typeof purchase.roundOff === 'number' && purchase.roundOff !== 0),
       note: purchase.note || '',
+      number: purchase.number || '',
+      dueDate: purchase.dueDate || '',
+      placeOfSupply: purchase.placeOfSupply || '',
+      reverseCharge: !!purchase.reverseCharge,
+      charges: (purchase.charges || []).map(c => ({ ...c })),
+      tds194QPercent: purchase.tds194QPercent || 0,
+      paymentRows: inlineRowsOfPurchase(purchase),
+      purchaseType: 'credit',
+      poId: purchase.poId || '',
+      attachment: purchase.attachment || null,
+      poNumber: orders.find(o => o.id === purchase.poId)?.number || '',
     });
     setEditingId(purchase.id);
     setShowForm(true);
@@ -264,110 +294,7 @@ export default function PurchaseBills() {
   // supplier block, line items table, tax breakdown, and total. Uses
   // jsPDF's built-in text/rect helpers (same as the ledger PDF) so we
   // don't pull autotable and keep the bundle small.
-  const viewAsPdf = async (purchase) => {
-    try {
-      const { jsPDF } = await import('jspdf');
-      const t = calcPurchaseTotal(purchase.items, !!purchase.applyRoundOff);
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-      const marginL = 15, marginR = 195;
-      let y = 20;
-      const fmt = (n) => (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-      doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-      doc.text('PURCHASE BILL', marginL, y); y += 8;
-      doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(100);
-      doc.text(`Invoice #: ${purchase.invoiceNumber || '-'}`, marginL, y); y += 5;
-      doc.text(`Date: ${purchase.date ? new Date(purchase.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}`, marginL, y); y += 5;
-      doc.text(`Payment: ${purchase.paymentStatus || 'Unpaid'}   ·   ${purchase.interstate ? 'Interstate (IGST)' : 'Intrastate (CGST+SGST)'}`, marginL, y); y += 8;
-      doc.setDrawColor(...getAccentRGB()); doc.setLineWidth(0.5);
-      doc.line(marginL, y, marginR, y); y += 8;
-
-      doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
-      doc.text('Supplier', marginL, y); y += 6;
-      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-      doc.text(purchase.supplierName || '-', marginL, y); y += 5;
-      // v1.10.29 — supplier address (wraps at ~110mm so it doesn't collide
-      // with anything on the right side of the header).
-      if (purchase.supplierAddress) {
-        const wrapped = doc.splitTextToSize(purchase.supplierAddress, 110);
-        wrapped.forEach(line => { doc.text(line, marginL, y); y += 5; });
-      }
-      if (purchase.supplierGstin) { doc.text(`GSTIN: ${purchase.supplierGstin}`, marginL, y); y += 5; }
-      y += 4;
-
-      // Items header
-      doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-      doc.text('#', marginL, y);
-      doc.text('Description', marginL + 8, y);
-      doc.text('HSN', marginL + 80, y);
-      doc.text('Qty', marginL + 100, y, { align: 'right' });
-      doc.text('Rate', marginL + 122, y, { align: 'right' });
-      doc.text('GST%', marginL + 140, y, { align: 'right' });
-      doc.text('Amount', marginR, y, { align: 'right' });
-      y += 2; doc.setLineWidth(0.2); doc.line(marginL, y, marginR, y); y += 5;
-
-      doc.setFont('helvetica', 'normal');
-      (purchase.items || []).forEach((item, idx) => {
-        if (y > 265) { doc.addPage(); y = 20; }
-        const lineTotal = (Number(item.quantity) || 0) * (Number(item.rate) || 0);
-        const withTax = lineTotal * (1 + (Number(item.taxPercent) || 0) / 100);
-        // v1.10.30 — reported: "in purchase bill pdf long names got cut in
-        // pdf fix". Prior code used `.slice(0, 40)` which mid-word truncated
-        // "4 Copier Paper (Pack of..." → "4 Copier Paper (Pack o". Now we
-        // wrap the description into as many lines as needed (70mm column
-        // width). The row height grows to fit the wrapped text so nothing
-        // clips into the next line.
-        const nameCol = 70; // mm — width of description column
-        const nameLines = doc.splitTextToSize(String(item.name || '-'), nameCol);
-        const rowH = Math.max(6, nameLines.length * 4.5);
-        // Page break if this row won't fit.
-        if (y + rowH > 275) { doc.addPage(); y = 20; }
-        doc.text(String(idx + 1), marginL, y);
-        // Description wraps top-aligned.
-        nameLines.forEach((line, lineIdx) => {
-          doc.text(line, marginL + 8, y + lineIdx * 4.5);
-        });
-        // Everything else aligns to the top of the row (so it lines up
-        // with the first line of the wrapped description).
-        doc.text(String(item.hsn || '-'), marginL + 80, y);
-        doc.text(String(item.quantity || 0), marginL + 100, y, { align: 'right' });
-        doc.text(fmt(item.rate), marginL + 122, y, { align: 'right' });
-        doc.text(String(item.taxPercent || 0) + '%', marginL + 140, y, { align: 'right' });
-        doc.text(fmt(withTax), marginR, y, { align: 'right' });
-        y += rowH;
-      });
-
-      // Totals
-      y += 4; doc.setDrawColor(...getAccentRGB()); doc.setLineWidth(0.4);
-      doc.line(marginL + 100, y, marginR, y); y += 6;
-      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(80);
-      doc.text('Taxable', marginL + 100, y); doc.text(fmt(t.taxable), marginR, y, { align: 'right' }); y += 5;
-      // v1.10.74 - show the tax split instead of one combined line.
-      if (purchase.interstate) {
-        doc.text('IGST', marginL + 100, y); doc.text(fmt(t.tax), marginR, y, { align: 'right' }); y += 5;
-      } else {
-        doc.text('CGST', marginL + 100, y); doc.text(fmt(t.tax / 2), marginR, y, { align: 'right' }); y += 5;
-        doc.text('SGST', marginL + 100, y); doc.text(fmt(t.tax / 2), marginR, y, { align: 'right' }); y += 5;
-      }
-      if (t.cess > 0.005) { doc.text('Cess', marginL + 100, y); doc.text(fmt(t.cess), marginR, y, { align: 'right' }); y += 5; }
-      if (Math.abs(t.roundOff) > 0.005) { doc.text('Round-off', marginL + 100, y); doc.text((t.roundOff > 0 ? '+' : '') + fmt(t.roundOff), marginR, y, { align: 'right' }); y += 5; }
-      y += 2; doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(marginL + 100, y, marginR, y); y += 6;
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0);
-      doc.text('TOTAL', marginL + 100, y); doc.text(fmt(t.finalTotal), marginR, y, { align: 'right' });
-
-      if (purchase.note) {
-        y += 14; doc.setFontSize(9); doc.setFont('helvetica', 'italic'); doc.setTextColor(90);
-        doc.text('Note: ' + purchase.note, marginL, y);
-      }
-
-      const safeInv = String(purchase.invoiceNumber || 'purchase').replace(/[^A-Za-z0-9._-]/g, '_');
-      const filename = `Purchase-${safeInv}-${purchase.date || 'undated'}.pdf`;
-      doc.save(filename);
-    } catch (err) {
-      console.error('Purchase PDF failed:', err);
-      toast('Could not generate PDF — see console', 'error');
-    }
-  };
+  const viewAsPdf = (purchase) => purchaseDocPdf(purchase, { title: 'PURCHASE BILL', accent: getAccentRGB() });
 
   const handleSave = async () => {
     if (!form.supplierName.trim()) { toast('Supplier name is required', 'warning'); return; }
@@ -384,10 +311,36 @@ export default function PurchaseBills() {
       toast('Add at least one item with a quantity and rate', 'warning');
       return;
     }
+    // P3-S1 use case 4: the same supplier bill number twice in a financial year is usually a double entry.
+    const dup = findDuplicateBill(purchases, form, editingId);
+    if (dup && !(await confirmAction({
+      title: 'Bill already recorded?',
+      message: `${form.supplierName.trim()} bill ${form.invoiceNumber.trim()} is already in your purchases (${dup.number || dup.invoiceNumber}, dated ${dup.date}). Save this one too?`,
+      confirmLabel: 'Save anyway',
+      cancelLabel: 'Go back',
+      tone: 'warning',
+    }))) return;
+    const paymentTotal = form.paymentRows.reduce((t, r) => t + (parseFloat(r.amount) || 0), 0);
+    if (paymentTotal > calcPurchaseTotal(form.items, form.applyRoundOff, form).payable + 0.005) {
+      toast('Paid is more than the bill (less TDS)', 'warning');
+      return;
+    }
     try {
-      const totals = calcPurchaseTotal(form.items, form.applyRoundOff);
+      const totals = calcPurchaseTotal(form.items, form.applyRoundOff, form);
+      const prior = editingId ? purchases.find(p => p.id === editingId) : null;
+      // Our reference, PUR-n: given once, on the first save.
+      let number = form.number || prior?.number || '';
+      if (!number) {
+        try { number = await getNextInvoiceNumber('PUR', { businessKey: businessKeyOf(ownerProfile || {}) }); } catch { number = ''; }
+      }
+      let payments = mergePurchasePayments(prior?.payments, form.paymentRows, { date: form.date });
+      const order = form.poId ? orders.find(o => o.id === form.poId) : null;
       const purchase = {
         ...(editingId ? { id: editingId } : {}),
+        // Kept from the saved bill: what Phase 3 screens link to it (its order, its vouchers' entries) is not on the form.
+        ...(form.poId || prior?.poId ? { poId: form.poId || prior.poId } : {}),
+        docType: 'bill',
+        number,
         date: form.date,
         supplierName: form.supplierName.trim(),
         supplierAddress: (form.supplierAddress || '').trim(),
@@ -404,6 +357,9 @@ export default function PurchaseBills() {
           rate: parseFloat(i.rate) || 0,
           taxPercent: parseFloat(i.taxPercent) || 0,
           cessPercent: parseFloat(i.cessPercent) || 0,
+          itcStatus: ITC_STATUSES.includes(i.itcStatus) ? i.itcStatus : 'eligible',
+          ...(i.productId ? { productId: i.productId } : {}),
+          ...(i.itemId ? { itemId: i.itemId } : {}),
         })),
         // totalAmount is the grand total INCLUDING round-off so the table
         // sum and GSTR-3B reconciliation both reflect what the supplier
@@ -416,7 +372,29 @@ export default function PurchaseBills() {
         paymentStatus: form.paymentStatus,
         interstate: !!form.interstate,
         note: form.note.trim(),
+        dueDate: form.dueDate || '',
+        attachment: form.attachment || null,
+        placeOfSupply: form.placeOfSupply || '',
+        reverseCharge: !!form.reverseCharge,
+        charges: (form.charges || []).filter(c => Number(c.amount) > 0),
+        tds194QPercent: Number(form.tds194QPercent) || 0,
+        tdsAmount: totals.tdsAmount,
+        payments,
+        ...(dup ? { duplicateOf: dup.id } : {}),
       };
+      if (order) {
+        // P3-S3: no more than is still pending on the order, and the order's advance goes to this bill first.
+        const over = overConversionOf(order, purchases, purchase.items, editingId);
+        if (over.length) {
+          toast(`More than is pending on ${order.number}: ${over.map(o => `${o.name} (${o.returnable} left)`).join(', ')}`, 'warning');
+          return;
+        }
+        const adv = advanceEntryFor(order, purchases, totals.payable - paymentTotal, editingId);
+        payments = [...payments.filter(p => p.source !== 'po_advance'), ...(adv ? [adv] : [])];
+        purchase.payments = payments;
+      }
+      // Once money is recorded against the bill, its status follows the money.
+      purchase.paymentStatus = purchaseStatus(purchase, debitNotes);
       await savePurchase(purchase);
 
       // v1.10.29 — reported: "items added in purchase bill also available
@@ -814,7 +792,7 @@ export default function PurchaseBills() {
     if (!filtered.length) return [];
     const sum = { taxable: 0, tax: 0, cess: 0, roundOff: 0, finalTotal: 0 };
     const rows = [...filtered].sort((x, y) => String(x.date || '').localeCompare(String(y.date || ''))).map(p => {
-      const t = calcPurchaseTotal(p.items, !!p.applyRoundOff);
+      const t = calcPurchaseTotal(p.items, !!p.applyRoundOff, p);
       for (const k of Object.keys(sum)) sum[k] += Number(t[k]) || 0;
       return [p.date || '', p.supplierName || '', p.supplierGstin || '', p.invoiceNumber || '', r2(t.taxable), r2(t.tax), r2(t.cess),
         p.interstate ? 'Y' : 'N', r2(t.roundOff), r2(t.finalTotal), p.paymentStatus || '', p.note || ''];
@@ -822,7 +800,7 @@ export default function PurchaseBills() {
     return [...rows, ['Total', '', '', '', r2(sum.taxable), r2(sum.tax), r2(sum.cess), '', r2(sum.roundOff), r2(sum.finalTotal), '', '']];
   })();
 
-  const formTotals = calcPurchaseTotal(form.items, form.applyRoundOff);
+  const formTotals = calcPurchaseTotal(form.items, form.applyRoundOff, form);
 
   return (
     <div className="dashboard-container">
@@ -849,6 +827,7 @@ export default function PurchaseBills() {
             </button>
           )}
           <BulkCsvImport kind="purchase" onDone={() => { loadPurchases(); loadProducts(); }} />
+          <button className="btn btn-secondary" onClick={() => setShowStatement(true)} disabled={!purchases.length}>Supplier statement</button>
           <button className="btn btn-primary" onClick={openAdd}><Plus size={18} /> Add Purchase</button>
         </div>
       </div>
@@ -863,7 +842,7 @@ export default function PurchaseBills() {
       {/* v1.10.30 — Purchase view modal (quick check, no download). */}
       {viewPurchase && (() => {
         const p = viewPurchase;
-        const t = calcPurchaseTotal(p.items, !!p.applyRoundOff);
+        const t = calcPurchaseTotal(p.items, !!p.applyRoundOff, p);
         return (
           <div className="modal-overlay" onClick={() => setViewPurchase(null)}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
@@ -990,11 +969,13 @@ export default function PurchaseBills() {
         </div>
       </div>
 
+      {showStatement && <SupplierStatement bills={purchases} debitNotes={debitNotes} orders={orders} onClose={() => setShowStatement(false)} />}
+
       {/* Add/Edit Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={closeForm}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '720px' }}>
-            <h3 className="section-title">{editingId ? 'Edit Purchase Bill' : 'Add Purchase Bill'}</h3>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '920px' }}>
+            <h3 className="section-title">{editingId ? `Edit Purchase Bill${form.number ? ` · ${form.number}` : ''}` : 'Add Purchase Bill'}{form.poNumber ? ` — receiving ${form.poNumber}` : ''}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="form-group">
                 <label className="form-label">Date *</label>
@@ -1051,6 +1032,21 @@ export default function PurchaseBills() {
                 <input type="text" className="form-input" value={form.note}
                   onChange={e => updateField('note', e.target.value)} placeholder="Any note..." />
               </div>
+              {/* Vyapar parity P3-S1 */}
+              <AttachmentField label="Original bill" value={form.attachment} onChange={v => updateField('attachment', v)} />
+              <div />
+              <div className="form-group">
+                <label className="form-label">Due date</label>
+                <input type="date" className="form-input" value={form.dueDate || ''} min={form.date || undefined}
+                  onChange={e => updateField('dueDate', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Place of supply</label>
+                <select className="form-input" value={form.placeOfSupply || ''} onChange={e => updateField('placeOfSupply', e.target.value)}>
+                  <option value="">{ownerProfile?.state ? `Your state (${ownerProfile.state})` : 'Your state'}</option>
+                  {INDIAN_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+                </select>
+              </div>
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!form.interstate}
@@ -1060,6 +1056,19 @@ export default function PurchaseBills() {
                     <strong>Inter-state purchase</strong> — supplier charged IGST (different state)
                     <span style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block' }}>
                       Routes ITC to IGST in GSTR-3B instead of CGST + SGST. Tip: first 2 digits of supplier GSTIN = their state code.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!form.reverseCharge}
+                    onChange={e => updateField('reverseCharge', e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
+                  <span>
+                    <strong>Reverse charge (RCM)</strong> — you pay this GST to the government, not the supplier
+                    <span style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block' }}>
+                      Reported in GSTR-3B 3.1(d); the credit is claimed in 4(A)(3) once the tax is paid.
                     </span>
                   </span>
                 </label>
@@ -1149,6 +1158,13 @@ export default function PurchaseBills() {
                     onFocus={e => e.target.select()}
                     onChange={e => updateItem(idx, 'cessPercent', e.target.value)} />
                 </div>
+                <div className="form-group" style={{ flex: 1.1, margin: 0 }}>
+                  {idx === 0 && <label className="form-label" title="How much of this line's GST you can claim as input tax credit">ITC</label>}
+                  <select className="form-input" value={item.itcStatus || 'eligible'} aria-label={`Line ${idx + 1} ITC`}
+                    onChange={e => updateItem(idx, 'itcStatus', e.target.value)}>
+                    {ITC_STATUSES.map(st => <option key={st} value={st}>{ITC_STATUS_LABELS[st]}</option>)}
+                  </select>
+                </div>
                 <div style={{ flex: '0 0 auto', marginBottom: idx === 0 ? 0 : 0 }}>
                   {form.items.length > 1 && (
                     <button className="icon-btn icon-btn-red" onClick={() => removeItem(idx)} title="Remove"><Trash2 size={15} /></button>
@@ -1158,6 +1174,12 @@ export default function PurchaseBills() {
             ))}
             <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', marginTop: '0.25rem' }}
               onClick={addItem}><Plus size={14} /> Add Item</button>
+
+            {/* P3-S1: the same charges and payment blocks as Add Sale (P2-S2, P2-S3). */}
+            <div style={{ marginTop: '1rem' }}>
+              <ChargeRows charges={form.charges || []} onChange={v => updateField('charges', v)} currency="INR" showGST
+                totals={{ chargesTotal: formTotals.chargesTaxable, chargesTax: formTotals.chargesTax }} />
+            </div>
 
             <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: '0.85rem' }}>
               <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1173,7 +1195,19 @@ export default function PurchaseBills() {
                   </span>
                 )}
                 <span>Total: <strong>{formatCurrency(formTotals.finalTotal)}</strong></span>
+                {formTotals.tdsAmount > 0 && (
+                  <span style={{ color: '#475569' }}>
+                    TDS §194Q: <strong>−{formatCurrency(formTotals.tdsAmount)}</strong> · Payable <strong>{formatCurrency(formTotals.payable)}</strong>
+                  </span>
+                )}
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', marginTop: '0.6rem', color: '#475569', flexWrap: 'wrap' }}>
+                <strong>TDS §194Q</strong>
+                <input type="number" className="form-input" style={{ width: 80, padding: '0.2rem 0.4rem' }} min="0" max="5" step="0.01"
+                  value={form.tds194QPercent || ''} placeholder="0" onFocus={e => e.target.select()}
+                  onChange={e => updateField('tds194QPercent', e.target.value)} aria-label="TDS 194Q percent" />
+                <span>% — when your purchases from this supplier pass ₹50 lakh this year (usually 0.1%, on the value before GST)</span>
+              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', cursor: 'pointer', marginTop: '0.6rem', color: '#475569' }}>
                 <input type="checkbox" checked={!!form.applyRoundOff}
                   onChange={e => updateField('applyRoundOff', e.target.checked)}
@@ -1186,11 +1220,42 @@ export default function PurchaseBills() {
               </label>
             </div>
 
+            <div style={{ marginTop: '1rem' }}>
+              <PaymentBlock direction="out" rows={form.paymentRows || []} onRowsChange={v => updateField('paymentRows', v)}
+                saleType={form.purchaseType || 'credit'} onSaleTypeChange={v => updateField('purchaseType', v)}
+                total={formTotals.payable} currency="INR"
+                payments={(purchases.find(p => p.id === editingId)?.payments || []).filter(p => p.source !== PURCHASE_INLINE)} />
+            </div>
+
             <div className="flex gap-2 justify-end mt-4">
               <button className="btn btn-secondary" onClick={closeForm}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave}><Save size={16} /> {editingId ? 'Update' : 'Save'}</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* P10-S4: the 180-day rule. Credit is reversed when the supplier is unpaid 180 days after the invoice. */}
+      {(risk.atRisk.length > 0 || risk.dueForReversal.length > 0) && (
+        <div className="glass-panel p-4 mb-6">
+          <h3 className="section-title" style={{ marginBottom: '0.5rem' }}>ITC at risk — supplier not yet paid</h3>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Bill</th><th>Supplier</th><th>Bill date</th><th style={{ textAlign: 'right' }}>Unpaid</th><th style={{ textAlign: 'right' }}>ITC</th><th>Days left</th><th /></tr></thead>
+              <tbody>
+                {[...risk.dueForReversal.map(r => ({ ...r, itc: r.itcToReverse, left: -r.daysLate })), ...risk.atRisk.map(r => ({ ...r, itc: r.itcAtRisk, left: r.daysLeft }))].map(r => (
+                  <tr key={r.id}>
+                    <td>{r.number}</td><td>{r.supplier}</td><td>{r.date}</td>
+                    <td style={{ textAlign: 'right' }}>{formatCurrency(r.unpaid)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatCurrency(r.itc)}</td>
+                    <td style={{ color: r.left < 0 ? '#dc2626' : '#d97706', fontWeight: 600 }}>{r.left < 0 ? `${-r.left} late — reversed` : r.left}</td>
+                    <td><a className="btn btn-secondary" style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }} href="/purchases/payment-out">Pay now</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="field-hint" style={{ marginTop: '0.5rem' }}>Paid in time keeps the credit. Credit on a bill still unpaid 180 days after its date is reversed in GSTR-3B 4(B)(2) and comes back as Re-claimed ITC when you pay.</p>
         </div>
       )}
 
@@ -1227,13 +1292,26 @@ export default function PurchaseBills() {
               </thead>
               <tbody>
                 {filtered.map(p => {
-                  const t = calcPurchaseTotal(p.items, !!p.applyRoundOff);
+                  const t = calcPurchaseTotal(p.items, !!p.applyRoundOff, p);
                   return (
                     <tr key={p.id}>
                       <td className="text-muted">{p.date ? new Date(p.date).toLocaleDateString('en-IN') : ''}</td>
                       <td className="font-medium">{p.supplierName}</td>
                       <td className="text-muted" style={{ fontSize: '0.78rem' }}>{p.supplierGstin || '-'}</td>
-                      <td><span className="invoice-badge">{p.invoiceNumber}</span></td>
+                      <td>
+                        <span className="invoice-badge">{p.invoiceNumber}</span>
+                        {(() => {
+                          const r = riskOf(p.id);
+                          if (!r) return null;
+                          const late = r.daysLate != null;
+                          return (
+                            <span title={late ? 'The supplier was not paid within 180 days: the credit is reversed in GSTR-3B 4(B)(2)' : 'Pay the supplier before the 180 days run out to keep the credit'}
+                              style={{ display: 'block', marginTop: 3, fontSize: '0.68rem', fontWeight: 700, color: late ? '#dc2626' : '#d97706' }}>
+                              {late ? `ITC reversed (${r.daysLate} days late)` : `ITC at risk (${r.daysLeft} days left)`}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td style={{ textAlign: 'right' }}>{formatCurrency(t.taxable)}</td>
                       <td style={{ textAlign: 'right' }} className="text-muted">{formatCurrency(t.tax)}</td>
                       <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(t.finalTotal)}</td>

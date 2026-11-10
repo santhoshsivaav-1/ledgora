@@ -3,16 +3,17 @@ import { nilExemptSummary, exportSection } from '../src/features/gst-returns/gst
 
 const item = (amount, rate = 0) => ({ amount, taxPercent: rate });
 const split = (it) => ({ taxable: it.amount, igst: it.taxPercent ? (it.amount * it.taxPercent) / 100 : 0, cess: 0 });
-const bos = (client, items, inter = false, type = 'bill-of-supply') => ({ invoiceType: type, data: { client, items } });
+// Inter-state is decided by isInter() in each test, not stored on the bill.
+const bos = (client, items, type = 'bill-of-supply') => ({ invoiceType: type, data: { client, items } });
 
 describe('GSTR-1 Table 8 (bills of supply)', () => {
   it('totals bills of supply by buyer kind and ignores every other document', () => {
     const bills = [
       bos({ gstin: '29ABCDE1234F1Z5' }, [item(1000), item(500)]),
       bos({}, [item(250)]),
-      bos({}, [item(100)], true),
-      bos({}, [item(9999)], false, 'tax-invoice'),
-      bos({}, [item(7777)], false, 'composition'),
+      bos({}, [item(100)]),
+      bos({}, [item(9999)], 'tax-invoice'),
+      bos({}, [item(7777)], 'composition'),
     ];
     const r = nilExemptSummary(bills, { isInter: (b) => b === bills[2], split });
     expect(r.inv).toEqual([
@@ -39,5 +40,194 @@ describe('GSTR-1 Table 6A (exports)', () => {
     expect(r[0].inv[0]).toMatchObject({ inum: 'INV/1', idt: '05-10-2026', val: 1180, sbnum: '123', sbdt: '06-10-2026', sbpcode: 'INMAA1' });
     expect(r[0].inv[0].itms).toEqual([{ txval: 1000, rt: 18, iamt: 180, csamt: 0 }]);
     expect(r[1].inv[0]).not.toHaveProperty('sbnum');
+  });
+});
+
+// ---- Vyapar parity Phase 3: GSTR-3B Table 4 and other income, before / after ------------------------------------------
+import { itcTable4, incomeAsBills, isPurchaseBill } from '../src/features/gst-returns/gstReturnTables';
+
+// GSTR-3B Table 4 as GSTReturns.jsx computed it before Phase 3, copied verbatim, so every fixture states what the
+// return said "before" next to what it says "after".
+function before3B({ purchases, expenses }) {
+  const book = (p) => (p?.items || []).reduce((acc, it) => {
+    const amount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
+    const tax = amount * (Number(it.taxPercent) || 0) / 100;
+    const cess = amount * (Number(it.cessPercent) || 0) / 100;
+    return { taxable: acc.taxable + amount, tax: acc.tax + tax, cess: acc.cess + cess, total: acc.total + amount + tax + cess };
+  }, { taxable: 0, tax: 0, cess: 0, total: 0 });
+  const e = expenses.reduce((acc, x) => {
+    const gst = x.gstAmount || 0;
+    if (x.interstate) return { cgst: acc.cgst, sgst: acc.sgst, igst: acc.igst + gst };
+    const half = Math.round((gst / 2) * 100) / 100;
+    return { cgst: acc.cgst + half, sgst: acc.sgst + (gst - half), igst: acc.igst };
+  }, { cgst: 0, sgst: 0, igst: 0 });
+  const p = purchases.reduce((acc, x) => {
+    const tax = x.totalTax || book(x).tax;
+    if (x.interstate) return { cgst: acc.cgst, sgst: acc.sgst, igst: acc.igst + tax };
+    const half = Math.round((tax / 2) * 100) / 100;
+    return { cgst: acc.cgst + half, sgst: acc.sgst + (tax - half), igst: acc.igst };
+  }, { cgst: 0, sgst: 0, igst: 0 });
+  const cess = purchases.reduce((s, x) => s + book(x).cess, 0);
+  return { oth: { cgst: e.cgst + p.cgst, sgst: e.sgst + p.sgst, igst: e.igst + p.igst }, cess };
+}
+const pick = ({ igst, cgst, sgst }) => ({ igst, cgst, sgst });
+const pl = (rate, taxPercent, extra = {}) => ({ name: 'Item', quantity: 1, rate, taxPercent, ...extra });
+
+describe('GSTR-3B Table 4 (Phase 3): purchases recorded before Phase 3 report exactly as before', () => {
+  // Mixed real-world shapes: stored totalTax, missing totalTax, odd paise, cess, IGST, expenses both ways.
+  const purchases = [
+    { items: [pl(1000, 18), pl(333.33, 5)], totalTax: 196.6665 },
+    { items: [pl(2500, 12, { quantity: 3 })], interstate: true },
+    { items: [pl(100000, 28, { cessPercent: 15 })] },
+    { items: [pl(0.05, 100)] },
+    { items: [pl(999.99, 18, { itcStatus: 'eligible' }), pl(10, 18, { itcStatus: 'capital_goods' })] },
+  ];
+  const expenses = [{ gstAmount: 4500 }, { gstAmount: 180.01, interstate: true }, { gstAmount: 0.03 }, {}];
+
+  it('4(A)(5) OTH, its cess, and the net used for set-off are identical to the paisa', () => {
+    const was = before3B({ purchases, expenses });
+    const now = itcTable4({ purchases, expenses });
+    expect(pick(now.avl.oth)).toEqual(was.oth);
+    expect(now.avl.oth.cess).toBe(was.cess);
+    expect(pick(now.net)).toEqual(was.oth);
+    expect(now.reversed).toBe(false);
+    expect(now.avl.isrc).toEqual({ igst: 0, cgst: 0, sgst: 0, cess: 0 });
+  });
+  it('a purchase saved without docType is a bill', () => {
+    expect(isPurchaseBill({})).toBe(true);
+    expect(isPurchaseBill({ docType: 'order' })).toBe(false);
+  });
+});
+
+describe('GSTR-3B Table 4 (Phase 3): the numbers that change, before → after', () => {
+  it('§17(5) passenger car: before claimed ₹2,80,000 credit; after it is in 4(A) and reversed in 4(B)(1), net ₹0', () => {
+    const purchases = [{ items: [pl(1000000, 28, { itcStatus: 'ineligible_17_5' })], interstate: true }];
+    const was = before3B({ purchases, expenses: [] });
+    const now = itcTable4({ purchases });
+    expect(was.oth.igst).toBe(280000);
+    expect(now.avl.oth.igst).toBe(280000);
+    expect(now.rev.rul.igst).toBe(280000);
+    expect(now.net.igst).toBe(0);
+    expect(now.reversed).toBe(true);
+  });
+
+  it('mixed bill: only the blocked line is reversed (before 108 + 108, after net 90 + 90)', () => {
+    const purchases = [{ items: [pl(1000, 18), pl(200, 18, { itcStatus: 'blocked' })] }];
+    expect(before3B({ purchases, expenses: [] }).oth).toEqual({ igst: 0, cgst: 108, sgst: 108 });
+    const now = itcTable4({ purchases });
+    expect(pick(now.avl.oth)).toEqual({ igst: 0, cgst: 108, sgst: 108 });
+    expect(pick(now.rev.rul)).toEqual({ igst: 0, cgst: 18, sgst: 18 });
+    expect(pick(now.net)).toEqual({ igst: 0, cgst: 90, sgst: 90 });
+  });
+
+  it('reverse charge: before in 4(A)(5) OTH; after in 4(A)(3) ISRC, same net', () => {
+    const purchases = [{ reverseCharge: true, items: [pl(10000, 18)] }];
+    expect(before3B({ purchases, expenses: [] }).oth).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+    const now = itcTable4({ purchases });
+    expect(pick(now.avl.oth)).toEqual({ igst: 0, cgst: 0, sgst: 0 });
+    expect(pick(now.avl.isrc)).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+    expect(pick(now.net)).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+  });
+
+  it('debit note: before its tax would have been claimed as credit; after it is reversed in 4(B)(2)', () => {
+    const bill = { id: 'b1', items: [pl(6, 18, { quantity: 100, itemId: 'pen' })] };
+    const dn = { docType: 'debit-note', againstPurchaseId: 'b1', items: [pl(6, 18, { quantity: 10, itemId: 'pen' })] };
+    expect(before3B({ purchases: [bill, dn], expenses: [] }).oth.cgst).toBeCloseTo(59.4, 2); // 54 + 5.40 claimed
+    const now = itcTable4({ purchases: [bill, dn] });
+    expect(pick(now.avl.oth)).toEqual({ igst: 0, cgst: 54, sgst: 54 });
+    expect(pick(now.rev.oth)).toEqual({ igst: 0, cgst: 5.4, sgst: 5.4 });
+    expect(now.net.cgst).toBeCloseTo(48.6, 10);
+    expect(now.net.sgst).toBeCloseTo(48.6, 10);
+  });
+
+  it('purchase orders in the same collection are never credit', () => {
+    const now = itcTable4({ purchases: [{ docType: 'order', items: [pl(1000, 18)] }] });
+    expect(now.net).toEqual({ igst: 0, cgst: 0, sgst: 0, cess: 0 });
+  });
+
+  it('expense marked not ITC-eligible: before claimed; after shown in 4(A) and reversed in 4(B)(1)', () => {
+    const expenses = [{ gstAmount: 1800, itcEligible: false }, { gstAmount: 180 }];
+    expect(before3B({ purchases: [], expenses }).oth).toEqual({ igst: 0, cgst: 990, sgst: 990 });
+    const now = itcTable4({ expenses });
+    expect(pick(now.avl.oth)).toEqual({ igst: 0, cgst: 990, sgst: 990 });
+    expect(pick(now.net)).toEqual({ igst: 0, cgst: 90, sgst: 90 });
+  });
+
+  it('additional charges on a bill: before their GST was missed; after it is credit', () => {
+    const purchases = [{ items: [pl(1000, 18)], charges: [{ name: 'Freight', amount: 200, gstRate: 18 }] }];
+    expect(before3B({ purchases, expenses: [] }).oth).toEqual({ igst: 0, cgst: 90, sgst: 90 });
+    expect(pick(itcTable4({ purchases }).net)).toEqual({ igst: 0, cgst: 108, sgst: 108 });
+  });
+});
+
+describe('GSTR-1 and GSTR-3B 3.1 (Phase 3): other income, before (nothing) → after', () => {
+  const profile = { state: 'Tamil Nadu' };
+  const incomes = [
+    // amounts include GST, as on expense records
+    { id: 'a', number: 'INC-1', date: '2026-11-02', amount: 11800, gstAmount: 1800, gstPercent: 18, vendorName: 'Acme', vendorGstin: '29ABCDE1234F1Z5', interstate: true, placeOfSupply: 'Karnataka', sac: '9971', category: 'Commission' },
+    { id: 'b', number: 'INC-2', date: '2026-11-03', amount: 5900, gstAmount: 900, gstPercent: 18, vendorName: 'Walk-in', category: 'Rent received' },
+    { id: 'c', number: 'INC-3', date: '2026-11-04', amount: 1200, exempt: true, category: 'Interest received' },
+    { id: 'd', number: 'INC-4', date: '2026-11-05', amount: 700, category: 'Misc' },
+  ];
+  const bills = incomeAsBills(incomes, profile);
+
+  it('taxable income becomes a tax invoice (B2B with the payer GSTIN, B2CS without); non-supplies stay out', () => {
+    expect(bills.map((b) => [b.invoiceNumber, b.invoiceType])).toEqual([['INC-1', 'tax-invoice'], ['INC-2', 'tax-invoice'], ['INC-3', 'bill-of-supply']]);
+    expect(bills[0].data.client.gstin).toBe('29ABCDE1234F1Z5');
+    expect(bills[0].data.totals).toMatchObject({ taxableAmount: 10000, igst: 1800, cgst: 0, sgst: 0, total: 11800, isInterstate: true });
+    expect(bills[0].data.items).toEqual([expect.objectContaining({ hsn: '9971', rate: 10000, taxPercent: 18, quantity: 1 })]);
+    expect(bills[1].data.client.gstin).toBe('');
+    expect(bills[1].data.totals).toMatchObject({ taxableAmount: 5000, cgst: 450, sgst: 450, igst: 0 });
+    expect(bills[1].data.details.placeOfSupply).toBe('Tamil Nadu');
+  });
+  it('exempt income lands in GSTR-1 Table 8 and 3.1(c) through the bills-of-supply table', () => {
+    const r = nilExemptSummary(bills, { isInter: () => false, split: (it) => ({ taxable: it.rate * it.quantity }) });
+    expect(r.inv).toEqual([{ sply_ty: 'INTRAB2C', expt_amt: 1200, nil_amt: 0, ngsup_amt: 0 }]);
+    expect(incomeAsBills([], profile)).toEqual([]);
+  });
+});
+
+// ---- P10-S4: the 180-day rule, before (credit kept for ever) → after (reversed, then re-claimed on payment) -------------
+import { itc180ForPeriod } from '../src/features/purchases/purchaseExtras';
+
+describe('GSTR-3B Table 4 (P10-S4): the 180-day rule', () => {
+  // A bill of ₹10,000 + 18% dated 1 Jan 2026 (the supplier must be paid by 30 June); credit 900 + 900.
+  const bill = (payments) => ({ id: 'b1', docType: 'bill', supplierName: 'Om', invoiceNumber: 'P-9', date: '2026-01-01', totalAmount: 11800, items: [pl(10000, 18)], payments });
+  const inMonth = (ym) => (d) => String(d).startsWith(ym);
+  const t4 = (month, purchases) => {
+    const x = itc180ForPeriod(purchases, inMonth(month));
+    return itcTable4({ purchases: purchases.filter((p) => inMonth(month)(p.date)), itc180: x.reversals.length || x.reclaims.length ? x : null });
+  };
+  const late = [{ amount: 3000, date: '2026-03-01' }, { amount: 8800, date: '2026-08-10' }];
+
+  it('before: the bill kept its full credit for ever, however long the supplier went unpaid', () => {
+    expect(before3B({ purchases: [bill(late)], expenses: [] }).oth).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+  });
+  it('after, in January: the bill still claims its credit, the rule has nothing to say yet', () => {
+    const t = t4('2026-01', [bill(late)]);
+    expect(pick(t.avl.oth)).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+    expect(t.reversed).toBe(false);
+    expect(pick(t.net)).toEqual({ igst: 0, cgst: 900, sgst: 900 });
+  });
+  it('after, in July (the first day past the deadline): credit on the unpaid ₹8,800 is reversed in 4(B)(2)', () => {
+    const t = t4('2026-07', [bill(late)]);
+    expect(pick(t.rev.oth)).toEqual({ igst: 0, cgst: 671.19, sgst: 671.19 }); // 1800 × 8800 / 11800 = 1342.37
+    expect(t.reversed).toBe(true);
+  });
+  it('after, in August: the late payment brings that credit back as Re-claimed ITC', () => {
+    const t = t4('2026-08', [bill(late)]);
+    expect(pick(t.avl.reclaim)).toEqual({ igst: 0, cgst: 671.19, sgst: 671.19 });
+    expect(pick(t.net)).toEqual({ igst: 0, cgst: 671.19, sgst: 671.19 });
+  });
+  it('nothing changes when the supplier is paid within 180 days, or for a bill with no payments recorded in a quiet month', () => {
+    const paidInTime = [{ amount: 11800, date: '2026-06-30' }];
+    expect(t4('2026-07', [bill(paidInTime)]).reversed).toBe(false);
+    expect(t4('2026-08', [bill(paidInTime)]).reversed).toBe(false);
+    expect(pick(t4('2026-07', [bill([])]).rev.oth)).toEqual({ igst: 0, cgst: 900, sgst: 900 }); // never paid: all of it
+    expect(t4('2026-05', [bill([])]).reversed).toBe(false);
+  });
+  it('an inter-state bill reverses through IGST', () => {
+    const b = { ...bill([]), interstate: true };
+    expect(pick(t4('2026-07', [b]).rev.oth)).toEqual({ igst: 1800, cgst: 0, sgst: 0 });
   });
 });

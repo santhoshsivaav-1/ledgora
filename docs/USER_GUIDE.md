@@ -522,3 +522,71 @@ Turned on with `VITE_ENABLE_SALE_INLINE_PAYMENTS=true` while in beta.
   refunded. A credit note can not return more than is left on the original invoice.
 - **Sale orders.** An order can take an advance and shows its progress (ordered, invoiced, pending).
 
+### Purchases, payments out, returns and other income
+
+- **Purchase bills.** Each line has an **ITC** box: keep *Eligible* for normal credit; pick *Ineligible §17(5)* for
+  things the law blocks (cars, food, club fees), *Blocked* or *Used for exempt supply* when the credit is not yours to
+  keep, *Capital goods* for machinery. Tick **Reverse charge** when you pay the GST yourself. Add freight or other
+  **charges** with their GST, the **TDS §194Q** % when your purchases from the supplier pass ₹50 lakh in the year,
+  and what you **paid** with the bill. If the supplier's bill number is already recorded this financial year, the app
+  asks before saving a second copy.
+- **Payment Out.** Purchase & Expense › **Payment Out** records money paid to a supplier. It pays their oldest bills
+  first, or tick *Choose amounts myself*. Enter any **discount received** and the **TDS you deducted** (pick the
+  section; the app suggests the amount once the yearly threshold is crossed). Cash above ₹10,000 to one supplier in a
+  day is flagged (section 40A(3)). Deleting a payment reopens the bills it paid.
+- **Purchase orders.** Order goods without touching stock or GST. **Receive goods** opens Add Purchase with what is
+  still pending; change the quantities for a part delivery. An advance paid with the order goes to the first bill.
+  **Cancel** stops further deliveries and keeps any advance as your advance with the supplier.
+- **Purchase return / debit note.** Pick the supplier and the bill; the lines fill with what you can still return.
+  Goods returns take stock out; a *Rate difference* only corrects the value. Choose **Adjust payable** to lower what
+  you owe on the bill, or a cash / bank refund.
+- **Expenses and other income.** An expense can be itemised and marked **ITC eligible** (untick for GST you can not
+  claim). Purchase & Expense › **Other Income** records interest, commission and rent received; tick **Exempt** for
+  income without GST.
+- **Supplier statement.** Purchase Bills › **Supplier statement** lists a supplier's bills, payments, advances and
+  returns with what you owe after each; download it as CSV.
+- **TDS register.** Payment Out › **Show TDS register** totals the TDS you deducted per supplier and section for a
+  quarter, with CSV, for your quarterly TDS return. The PAN comes from the supplier's GSTIN.
+- **Attachments and PDFs.** Attach the original bill to a purchase, the receipt to an expense or payment. Purchase
+  orders and debit notes download as PDF.
+- **Your own categories and expense items.** In Add Expense, **Manage categories and expense items**: add categories
+  (optionally under a parent, as direct or indirect costs) and items like *Office rent* with their SAC, rate and GST;
+  typing an item on an itemised expense fills those in. **Show totals by category** rolls sub-categories into their
+  parent.
+- **Other income in your returns.** Income with GST appears in GSTR-1 (B2B when you enter the payer's GSTIN, else
+  B2CS) and in GSTR-3B 3.1(a); exempt income in GSTR-1 Table 8 and 3.1(c). Enter the SAC and place of supply.
+- **ITC at risk.** If you have not paid a supplier 150 days after the bill date, the bill shows **ITC at risk (n days left)**
+  and appears in a list with a *Pay now* button. Pay within 180 days of the bill date and the credit is safe. After 180
+  days the credit on the unpaid part is reversed in GSTR-3B 4(B)(2); when you pay, it comes back as *Re-claimed ITC*.
+- **TDS payable.** Payment Out › **Show TDS payable** lists the TDS you deducted, when it is due (the 7th of the next
+  month; 30 April for March), interest if it is late (1.5% a month or part), and whether the supplier's PAN is missing
+  (TDS is then deducted at a higher rate). **Mark deposited** records the challan (serial number, 7-digit BSR code, date).
+- **GSTR-3B.** Table 4 shows reverse-charge credit in 4(A)(3), credit you can not keep reversed in 4(B)(1), debit
+  notes in 4(B)(2), and the net credit used to pay your tax. Taxable other income is added to 3.1(a), exempt other
+  income to 3.1(c).
+
+
+
+## Accounting
+
+*Accounting* in the menu is the books behind your documents: every invoice, purchase, payment and expense as balanced
+debit and credit entries. It is off until you turn it on, and your documents do not change either way.
+
+- **Ledger setup.** Step 1, *Run check*, posts nothing; it tells you how many documents there are, whether the books
+  balance, and whether every customer's and supplier's balance matches what your documents say. Step 2 turns the ledger
+  on and posts everything. From then on each new or edited document posts by itself.
+- **Chart of accounts.** The standard accounts (Cash in Hand, Accounts Receivable, Sales, GST accounts and so on) plus
+  your own. *Add Account* picks the next free code and can post an opening balance. Padlocked accounts are the standard
+  ones: you can rename them but not delete them. An account with entries is switched off, not deleted.
+- **Ledger.** Pick an account to see its entries with a running balance. When a document is edited, the old entries are
+  reversed and new ones posted; the reversed pair is hidden unless you tick *Show reversals*.
+- **Trial balance.** Every account with a balance. **✔ Balanced** means debits equal credits.
+- **Journal.** For entries that are not a sale, purchase, payment or expense (depreciation, say). Save is disabled until
+  the debit and credit totals are equal. Editing a journal reverses it and posts the new one.
+- **Verify My Data** (Utilities). Runs 13 checks (negative stock, invoice totals, payments applied for too much, number
+  gaps, bad GSTINs, missing HSN/SAC, ledger problems, ...). *Fix automatically* appears where the app can repair it.
+- **Period lock and financial years.** In Ledger setup, freeze everything on or before a date, and close a financial
+  year. Nobody can add, edit or delete a document dated in a locked period; the owner can, by giving a reason, which is
+  recorded. Reopen a year if you need to.
+- Documents made in the older screens that save to the workspace store are not in the ledger yet; see
+  `docs/ACCOUNTING.md`.

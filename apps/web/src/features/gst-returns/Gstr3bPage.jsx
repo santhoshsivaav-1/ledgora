@@ -4,7 +4,7 @@ import { billIsInterstate, computeItemTaxSplit } from './gstHelpers';
 
 // GSTR-3B: the monthly summary return. One page of GST returns (change 3.17).
 export default function Gstr3bPage({
-  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff,
+  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, supplies31a = grandTotals, exempt31c = nilExempt.total,
 }) {
   return (
     <>
@@ -28,9 +28,9 @@ export default function Gstr3bPage({
               <table className="data-table" style={{ minWidth: '600px' }}>
                 <thead><tr><th>Nature of Supplies</th><th style={{ textAlign: 'right' }}>Taxable Value</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th></tr></thead>
                 <tbody>
-                  <tr><td className="font-medium">(a) Outward taxable supplies (other than zero-rated, nil-rated and exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(grandTotals.sgst)}</td></tr>
+                  <tr><td className="font-medium">(a) Outward taxable supplies (other than zero-rated, nil-rated and exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.sgst)}</td></tr>
                   <tr><td className="font-medium">(b) Zero-rated supplies</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td></tr>
-                  <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(nilExempt.total)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{nilExempt.total > 0 ? 'Bills of supply' : 'N/A'}</td></tr>
+                  <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(exempt31c)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{exempt31c > nilExempt.total ? 'Bills of supply and exempt other income' : nilExempt.total > 0 ? 'Bills of supply' : 'N/A'}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -76,22 +76,50 @@ export default function Gstr3bPage({
             );
           })()}
 
-          {/* Table 4 — ITC */}
-          <div className="glass-panel mb-4">
-            <div className="table-header"><h3>Table 4 — Eligible ITC (from Expenses & Purchases)</h3></div>
-            <div className="table-scroll">
-              <table className="data-table" style={{ minWidth: '500px' }}>
-                <thead><tr><th>Details</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th></tr></thead>
-                <tbody>
-                  <tr><td className="font-medium">(A) ITC Available — All other ITC</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.sgst)}</td></tr>
-                  <tr className="font-bold"><td>Net ITC Available</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(itcFromExpenses.sgst)}</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <p className="field-hint" style={{ padding: '0.75rem 1.25rem' }}>
-              ITC calculated from Expense Tracker and Purchase Bills entries with GST. Verify against GSTR-2B on the GST portal for actual eligible ITC.
-            </p>
-          </div>
+          {/* Table 4 — ITC. Phase 3: reverse-charge credit in (A)(3), credit flagged ineligible reversed in (B)(1), debit
+              notes in (B)(2). The extra rows appear only when they hold something. */}
+          {(() => {
+            const row = (label, h, opts = {}) => (
+              <tr className={opts.bold ? 'font-bold' : undefined}>
+                <td className={opts.bold ? undefined : 'font-medium'}>{label}</td>
+                {['igst', 'cgst', 'sgst'].map(k => (
+                  <td key={k} style={{ textAlign: 'right' }}>{opts.minus && h[k] > 0 ? '-' : ''}{formatCurrency(h[k])}</td>
+                ))}
+              </tr>
+            );
+            const some = (h) => h && h.igst + h.cgst + h.sgst > 0;
+            const isrc = table4?.avl.isrc;
+            const oth = table4?.avl.oth || itcFromExpenses;
+            return (
+              <div className="glass-panel mb-4">
+                <div className="table-header"><h3>Table 4 — Eligible ITC (from Expenses & Purchases)</h3></div>
+                <div className="table-scroll">
+                  <table className="data-table" style={{ minWidth: '500px' }}>
+                    <thead><tr><th>Details</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th></tr></thead>
+                    <tbody>
+                      {some(isrc) && row('(A)(3) Inward supplies liable to reverse charge', isrc)}
+                      {row('(A) ITC Available — All other ITC', oth)}
+                      {some(table4?.avl.reclaim) && row('(A)(5) Re-claimed ITC — supplier paid after 180 days', table4.avl.reclaim)}
+                      {some(table4?.rev.rul) && row('(B)(1) Reversed — §17(5), blocked, exempt use', table4.rev.rul, { minus: true })}
+                      {some(table4?.rev.oth) && row('(B)(2) Reversed — debit notes and the 180-day rule', table4.rev.oth, { minus: true })}
+                      {row('Net ITC Available', itcFromExpenses, { bold: true })}
+                    </tbody>
+                  </table>
+                </div>
+                {itc180?.reversals?.length > 0 && (
+                  <div style={{ padding: '0.5rem 1.25rem' }}>
+                    <strong style={{ fontSize: '0.8rem' }}>Review — supplier not paid within 180 days (reversed above)</strong>
+                    <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.1rem', fontSize: '0.8rem' }}>
+                      {itc180.reversals.map((r) => <li key={r.billId}>{r.supplier} · bill {r.number} · unpaid {formatCurrency(r.unpaid)} · credit {formatCurrency(r.itc)}. Pay it and the credit returns as Re-claimed ITC.</li>)}
+                    </ul>
+                  </div>
+                )}
+                <p className="field-hint" style={{ padding: '0.75rem 1.25rem' }}>
+                  ITC calculated from Expense Tracker and Purchase Bills entries with GST. Credit marked ineligible on a bill line or an expense is shown in 4(A) and reversed in 4(B)(1) (CBIC Circular 170/02/2022). Verify against GSTR-2B on the GST portal for actual eligible ITC.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Table 6 — Tax Payment */}
           <div className="glass-panel mb-4">

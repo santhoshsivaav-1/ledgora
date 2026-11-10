@@ -1,8 +1,10 @@
-import { date, foreignKey, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { check, date, foreignKey, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { base, money } from './common.ts';
 import { businesses } from './business.ts';
 import { parties } from './parties.ts';
 import { invoices } from './sales.ts';
+import { purchases, purchaseOrders } from './purchases.ts';
 
 /** Money received from a party. Whatever is not allocated to an invoice stays as the party's credit. */
 export const payments = pgTable(
@@ -25,8 +27,14 @@ export const payments = pgTable(
     /** Discount allowed and TDS kept by the payer: they settle invoices alongside `amount`. */
     discountAmount: money('discount_amount').notNull().default(0),
     tdsAmount: money('tds_amount').notNull().default(0),
-    /** receipt | invoice_inline | credit_note_refund */
+    /** in: receipt | invoice_inline | credit_note_refund | debit_note_refund. out: payment | purchase_inline | po_advance */
     source: text('source').notNull().default('receipt'),
+    /** P3-S2: the TDS section we deducted under on a Payment Out (Form 26Q). */
+    tdsSection: text('tds_section'),
+    /** The purchase bill an inline Payment Out belongs to, or the debit note a refund came for. */
+    purchaseId: uuid('purchase_id'),
+    /** The purchase order an advance was paid against. */
+    purchaseOrderId: uuid('purchase_order_id'),
     /** The invoice an inline payment or refund belongs to. */
     invoiceId: uuid('invoice_id'),
     /** Receipt number (RCT series); '' for inline payments, which carry the invoice's number. */
@@ -42,6 +50,15 @@ export const payments = pgTable(
     index('payments_org_unique_id').on(t.orgId, t.id),
     index('payments_invoice_idx').on(t.orgId, t.invoiceId),
     foreignKey({ columns: [t.orgId, t.invoiceId], foreignColumns: [invoices.orgId, invoices.id] }),
+    foreignKey({
+      columns: [t.orgId, t.purchaseId],
+      foreignColumns: [purchases.orgId, purchases.id],
+    }),
+    foreignKey({
+      columns: [t.orgId, t.purchaseOrderId],
+      foreignColumns: [purchaseOrders.orgId, purchaseOrders.id],
+    }),
+    index('payments_direction_idx').on(t.orgId, t.direction),
   ],
 );
 
@@ -50,7 +67,8 @@ export const paymentAllocations = pgTable(
   {
     ...base(),
     paymentId: uuid('payment_id').notNull(),
-    invoiceId: uuid('invoice_id').notNull(),
+    /** Exactly one of invoice_id (Payment In) and purchase_id (Payment Out) is set. */
+    invoiceId: uuid('invoice_id'),
     /** Phase 3: allocation to a purchase bill. */
     purchaseId: uuid('purchase_id'),
     amount: money('amount').notNull(),
@@ -59,5 +77,14 @@ export const paymentAllocations = pgTable(
     foreignKey({ columns: [t.orgId, t.invoiceId], foreignColumns: [invoices.orgId, invoices.id] }),
     index('payment_allocations_payment_idx').on(t.orgId, t.paymentId),
     index('payment_allocations_invoice_idx').on(t.orgId, t.invoiceId),
+    foreignKey({
+      columns: [t.orgId, t.purchaseId],
+      foreignColumns: [purchases.orgId, purchases.id],
+    }),
+    index('payment_allocations_purchase_idx').on(t.orgId, t.purchaseId),
+    check(
+      'payment_allocations_one_target',
+      sql`(${t.invoiceId} is null) <> (${t.purchaseId} is null)`,
+    ),
   ],
 );

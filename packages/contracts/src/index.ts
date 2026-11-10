@@ -5,6 +5,7 @@ export * from './items.ts';
 export * from './invoices.ts';
 export * from './payments.ts';
 export * from './purchases.ts';
+export * from './ledger.ts';
 export * from './recurring.ts';
 export * from './files.ts';
 export * from './platform.ts';

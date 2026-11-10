@@ -514,12 +514,19 @@ const EXPORT_TABLES = [
   'invoiceLines',
   'payments',
   'paymentAllocations',
+  'purchaseOrders',
+  'purchaseOrderLines',
   'purchases',
   'purchaseLines',
   'expenseCategories',
+  'expenseItems',
   'expenses',
   'recurringSchedules',
   'termsTemplates',
+  'accounts',
+  'ledgerEntries',
+  'financialYears',
+  'tdsEntries',
 ] as const;
 
 async function exportAll(tx: Tx, orgId: string, deps: Deps) {

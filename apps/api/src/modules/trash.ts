@@ -11,6 +11,7 @@ import {
   type TrashEntry,
 } from '@ledgora/contracts';
 import { audit } from '../audit.ts';
+import { syncLedger } from './ledgerRules.ts';
 import { AppError } from '../errors.ts';
 import type { Registrar } from '../http.ts';
 
@@ -64,6 +65,14 @@ async function purgeOne(tx: Tx, type: keyof typeof KINDS, id: string) {
       .delete(s.stockMovements)
       .where(and(eq(s.stockMovements.refType, 'purchase'), eq(s.stockMovements.refId, id)));
     await tx.delete(s.purchaseLines).where(eq(s.purchaseLines.purchaseId, id));
+    // Phase 3: what still points at the bill. Its own payments went when it was trashed; vouchers that paid it keep
+    // the money as advance, and a debit note against it stays, no longer linked.
+    await tx.delete(s.paymentAllocations).where(eq(s.paymentAllocations.purchaseId, id));
+    await tx.update(s.payments).set({ purchaseId: null }).where(eq(s.payments.purchaseId, id));
+    await tx
+      .update(s.purchases)
+      .set({ againstPurchaseId: null })
+      .where(eq(s.purchases.againstPurchaseId, id));
   }
   if (type === 'item') await tx.delete(s.stockMovements).where(eq(s.stockMovements.itemId, id));
   const { table } = KINDS[type];
@@ -167,6 +176,9 @@ export function trashModule({ route }: Registrar) {
             and(eq(s.stockMovements.refType, 'purchase'), eq(s.stockMovements.refId, params.id)),
           );
       }
+      // Phase 4: a restored document is posted again (its postings were reversed when it was trashed).
+      if (type === 'invoice' || type === 'purchase' || type === 'expense')
+        await syncLedger(tx, orgId, type, params.id);
       await audit(tx, orgId, `${type}.restore`, type, params.id);
       return { ok: true };
     },

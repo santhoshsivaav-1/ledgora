@@ -4,6 +4,7 @@
 
 import type { Numeric, Rec } from './types.ts';
 import { finiteNonNeg, r2, sum } from './money.ts';
+import { allocatePayment, type OpenDoc } from './payments.ts';
 
 const n = (v: Numeric) => Number(v) || 0;
 const EPS = 0.005;
@@ -224,21 +225,25 @@ export function cashLimitCheck(o: { dayCashTotal?: Numeric; newCash: Numeric; li
 }
 
 /**
- * Whether a document dated `date` falls in a closed period: on or before the lock date, or in a month whose GST return
- * is marked filed (`filedMonths` as 'YYYY-MM'). The owner may override; the API records the override in the audit log.
+ * Whether a document dated `date` falls in a closed period: on or before the lock date, inside a closed financial year,
+ * or in a month whose GST return is marked filed (`filedMonths` as 'YYYY-MM'). The owner may override; the API records
+ * the override in the audit log.
  */
 export function periodLocked(o: {
   date: string;
   lockDate?: string | null;
   filedMonths?: string[] | null;
+  closedRanges?: { start: string; end: string }[] | null;
   role?: string;
 }) {
   const reason =
     o.lockDate && o.date <= o.lockDate
       ? 'lock_date'
-      : (o.filedMonths || []).includes(String(o.date).slice(0, 7))
-        ? 'filed_month'
-        : null;
+      : (o.closedRanges || []).some((r) => o.date >= r.start && o.date <= r.end)
+        ? 'closed_year'
+        : (o.filedMonths || []).includes(String(o.date).slice(0, 7))
+          ? 'filed_month'
+          : null;
   return { locked: !!reason, reason, canOverride: !!reason && o.role === 'owner' };
 }
 
@@ -273,74 +278,24 @@ export const needsEwayBill = (goodsValue: Numeric, threshold: Numeric = 50_000) 
 // ---- P2-S5 receipts -------------------------------------------------------------------------------------------------------
 
 /**
- * Applies a receipt to open invoices. What it settles is the money plus any discount allowed and TDS the payer kept
- * (`settled = amount + discount + tds`); whatever is not applied stays as the party's advance. `oldest_first` fills
- * invoices by date; `manual` takes the user's `manual` amounts (by invoice id), each capped at what is pending.
+ * Applies a receipt to open invoices: the sale side of the shared allocation engine (payments.ts `allocatePayment`).
+ * What it settles is the money plus any discount allowed and TDS the payer kept (`settled = amount + discount + tds`);
+ * whatever is not applied stays as the party's advance. `oldest_first` fills invoices by date; `manual` takes the
+ * user's `manual` amounts (by invoice id), each capped at what is pending.
  */
 export function allocateReceipt(o: {
   amount: Numeric;
   discount?: Numeric;
   tds?: Numeric;
-  invoices: { id: string; date?: string; pending: Numeric }[];
+  invoices: OpenDoc[];
   strategy?: 'oldest_first' | 'manual';
   manual?: Record<string, Numeric>;
 }) {
-  const amount = r2(finiteNonNeg(o.amount));
-  const discount = r2(finiteNonNeg(o.discount));
-  const tds = r2(finiteNonNeg(o.tds));
-  const settled = r2(amount + discount + tds);
-  const errors: string[] = [];
-  const list = [...(o.invoices || [])];
-  let allocations: { invoiceId: string; amount: number }[] = [];
-  if (o.strategy === 'manual') {
-    for (const inv of list) {
-      const want = r2(finiteNonNeg(o.manual?.[inv.id]));
-      if (want <= 0) continue;
-      if (want > r2(n(inv.pending)) + EPS)
-        errors.push(`More than is pending on ${inv.id} (₹${r2(n(inv.pending)).toFixed(2)})`);
-      allocations.push({ invoiceId: inv.id, amount: Math.min(want, r2(n(inv.pending))) });
-    }
-  } else {
-    list.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-    let left = settled;
-    for (const inv of list) {
-      const pending = r2(n(inv.pending));
-      if (left <= 0) break;
-      if (pending <= 0) continue;
-      const take = r2(Math.min(pending, left));
-      allocations.push({ invoiceId: inv.id, amount: take });
-      left = r2(left - take);
-    }
-  }
-  allocations = allocations.filter((a) => a.amount > 0);
-  const allocated = r2(sum(allocations.map((a) => a.amount)));
-  if (allocated > settled + EPS)
-    errors.push(
-      `Allocated ₹${allocated.toFixed(2)} is more than the ₹${settled.toFixed(2)} settled`,
-    );
+  const { allocations, ...rest } = allocatePayment({ ...o, direction: 'in', docs: o.invoices });
   return {
-    settled,
-    allocations,
-    allocated,
-    advance: r2(Math.max(0, settled - allocated)),
-    ok: errors.length === 0,
-    errors,
+    ...rest,
+    allocations: allocations.map((a) => ({ invoiceId: a.docId, amount: a.amount })),
   };
-}
-
-/**
- * Splits a receipt's allocations into the parts that came from money, discount and TDS, in proportion, so each
- * invoice's settled amount can be shown and reported in its three parts. Rounding remainder goes to the money part.
- */
-export function splitSettlement(
-  allocation: Numeric,
-  o: { amount: Numeric; discount?: Numeric; tds?: Numeric },
-) {
-  const settled = n(o.amount) + n(o.discount) + n(o.tds);
-  if (settled <= 0) return { money: 0, discount: 0, tds: 0 };
-  const discount = r2((n(allocation) * n(o.discount)) / settled);
-  const tds = r2((n(allocation) * n(o.tds)) / settled);
-  return { money: r2(n(allocation) - discount - tds), discount, tds };
 }
 
 // ---- P2-S6 returns and sale orders ----------------------------------------------------------------------------------------
@@ -352,6 +307,22 @@ const lineKey = (l: Rec) =>
     : `nm:${String(l.name || '')
         .trim()
         .toLowerCase()}`;
+const nameKey = (l: Rec) =>
+  `nm:${String(l.name || '')
+    .trim()
+    .toLowerCase()}`;
+const idOf = (l: Rec) => (l.itemId || l.productId || null) as string | null;
+
+/**
+ * Which of `base` lines a line refers to: the one with the same item id, else the one with the same name. A line saved
+ * with an item id (the screens attach one once the product exists) still matches a line typed by name, and the
+ * reverse, so a return or delivery is never refused just because one side carries the id.
+ */
+function sameLine<T extends { id: string | null; name: string }>(l: Rec, base: T[]) {
+  const id = idOf(l);
+  const byId = id ? base.filter((b) => b.id === id) : [];
+  return byId.length ? byId : base.filter((b) => b.name === nameKey(l));
+}
 
 /**
  * How much of each invoice line can still be returned: sold less what earlier credit notes against the invoice took
@@ -359,13 +330,16 @@ const lineKey = (l: Rec) =>
  */
 export function returnableQty(invoiceLines: Rec[], priorCreditNotes: Rec[]) {
   const left: Record<string, number> = {};
-  for (const l of invoiceLines || [])
+  const base: { key: string; id: string | null; name: string }[] = [];
+  for (const l of invoiceLines || []) {
     left[lineKey(l)] = (left[lineKey(l)] || 0) + finiteNonNeg(l.quantity);
+    base.push({ key: lineKey(l), id: idOf(l), name: nameKey(l) });
+  }
   for (const cn of priorCreditNotes || []) {
     if (!cn || cn.status === 'cancelled') continue;
     for (const l of cn.lines || cn.items || []) {
-      const k = lineKey(l);
-      if (k in left) left[k] -= finiteNonNeg(l.quantity);
+      const target = sameLine(l, base)[0];
+      if (target) left[target.key] -= finiteNonNeg(l.quantity);
     }
   }
   for (const k of Object.keys(left)) left[k] = Math.max(0, Math.round(left[k] * 1000) / 1000);
@@ -376,7 +350,9 @@ export function returnableQty(invoiceLines: Rec[], priorCreditNotes: Rec[]) {
 export function overReturns(returnLines: Rec[], returnable: Record<string, number>) {
   const want: Record<string, { name: string; qty: number }> = {};
   for (const l of returnLines || []) {
-    const w = (want[lineKey(l)] ??= { name: String(l.name || ''), qty: 0 });
+    // Keyed like `returnable`: by id, else by name when only the name is there.
+    const k = lineKey(l) in returnable || !(nameKey(l) in returnable) ? lineKey(l) : nameKey(l);
+    const w = (want[k] ??= { name: String(l.name || ''), qty: 0 });
     w.qty += finiteNonNeg(l.quantity);
   }
   return Object.entries(want)
@@ -393,37 +369,62 @@ export const RETURN_REASONS = [
 ] as const;
 
 /**
- * Per line of a sale order: ordered, invoiced so far (by the invoices converted from it, cancelled ones skipped) and
- * pending. The order's status follows: Open (nothing invoiced), Partially invoiced, Closed (all invoiced) or Cancelled.
+ * Per line of an order: ordered, fulfilled so far by the documents converted from it (cancelled ones skipped) and
+ * pending. Shared by sale orders (fulfilled = invoiced) and purchase orders (fulfilled = received on a purchase bill).
+ * `state` is none / some / all fulfilled, or cancelled; each side names those states its own way.
  */
-export function saleOrderProgress(orderLines: Rec[], invoices: Rec[], cancelled = false) {
-  const done: Record<string, number> = {};
-  for (const inv of invoices || []) {
-    if (!inv || inv.status === 'cancelled') continue;
-    for (const l of inv.lines || inv.items || [])
-      done[lineKey(l)] = (done[lineKey(l)] || 0) + finiteNonNeg(l.quantity);
+export function orderProgress(orderLines: Rec[], docs: Rec[], cancelled = false) {
+  // Every delivered line is a pool; each order line draws on the pools of its item (by id, else by name), so a
+  // quantity is never counted for two order lines.
+  const pool: { id: string | null; name: string; left: number }[] = [];
+  for (const d of docs || []) {
+    if (!d || d.status === 'cancelled') continue;
+    for (const l of d.lines || d.items || [])
+      pool.push({ id: idOf(l), name: nameKey(l), left: finiteNonNeg(l.quantity) });
   }
   const lines = (orderLines || []).map((l) => {
-    const k = lineKey(l);
     const ordered = finiteNonNeg(l.quantity);
-    const invoiced = Math.min(ordered, done[k] || 0);
-    done[k] = Math.max(0, (done[k] || 0) - invoiced); // a second line of the same item takes what is left
+    let fulfilled = 0;
+    for (const p of sameLine(l, pool)) {
+      const take = Math.min(p.left, ordered - fulfilled);
+      if (take <= 0) continue;
+      p.left -= take;
+      fulfilled += take;
+    }
     return {
-      key: k,
+      key: lineKey(l),
       name: l.name,
       ordered,
-      invoiced: Math.round(invoiced * 1000) / 1000,
-      pending: Math.round((ordered - invoiced) * 1000) / 1000,
+      fulfilled: Math.round(fulfilled * 1000) / 1000,
+      pending: Math.round((ordered - fulfilled) * 1000) / 1000,
     };
   });
   const ordered = sum(lines.map((l) => l.ordered));
-  const invoiced = sum(lines.map((l) => l.invoiced));
-  const status = cancelled
+  const fulfilled = sum(lines.map((l) => l.fulfilled));
+  const state = cancelled
     ? 'cancelled'
-    : invoiced <= 0
-      ? 'open'
-      : invoiced >= ordered - 1e-9
-        ? 'closed'
-        : 'partially-invoiced';
-  return { lines, status };
+    : fulfilled <= 0
+      ? 'none'
+      : fulfilled >= ordered - 1e-9
+        ? 'all'
+        : 'some';
+  return { lines, state };
+}
+
+/**
+ * A sale order's progress: per line ordered, invoiced and pending; status Open (nothing invoiced), Partially invoiced,
+ * Closed (all invoiced) or Cancelled.
+ */
+export function saleOrderProgress(orderLines: Rec[], invoices: Rec[], cancelled = false) {
+  const p = orderProgress(orderLines, invoices, cancelled);
+  const status = {
+    none: 'open',
+    some: 'partially-invoiced',
+    all: 'closed',
+    cancelled: 'cancelled',
+  }[p.state];
+  return {
+    lines: p.lines.map(({ fulfilled, ...l }) => ({ ...l, invoiced: fulfilled })),
+    status,
+  };
 }

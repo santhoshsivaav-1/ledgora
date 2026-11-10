@@ -8,10 +8,12 @@ import { PAYMENT_MODE_OPTIONS, earlierPaymentsOf, paymentSummary } from './saleE
 // Vyapar parity P2-S2: the Payment block of Add Sale. Credit / Cash sale type, up to six payment rows (mode,
 // reference, cheque date, amount), received and balance underneath. Payments recorded elsewhere (a receipt, the
 // Dashboard) show as read-only lines; the rows here are saved with the invoice. Over-paying disables Save.
+// Phase 3 reuses it on Add Purchase with direction="out": the same rows, worded as money paid.
 
 const MAX_ROWS = 6;
 
-export default function PaymentBlock({ rows, onRowsChange, saleType, onSaleTypeChange, total, payments, currency, isOrder }) {
+export default function PaymentBlock({ rows, onRowsChange, saleType, onSaleTypeChange, total, payments, currency, isOrder, direction = 'in' }) {
+  const out = direction === 'out';
   const summary = paymentSummary(rows, { total, payments });
   const earlier = earlierPaymentsOf(payments);
   const set = (i, patch) => onRowsChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -27,9 +29,9 @@ export default function PaymentBlock({ rows, onRowsChange, saleType, onSaleTypeC
   return (
     <section className="glass-panel p-6 mb-6 sale-payment-block" aria-labelledby="sale-payment-title">
       <div className="sale-block-head">
-        <h3 id="sale-payment-title" className="section-title">{isOrder ? 'Advance received' : 'Payment'}</h3>
+        <h3 id="sale-payment-title" className="section-title">{isOrder ? (out ? 'Advance paid' : 'Advance received') : 'Payment'}</h3>
         {!isOrder && (
-          <div className="sale-type-toggle" role="radiogroup" aria-label="Sale type">
+          <div className="sale-type-toggle" role="radiogroup" aria-label={out ? 'Purchase type' : 'Sale type'}>
             {['credit', 'cash'].map((t) => (
               <label key={t} className={`sale-type-opt${saleType === t ? ' active' : ''}`}>
                 <input type="radio" name="sale-type" value={t} checked={saleType === t} onChange={() => pickType(t)} />
@@ -42,7 +44,7 @@ export default function PaymentBlock({ rows, onRowsChange, saleType, onSaleTypeC
 
       {earlier.map((p, i) => (
         <div key={p.id || p.receiptNo || i} className="sale-payment-readonly">
-          Received {formatCurrency(p.amount, currency)} via {p.receiptNo || p.mode || 'payment'}
+          {out ? 'Paid' : 'Received'} {formatCurrency(p.amount, currency)} via {p.voucherNo || p.receiptNo || p.mode || 'payment'}
           {p.date ? ` on ${p.date}` : ''}
         </div>
       ))}
@@ -80,7 +82,7 @@ export default function PaymentBlock({ rows, onRowsChange, saleType, onSaleTypeC
           <Plus size={14} /> Add payment mode
         </button>
         <span className="sale-payment-totals">
-          Received <strong>{formatCurrency(summary.paid, currency)}</strong>
+          {out ? 'Paid' : 'Received'} <strong>{formatCurrency(summary.paid, currency)}</strong>
           {!isOrder && (
             <>
               {' · '}Balance <strong>{formatCurrency(summary.balance, currency)}</strong>

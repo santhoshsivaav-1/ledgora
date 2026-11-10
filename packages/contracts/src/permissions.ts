@@ -28,6 +28,12 @@ export const PERMISSIONS = [
   'file:read',
   'file:write',
   'report:read',
+  // Vyapar parity Phase 4: the books. Reading them, posting a manual journal, switching the ledger on / closing a year
+  // / locking a period, and running Verify My Data.
+  'ledger:read',
+  'journal:write',
+  'accounting:manage',
+  'verify:run',
   'business:read',
   'business:write',
   'settings:write',
@@ -81,6 +87,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'data:export',
     'audit:read',
     'team:read',
+    'journal:write',
+    'verify:run',
   ],
   salesman: [
     'invoice:read',
@@ -170,14 +178,21 @@ export function permissionFor(method: string, path: string): Permission | null {
   if (/^\/v1\/jobs/.test(path)) return null;
   if (/^\/v1\/(members|invitations)/.test(path)) return read ? 'team:read' : 'team:manage';
   if (/^\/v1\/audit/.test(path)) return 'audit:read';
+  // Vyapar parity Phase 4 / 10: the books, Verify My Data and the TDS ledger.
+  if (/^\/v1\/(accounts|ledger|financial-years)/.test(path))
+    return read ? 'ledger:read' : 'accounting:manage';
+  if (/^\/v1\/journals/.test(path)) return read ? 'ledger:read' : 'journal:write';
+  if (/^\/v1\/accounting/.test(path)) return read ? 'ledger:read' : 'accounting:manage';
+  if (/^\/v1\/verify/.test(path)) return 'verify:run';
+  if (/^\/v1\/tds/.test(path)) return read ? 'payment:read' : 'payment:write';
   const table: [RegExp, string][] = [
     [/^\/v1\/invoices/, 'invoice'],
     [/^\/v1\/(parties|party-groups)/, 'party'],
     [/^\/v1\/(items|units)/, 'item'],
     [/^\/v1\/payments/, 'payment'],
     [/^\/v1\/staff/, 'staff'],
-    [/^\/v1\/(purchases)/, 'purchase'],
-    [/^\/v1\/(expenses|expense-categories)/, 'expense'],
+    [/^\/v1\/(purchases|purchase-orders|suppliers)/, 'purchase'],
+    [/^\/v1\/(expenses|expense-categories|expense-items)/, 'expense'],
     [/^\/v1\/recurring/, 'recurring'],
     [/^\/v1\/templates/, 'template'],
     [/^\/v1\/files/, 'file'],

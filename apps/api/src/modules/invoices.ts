@@ -58,6 +58,7 @@ import {
   walkInParty,
   writeInlinePayments,
 } from './saleRules.ts';
+import { syncLedger } from './ledgerRules.ts';
 
 const {
   invoices,
@@ -524,6 +525,8 @@ export async function createInvoice(
     [row] = await tx.select().from(invoices).where(eq(invoices.id, row.id));
   }
   if (row.invoiceType === 'credit-note') await writeRefund(tx, orgId, row, input.refund);
+  // Phase 4: with the ledger on, the sale and the money taken with it are posted in this same transaction.
+  await syncLedger(tx, orgId, 'invoice', row.id);
   await audit(tx, orgId, 'invoice.create', 'invoice', row.id, {
     after: { number, total: row.total, ...(salesmanId ? { salesmanId } : {}) },
   });
@@ -708,6 +711,7 @@ export function invoicesModule({ route }: Registrar) {
         'edit',
       );
       if (row.invoiceType === 'credit-note') await writeRefund(tx, orgId, row, body.refund);
+      await syncLedger(tx, orgId, 'invoice', row.id);
       await audit(tx, orgId, 'invoice.update', 'invoice', row.id, {
         before: { total: before.total },
         after: { total: row.total },
@@ -779,6 +783,7 @@ export function invoicesModule({ route }: Registrar) {
         })
         .where(eq(invoices.id, params.id))
         .returning();
+      await syncLedger(tx, orgId, 'invoice', row.id);
       await audit(tx, orgId, 'invoice.cancel', 'invoice', row.id, {
         before: { status: before.status },
         after: { reason: body.reason, releasedPayments: allocs.length },

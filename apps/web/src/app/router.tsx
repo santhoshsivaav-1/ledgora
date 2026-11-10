@@ -29,6 +29,14 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'inventory', path: '/products', title: 'Products' },
   { id: 'expenses', path: '/expenses', title: 'Expenses' },
   { id: 'purchases', path: '/purchases', title: 'Purchases' },
+  // Vyapar parity Phase 3: the rest of the buy side.
+  { id: 'payment-out', path: '/purchases/payment-out', title: 'Payment out' },
+  { id: 'purchase-orders', path: '/purchases/orders', title: 'Purchase orders' },
+  { id: 'purchase-returns', path: '/purchases/returns', title: 'Purchase returns' },
+  { id: 'other-income', path: '/other-income', title: 'Other income' },
+  // Vyapar parity Phase 4: the books. /accounting/:tab is one screen with tabs; viewFromPath maps every tab to it.
+  { id: 'accounting', path: '/accounting', title: 'Accounting' },
+  { id: 'verify', path: '/utilities/verify', title: 'Verify My Data' },
   { id: 'recurring', path: '/recurring', title: 'Recurring' },
   { id: 'receipts', path: '/receipts', title: 'Receipts', vyaparPath: '/sales/payment-in' },
   { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },
@@ -57,6 +65,7 @@ const matches = (path: string, clean: string) => new RegExp(`^${path.replace(/:[
 export function viewFromPath(pathname: string) {
   const clean = pathname.replace(/\/+$/, '') || '/';
   if (clean.startsWith('/gst-returns')) return 'filing'; // GST returns has one address per page
+  if (clean.startsWith('/accounting')) return 'accounting'; // the books have one address per tab
   for (const r of VIEW_ROUTES) {
     if (matches(r.path, clean) || (r.vyaparPath && matches(r.vyaparPath, clean))) return r.id;
   }

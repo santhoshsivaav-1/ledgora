@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, ChevronRight, AlertTriangle, BookOpen, BarChart3 } from 'lucide-react';
-import { getAllBills, getAllExpenses, getAllPurchases, getProfile } from '../../lib/data';
+import { itc180ForPeriod } from '../purchases/purchaseExtras';
+import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getProfile } from '../../lib/data';
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
-import { nilExemptSummary, exportSection, withChargeLines } from './gstReturnTables';
+import { nilExemptSummary, exportSection, withChargeLines, itcTable4, incomeAsBills, isPurchaseBill, isDebitNote } from './gstReturnTables';
 import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
@@ -21,6 +22,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   const [cancelledBills, setCancelledBills] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  // Vyapar parity Phase 3: debit notes reverse credit (4(B)(2)).
+  const [debitNotes, setDebitNotes] = useState([]);
   const [profile, setProfile] = useState({});
   const [filterMode, setFilterMode] = useState('month');
   const [fyFilter, setFyFilter] = useState('');
@@ -78,14 +81,24 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       // business's invoices here would misstate the return being filed.
       // v1.10.67 (#66 item 12) — a cancelled invoice is not reported.
       // Additional charges (P2-S3) become lines here, once, so every table below reports them.
-      setBills((b || []).filter(bill => belongsToProfile(bill, p) && !isCancelledBill(bill)).map(withChargeLines));
+      // Other income that is a supply (P3-S6) joins as bills, so GSTR-1 (B2B, B2CS, HSN, Table 8) and GSTR-3B 3.1 report it.
+      let income = [];
+      try { income = (await getAllOtherIncome() || []).filter(r => belongsToProfile(r, p)); } catch { /* older servers */ }
+      setBills([
+        ...(b || []).filter(bill => belongsToProfile(bill, p) && !isCancelledBill(bill)).map(withChargeLines),
+        ...incomeAsBills(income, p || {}),
+      ]);
       setCancelledBills((b || []).filter(bill => belongsToProfile(bill, p) && isCancelledBill(bill)));
       // v1.10.66 (#64) — and only its own expenses and purchases. Left
       // unfiltered, GSTR-3B Table 4 claimed input tax credit on purchases made
       // by a different GSTIN.
       setExpenses((e || []).filter(r => belongsToProfile(r, p))); setProfile(p || {});
       // Purchases endpoint may not exist on older server versions
-      try { const pur = await getAllPurchases(); setPurchases((pur || []).filter(r => belongsToProfile(r, p))); } catch { /* ignore — older servers don't have this endpoint */ }
+      try {
+        const docs = (await getAllPurchaseDocs() || []).filter(r => belongsToProfile(r, p));
+        setPurchases(docs.filter(isPurchaseBill));
+        setDebitNotes(docs.filter(isDebitNote));
+      } catch { /* ignore — older servers don't have this endpoint */ }
     } catch { toast('Failed to load data', 'error'); }
   };
 
@@ -345,43 +358,37 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
     isInter: billIsInterstate,
     split: (item, bill) => computeItemTaxSplit(item, billIsInterstate(bill), !!bill.data?.taxInclusive, false),
   });
-  const outputTax = { cgst: grandTotals.cgst, sgst: grandTotals.sgst, igst: grandTotals.igst + exportTotals.igst };
-  // ITC from expenses — P1 #15 fix: route to IGST when the expense is
-  // interstate (vendor charged IGST, e.g. AWS / Google / Adobe from an
-  // out-of-state office). Was unconditionally splitting 50/50 into
-  // CGST/SGST → mis-routed ITC in GSTR-3B Table 4(A). Legacy expense
-  // records without the field default to intrastate (safest — preserves
-  // pre-v1.6.8 behaviour so no book values shift silently).
-  const itcFromExpensesOnly = filteredExpenses.reduce((acc, e) => {
-    const gst = e.gstAmount || 0;
-    if (e.interstate) {
-      return { cgst: acc.cgst, sgst: acc.sgst, igst: acc.igst + gst };
-    }
-    const half = Math.round((gst / 2) * 100) / 100;
-    return { cgst: acc.cgst + half, sgst: acc.sgst + (gst - half), igst: acc.igst };
-  }, { cgst: 0, sgst: 0, igst: 0 });
   // ITC from purchase bills
   const filteredPurchases = purchases.filter(p => filterByPeriod(p.date));
-  // ITC from purchases — route to IGST when the purchase is interstate (supplier charged IGST),
-  // otherwise split CGST/SGST. Without this, an interstate purchase incorrectly added its tax
-  // to CGST+SGST in the GSTR-3B Table 4(A).
-  const itcFromPurchases = filteredPurchases.reduce((acc, p) => {
-    const tax = p.totalTax || purchaseBookTotals(p).tax;
-    if (p.interstate) {
-      return { cgst: acc.cgst, sgst: acc.sgst, igst: acc.igst + tax };
-    }
-    const half = Math.round((tax / 2) * 100) / 100;
-    return { cgst: acc.cgst + half, sgst: acc.sgst + (tax - half), igst: acc.igst };
-  }, { cgst: 0, sgst: 0, igst: 0 });
+  const filteredDebitNotes = debitNotes.filter(p => filterByPeriod(p.date));
+  // Table 4 (Vyapar parity Phase 3, gstReturnTables.itcTable4): 4(A)(3) reverse charge, 4(A)(5) everything else,
+  // 4(B)(1) credit flagged ineligible on the bill or the expense, 4(B)(2) debit notes. Interstate purchases and expenses
+  // go to IGST, the rest is split CGST/SGST (P1 #15). Purchases and expenses without the new flags are read exactly as
+  // before, so the net below is what Table 4(A) showed until now.
+  // P10-S4: bills whose supplier is still unpaid 180 days after the invoice reverse their credit here (4(B)(2)); credit
+  // comes back as "Re-claimed ITC" in the period the supplier is paid. A period with neither is read exactly as before.
+  const itc180 = itc180ForPeriod(purchases, filterByPeriod);
+  const table4 = itcTable4({
+    purchases: [...filteredPurchases, ...filteredDebitNotes],
+    expenses: filteredExpenses,
+    itc180: itc180.reversals.length || itc180.reclaims.length ? itc180 : null,
+  });
   // Compensation cess paid on purchases is input tax credit too (GSTR-3B
   // Table 4(A) csamt); it was always reported as 0.
-  const itcCessFromPurchases = filteredPurchases.reduce((s, p) => s + purchaseBookTotals(p).cess, 0);
-  // Combined ITC
-  const itcFromExpenses = {
-    cgst: itcFromExpensesOnly.cgst + itcFromPurchases.cgst,
-    sgst: itcFromExpensesOnly.sgst + itcFromPurchases.sgst,
-    igst: itcFromExpensesOnly.igst + itcFromPurchases.igst,
+  const itcCessFromPurchases = table4.avl.oth.cess;
+  // Net ITC: what the set-off uses.
+  const itcFromExpenses = { cgst: table4.net.cgst, sgst: table4.net.sgst, igst: table4.net.igst };
+  const itcAvailable4A = {
+    igst: table4.avl.isrc.igst + table4.avl.oth.igst,
+    cgst: table4.avl.isrc.cgst + table4.avl.oth.cgst,
+    sgst: table4.avl.isrc.sgst + table4.avl.oth.sgst,
   };
+  // Other income that is a supply (P3-S6) is already among the bills (incomeAsBills), so 3.1(a) and 3.1(c) are the
+  // bills' figures.
+  const supplies31a = grandTotals;
+  const exempt31c = nilExempt.total;
+  // Output tax: 3.1(a) (sales and taxable other income) plus the IGST on exports.
+  const outputTax = { cgst: supplies31a.cgst, sgst: supplies31a.sgst, igst: supplies31a.igst + exportTotals.igst };
   // v1.10.76 (#81) - credit set off across heads in the legal order (see setOffITC).
   const setOff = setOffITC(outputTax, itcFromExpenses);
   const netTax = setOff.payable;
@@ -621,8 +628,15 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
 
   const exportGSTR3B = () => {
     downloadCSV('GSTR3B_Summary.csv', ['Description', 'Taxable Value', 'IGST', 'CGST', 'SGST', 'Total'], [
-      ['3.1(a) Outward taxable supplies', grandTotals.taxable.toFixed(2), grandTotals.igst.toFixed(2), grandTotals.cgst.toFixed(2), grandTotals.sgst.toFixed(2), (grandTotals.igst + grandTotals.cgst + grandTotals.sgst).toFixed(2)],
-      ['4(A) ITC Available', '', itcFromExpenses.igst.toFixed(2), itcFromExpenses.cgst.toFixed(2), itcFromExpenses.sgst.toFixed(2), (itcFromExpenses.igst + itcFromExpenses.cgst + itcFromExpenses.sgst).toFixed(2)],
+      ['3.1(a) Outward taxable supplies', supplies31a.taxable.toFixed(2), supplies31a.igst.toFixed(2), supplies31a.cgst.toFixed(2), supplies31a.sgst.toFixed(2), (supplies31a.igst + supplies31a.cgst + supplies31a.sgst).toFixed(2)],
+      ['4(A) ITC Available', '', itcAvailable4A.igst.toFixed(2), itcAvailable4A.cgst.toFixed(2), itcAvailable4A.sgst.toFixed(2), (itcAvailable4A.igst + itcAvailable4A.cgst + itcAvailable4A.sgst).toFixed(2)],
+      // Phase 3: reversals and the net, only when there are any, so a return without them exports as before.
+      ...(table4.reversed ? [
+        ['4(B)(1) ITC Reversed - rules 38/42/43, section 17(5)', '', table4.rev.rul.igst.toFixed(2), table4.rev.rul.cgst.toFixed(2), table4.rev.rul.sgst.toFixed(2), (table4.rev.rul.igst + table4.rev.rul.cgst + table4.rev.rul.sgst).toFixed(2)],
+        ['4(A)(5) Re-claimed ITC (180-day rule)', '', table4.avl.reclaim.igst.toFixed(2), table4.avl.reclaim.cgst.toFixed(2), table4.avl.reclaim.sgst.toFixed(2), (table4.avl.reclaim.igst + table4.avl.reclaim.cgst + table4.avl.reclaim.sgst).toFixed(2)],
+        ['4(B)(2) ITC Reversed - others (debit notes, 180-day rule)', '', table4.rev.oth.igst.toFixed(2), table4.rev.oth.cgst.toFixed(2), table4.rev.oth.sgst.toFixed(2), (table4.rev.oth.igst + table4.rev.oth.cgst + table4.rev.oth.sgst).toFixed(2)],
+        ['4(C) Net ITC Available', '', itcFromExpenses.igst.toFixed(2), itcFromExpenses.cgst.toFixed(2), itcFromExpenses.sgst.toFixed(2), (itcFromExpenses.igst + itcFromExpenses.cgst + itcFromExpenses.sgst).toFixed(2)],
+      ] : []),
       ['6.1 ITC utilised', '', setOff.used.igst.toFixed(2), setOff.used.cgst.toFixed(2), setOff.used.sgst.toFixed(2), (setOff.used.igst + setOff.used.cgst + setOff.used.sgst).toFixed(2)],
       ['6.1 Tax Payable in cash', '', netTax.igst.toFixed(2), netTax.cgst.toFixed(2), netTax.sgst.toFixed(2), (netTax.igst + netTax.cgst + netTax.sgst).toFixed(2)],
       ['ITC carried forward', '', itcCarry.igst.toFixed(2), itcCarry.cgst.toFixed(2), itcCarry.sgst.toFixed(2), (itcCarry.igst + itcCarry.cgst + itcCarry.sgst).toFixed(2)],
@@ -634,7 +648,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // Matches the schema accepted by https://services.gst.gov.in/services/auth/dashboard
   // Upload via: GST portal → Returns → GSTR-3B → Prepare Offline → Upload JSON
   const exportGSTR3BJSON = () => {
-    if (filteredBills.length === 0 && filteredExpenses.length === 0 && nilExempt.total === 0) {
+    if (filteredBills.length === 0 && filteredExpenses.length === 0 && nilExempt.total === 0 && exempt31c === 0 && supplies31a.taxable === 0) {
       toast('No data to export for this period', 'warning');
       return;
     }
@@ -650,15 +664,15 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         // v1.10.31 — GST-C3: cess populated (was hardcoded 0 → GSTR-1 emitted
         // cess but GSTR-3B did not → Section 61 mismatch notice for
         // tobacco / coal / aerated / motor-vehicle sellers).
-        txval: round2(grandTotals.taxable),
-        iamt: round2(grandTotals.igst),
-        camt: round2(grandTotals.cgst),
-        samt: round2(grandTotals.sgst),
-        csamt: round2(grandTotals.cess),
+        txval: round2(supplies31a.taxable),
+        iamt: round2(supplies31a.igst),
+        camt: round2(supplies31a.cgst),
+        samt: round2(supplies31a.sgst),
+        csamt: round2(supplies31a.cess),
       },
       // v1.10.66 (#61) — exports, kept out of osup_det above.
       osup_zero: { txval: round2(exportTotals.taxable), iamt: round2(exportTotals.igst), csamt: round2(exportTotals.cess) },
-      osup_nil_exmp: { txval: nilExempt.total },
+      osup_nil_exmp: { txval: exempt31c },
       // v1.10.31 — GST-M10: RCM inward supplies populated from purchases
       // flagged as reverse-charge (was hardcoded 0 → self-remit RCM liability
       // never reported → interest u/s 50).
@@ -686,15 +700,25 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       itc_avl: [
         { ty: 'IMPG', iamt: 0, camt: 0, samt: 0, csamt: 0 },
         { ty: 'IMPS', iamt: 0, camt: 0, samt: 0, csamt: 0 },
-        { ty: 'ISRC', iamt: 0, camt: 0, samt: 0, csamt: 0 },
+        // Phase 3: credit on reverse-charge purchases, 4(A)(3).
+        { ty: 'ISRC', iamt: round2(table4.avl.isrc.igst), camt: round2(table4.avl.isrc.cgst), samt: round2(table4.avl.isrc.sgst), csamt: round2(table4.avl.isrc.cess) },
         { ty: 'ISD',  iamt: 0, camt: 0, samt: 0, csamt: 0 },
         { ty: 'OTH',
-          iamt: round2(itcFromExpenses.igst),
-          camt: round2(itcFromExpenses.cgst),
-          samt: round2(itcFromExpenses.sgst),
+          iamt: round2(table4.avl.oth.igst),
+          camt: round2(table4.avl.oth.cgst),
+          samt: round2(table4.avl.oth.sgst),
           csamt: round2(itcCessFromPurchases),
         },
       ],
+      // Phase 3: 4(B) reversals and 4(C) net, present only when something is reversed, so a return without
+      // reversals exports byte-for-byte as before.
+      ...(table4.reversed ? {
+        itc_rev: [
+          { ty: 'RUL', iamt: round2(table4.rev.rul.igst), camt: round2(table4.rev.rul.cgst), samt: round2(table4.rev.rul.sgst), csamt: round2(table4.rev.rul.cess) },
+          { ty: 'OTH', iamt: round2(table4.rev.oth.igst), camt: round2(table4.rev.oth.cgst), samt: round2(table4.rev.oth.sgst), csamt: round2(table4.rev.oth.cess) },
+        ],
+        itc_net: { iamt: round2(table4.net.igst), camt: round2(table4.net.cgst), samt: round2(table4.net.sgst), csamt: round2(table4.net.cess) },
+      } : {}),
       itc_inelg: [
         { ty: 'RUL', iamt: 0, camt: 0, samt: 0, csamt: 0 },
         { ty: 'OTH', iamt: 0, camt: 0, samt: 0, csamt: 0 },
@@ -1182,6 +1206,10 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         hasCarry={hasCarry}
         itcCarry={itcCarry}
         itcFromExpenses={itcFromExpenses}
+        table4={table4}
+        itc180={itc180}
+        supplies31a={supplies31a}
+        exempt31c={exempt31c}
         markFiled={markFiled}
         netPayable={netPayable}
         netTax={netTax}

@@ -11,6 +11,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The ledger (Vyapar parity Phase 4), plus the 180-day ITC rule and the TDS ledger (Phase 10).** Off until a business
+  turns it on (*Accounting › Ledger setup*); with it off nothing is written and the app behaves as before. See
+  `docs/ACCOUNTING.md`.
+  - **Posting engine** (`tax-engine/posting.ts`): pure rules for sales, credit notes, purchases, debit notes, payments in and
+    out, expenses and other income, plus the Phase 5 documents (transfers, loans, cheques, adjustments, openings) and
+    manual journals. 500 random documents are tested to balance.
+  - **Append-only books** (migration `0011_ledger_foundation.sql`): tables `accounts`, `ledger_entries`, `financial_years`,
+    `tds_entries` with row-level security. The database refuses an entry with both sides and any voucher whose debits and
+    credits differ, and the API's role cannot update or delete a ledger row. A correction is a reversal plus a new posting.
+  - **Wired into the API**: invoices, purchases, payments, expenses and Trash restore post in the same transaction as the
+    document (`ledgerRules.ts`). New: `PUT /v1/purchases/:id` (edit a bill or debit note; lines, stock, payments and
+    postings are redone).
+  - **Accounting screens**: Ledger setup (check, then enable, with party balances compared to the documents), Chart of
+    accounts (add with an opening balance), an account's Ledger with a running balance, Trial balance, Journal vouchers
+    (Save only when debits equal credits), Verify My Data (13 checks, with automatic fixes), and financial years.
+  - **Period lock** in every module: a lock date, a closed financial year or a filed GST month refuses the write; the
+    owner can override with a reason, which is audited.
+  - **Backfill** (`POST /v1/accounting/backfill`): a dry run that is exactly what the real run would do; turns the ledger
+    on only when the trial balance balances and every party's ledger balance matches the documents. Posts party opening
+    balances.
+  - **ITC 180-day rule**: bills whose supplier is unpaid 150+ days show "ITC at risk (n days left)" with a Pay now list;
+    past 180 days the credit is reversed in GSTR-3B 4(B)(2) (with a Review list) and comes back as Re-claimed ITC in
+    4(A)(5) when the supplier is paid. `GET /v1/purchases/itc-at-risk`.
+  - **TDS payable**: every Payment Out with TDS and every §194Q bill, with due date, overdue flag and §201(1A) interest,
+    a missing-PAN flag, challan entry (BSR code, serial, date; posts Dr TDS Payable / Cr Bank), CSV. `GET /v1/tds`,
+    `POST /v1/tds/:id/deposit`.
+  - New permissions: `ledger:read`, `journal:write`, `accounting:manage`, `verify:run`. Menu: Accounting; Utilities › Verify
+    My Data.
+  - Browser run `apps/web/scripts/ledger-e2e.mjs`.
+  - The ledger holds what the typed API tables hold; the web screens still save workspace documents (see the limits in
+    `docs/ACCOUNTING.md`).
+
+- **Purchase side (Vyapar parity Phase 3).** No feature flag: GSTR-3B for purchases and expenses recorded before this
+  release is unchanged to the paisa (fixtures in `apps/web/test/gstReturnTables.test.js`).
+  - **One allocation engine for both sides**: `allocatePayment` in `tax-engine/payments.ts` applies Payment In to
+    invoices and Payment Out to purchase bills with the same maths (`allocateReceipt` is now its sale-side wrapper).
+    Order progress is shared too (`orderProgress`, used by sale and purchase orders).
+  - **Purchase bills** (P3-S1): our reference `PUR-n`, due date, place of supply, reverse charge, an **ITC** status per
+    line (eligible, capital goods, ineligible §17(5), blocked, used for exempt supply), additional charges, §194Q TDS,
+    payments made with the bill, and a warning when the supplier's bill number is already on another bill this
+    financial year (`409 duplicate_bill`, `allowDuplicate` to save anyway; `GET /v1/purchases/duplicate-check`).
+    Stock comes in at landed cost (charges spread by value, lost credit added). API: `itc` buckets on every purchase.
+  - **Payment Out** (P3-S2): `POST /v1/payments` with `direction: 'out'` (numbered `PAY-n`) settles purchase bills,
+    oldest first or by hand; discount received and **TDS deducted by us** (`tdsSection` 194C/J/H/I/Q/A) settle like
+    money. `tdsCalc` suggests the TDS with yearly thresholds and catch-up. §40A(3) cash warning on the screen.
+    Deleting a payment reopens the bills. `GET /v1/suppliers/:id/statement` = bills − payments − debit notes.
+  - **Purchase orders** (P3-S3): `/v1/purchase-orders` (numbered `PO-n`, advance as a Payment Out, cancel, delete when
+    nothing was received) and `POST /v1/purchase-orders/:id/convert` for part deliveries; receiving more than is
+    pending is `422 over_conversion`. No stock, ledger or GST effect.
+  - **Debit notes / purchase returns** (P3-S4): `docType: 'debit-note'` (`DN-n`) against a bill, reasons purchase
+    return / rate difference / quality / other, refund by adjusting the payable or in cash / bank. Can not return more
+    than is left (`GET /v1/purchases/:id/returnable`, `422 over_return`). Goods returns take stock out.
+  - **Expenses** (P3-S5): `EXP-n`, payee party, itemised lines, ITC eligible switch, paid now / on credit; categories
+    form a tree with a P&L kind (`direct` / `indirect`); expense items (`/v1/expense-items`) keep SAC and GST rate.
+  - **Other income** (P3-S6): the expenses record with `kind: 'income'` (`INC-n`); income categories (Interest
+    received, Commission, Rent received, Discount received, Misc) are added on first use.
+  - **GSTR-3B**: Table 4 now shows 4(A)(3) reverse-charge credit, 4(B)(1) credit reversed for §17(5) / blocked /
+    exempt use (and expenses marked not ITC-eligible), 4(B)(2) debit notes, and the net used for set-off. Charges on
+    purchase bills are credit. Taxable other income joins 3.1(a), exempt other income 3.1(c). The JSON gains
+    `itc_rev` / `itc_net` only when something is reversed.
+  - **Other income in GSTR-1**: income with GST is reported as a tax invoice (B2B / B2CS, HSN by its SAC), exempt
+    income in Table 8; the income form takes a SAC and place of supply.
+  - **Supplier statement**, **TDS register** (deductee- and section-wise, by quarter, CSV), **attachments** on purchase
+    bills, expenses and Payment Out, **PDFs** of purchase orders and debit notes, and **expense categories and items**
+    (a category tree with direct / indirect placement, items that fill SAC, rate and GST on itemised lines).
+  - Browser run `apps/web/scripts/purchase-e2e.mjs` (PO → part delivery → debit note → Payment Out with TDS →
+    GSTR-3B). Fixed on the way: a Payment Out preview ignoring an order advance already applied; lines with a product
+    id not matching lines typed by name; a refunded debit note understating the supplier balance.
+  - Web: Purchase & Expense › **Payment Out**, **Purchase Order**, **Purchase Return / Debit Note** and **Other
+    Income** (new menu); the Purchase Bills form gains the P3-S1 fields, reusing the Phase 2 charges and payment
+    blocks. Purchase orders and debit notes are kept with purchases (`docType`), Payment Out with receipts
+    (`direction: 'out'`), other income with expenses (`kind: 'income'`); existing screens read exactly what they read
+    before.
+  - Migration `0010_purchase_side.sql`: tables `purchase_orders`, `purchase_order_lines`, `expense_items` (row-level
+    security); new columns on `purchases`, `purchase_lines` (`itc_status`, `landed_cost`), `payments` (`tds_section`,
+    `purchase_id`, `purchase_order_id`), `expenses`, `expense_categories`; `payment_allocations.invoice_id` may be null
+    when the allocation is to a purchase bill (a check keeps exactly one target).
+
 - **Sale enhancements (Vyapar parity Phase 2).** API, tax engine and database ship on; the web screens are behind
   `VITE_ENABLE_SALE_INLINE_PAYMENTS=true` (off by default, so the app is unchanged until it is turned on).
   - **Salesman** (P2-S1): `GET/POST/PATCH/DELETE /v1/staff`, `GET /v1/staff/:id/performance?from&to&basis`

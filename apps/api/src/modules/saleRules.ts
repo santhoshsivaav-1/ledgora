@@ -18,8 +18,16 @@ import { audit } from '../audit.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { OrgContext } from '../middleware/context.ts';
 
-const { invoices, payments, paymentAllocations, parties, staff, businessSettings, stockMovements } =
-  schema;
+const {
+  invoices,
+  payments,
+  paymentAllocations,
+  parties,
+  staff,
+  businessSettings,
+  stockMovements,
+  financialYears,
+} = schema;
 
 type InvoiceRow = typeof invoices.$inferSelect;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -61,6 +69,10 @@ export interface TransactionSettings {
   commissionBasis?: 'sale' | 'collection';
   /** §269ST limit; default ₹2,00,000. */
   cashLimit?: number;
+  /** Phase 4: when on, a filed GST month no longer locks the books (the lock date and closed years still do). */
+  allowEditAfterGstFiled?: boolean;
+  /** Phase 4: financial years marked closed; writes dated in them are refused. */
+  closedRanges?: { start: string; end: string }[];
 }
 
 export async function transactionSettings(
@@ -75,7 +87,19 @@ export async function transactionSettings(
     transaction?: TransactionSettings;
     filedMonths?: string[];
   };
-  return { filedMonths: prefs.filedMonths, ...(prefs.transaction ?? {}) };
+  const t = { filedMonths: prefs.filedMonths, ...(prefs.transaction ?? {}) };
+  if (t.allowEditAfterGstFiled) t.filedMonths = [];
+  const closed = await tx
+    .select({ start: financialYears.startDate, end: financialYears.endDate })
+    .from(financialYears)
+    .where(
+      and(
+        eq(financialYears.businessId, businessId),
+        eq(financialYears.status, 'closed'),
+        isNull(financialYears.deletedAt),
+      ),
+    );
+  return { ...t, closedRanges: closed };
 }
 
 // ---- P2-S1 salesman scope -------------------------------------------------------------------------------------------------
@@ -449,6 +473,47 @@ async function override(
   return true;
 }
 
+const periodLockedError = (
+  lock: { reason: string | null; canOverride: boolean },
+  settings: TransactionSettings,
+) =>
+  new AppError(
+    'period_locked',
+    lock.reason === 'filed_month'
+      ? 'The GST return for this month is filed. Only the owner can save into it, with a reason.'
+      : lock.reason === 'closed_year'
+        ? 'This financial year is closed. Only the owner can save into it, with a reason.'
+        : `Books are locked up to ${settings.lockDate}. Only the owner can save into a locked period, with a reason.`,
+    { reason: lock.reason, lockDate: settings.lockDate ?? null, canOverride: lock.canOverride },
+  );
+
+/**
+ * The period lock for any write dated `date`, in any module (P4-S6): the lock date, a closed financial year, or a
+ * filed GST month. The owner may save into it with a reason (header `x-override-reason`); that is audited.
+ */
+export async function guardPeriod(
+  tx: Tx,
+  orgId: string,
+  auth: OrgContext,
+  businessId: string,
+  date: string | null | undefined,
+  reason?: string | null,
+) {
+  if (!date) return;
+  const settings = await transactionSettings(tx, businessId);
+  const lock = periodLocked({
+    date,
+    lockDate: settings.lockDate,
+    filedMonths: settings.filedMonths,
+    closedRanges: settings.closedRanges,
+    role: auth.role,
+  });
+  if (!lock.locked) return;
+  if (await override(tx, orgId, auth, 'period_locked', reason ?? '', { date, why: lock.reason }))
+    return;
+  throw periodLockedError(lock, settings);
+}
+
 /**
  * Runs the P2-S4 guards on a save and throws the first that stops it. Warnings that the caller has confirmed pass;
  * blocks pass only for the owner with a reason, which is audited. Every refusal carries the figures the dialog shows.
@@ -462,6 +527,7 @@ export async function runGuards(tx: Tx, orgId: string, auth: OrgContext, g: Guar
     date: g.invoiceDate,
     lockDate: settings.lockDate,
     filedMonths: settings.filedMonths,
+    closedRanges: settings.closedRanges,
     role: auth.role,
   });
   if (
@@ -471,13 +537,7 @@ export async function runGuards(tx: Tx, orgId: string, auth: OrgContext, g: Guar
       why: lock.reason,
     }))
   )
-    throw new AppError(
-      'period_locked',
-      lock.reason === 'filed_month'
-        ? 'The GST return for this month is filed. Only the owner can save into it, with a reason.'
-        : `Books are locked up to ${settings.lockDate}. Only the owner can save into a locked period, with a reason.`,
-      { reason: lock.reason, lockDate: settings.lockDate ?? null, canOverride: lock.canOverride },
-    );
+    throw periodLockedError(lock, settings);
 
   // Credit limit (sales only; what stays unpaid after the money received with the sale).
   if (g.partyId && SALE_TYPES.includes(g.invoiceType)) {
