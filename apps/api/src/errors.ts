@@ -16,6 +16,14 @@ const STATUS: Record<Code, number> = {
   already_cancelled: 409,
   not_in_trash: 404,
   unprocessable: 422,
+  // Vyapar parity Phase 2 save guards. 422 = the numbers are wrong; 409 = allowed only after the user answers
+  // (confirm, acknowledge, or owner override).
+  over_allocated: 422,
+  over_return: 422,
+  credit_limit: 409,
+  cash_limit: 409,
+  negative_stock: 409,
+  period_locked: 409,
   too_many_requests: 429,
   internal: 500,
 };

@@ -4,7 +4,15 @@
 // `split(item, bill)` is the app's per-line tax split ({ taxable, igst, cess, ... }); `isInter(bill)` and `fmtDate` come from
 // the page, so this file does not depend on them.
 
+import { billLinesWithCharges } from '@ledgora/tax-engine';
+
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// Vyapar parity P2-S3: a bill's additional charges (data.charges) are taxable supplies at their own rate and SAC, so
+// every table that works line by line (B2B, B2CS rate-wise, HSN Table 12, 3B) must see them as lines. They come in as
+// isCharge lines. A bill without charges is returned as it is, so the returns are unchanged for existing data.
+export const withChargeLines = (bill) =>
+  bill?.data?.charges?.length ? { ...bill, data: { ...bill.data, items: billLinesWithCharges(bill) } } : bill;
 
 // Table 8 rows are split by where the buyer is and whether the buyer is registered.
 export const nilSupplyType = (isInter, registered) => `${isInter ? 'INTR' : 'INTRA'}${registered ? 'B2B' : 'B2C'}`;

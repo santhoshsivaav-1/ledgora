@@ -24,6 +24,13 @@ export const ERROR_CODES = [
   'already_cancelled',
   'not_in_trash',
   'unprocessable',
+  // Vyapar parity Phase 2 save guards: each one a decision the screen answers differently.
+  'over_allocated',
+  'credit_limit',
+  'period_locked',
+  'cash_limit',
+  'negative_stock',
+  'over_return',
   'too_many_requests',
   'internal',
 ] as const;

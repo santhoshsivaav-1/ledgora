@@ -4107,13 +4107,13 @@ Copy into the PR description or keep in this file; tick as slices merge.
 - [ ] P1-S8 Stock adjust and bulk update
 
 ### Phase 2
-- [ ] P2-S1 Salesman master
-- [ ] P2-S2 Inline payments
-- [ ] P2-S3 Additional charges
-- [ ] P2-S4 Credit and cash-limit guards
-- [ ] P2-S5 Payment In upgrade
-- [ ] P2-S6 Sale return and sale order upgrades
-- [ ] P2-S7 Single-page editor with live preview
+- [x] P2-S1 Salesman master (2026-11-10)
+- [x] P2-S2 Inline payments (2026-11-10; web block behind `sale.inlinePayments`, still off by default)
+- [x] P2-S3 Additional charges (2026-11-10; 20 golden totals byte-identical)
+- [x] P2-S4 Credit and cash-limit guards (2026-11-10)
+- [x] P2-S5 Payment In upgrade (2026-11-10)
+- [ ] P2-S6 Sale return and sale order upgrades (API done 2026-11-10; web partial conversion of an order still open)
+- [ ] P2-S7 Single-page editor with live preview (layout done 2026-11-10; 300 ms / 100-line and keyboard-only acceptance not yet measured)
 
 ### Phase 3
 - [ ] P3-S1 Purchase bill upgrades

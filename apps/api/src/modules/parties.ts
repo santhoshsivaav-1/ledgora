@@ -35,6 +35,8 @@ export const toParty = (r: typeof parties.$inferSelect): Party => ({
   isSez: r.isSez,
   openingBalance: r.openingBalance,
   groupId: r.groupId,
+  creditLimit: r.creditLimit,
+  creditMode: r.creditMode as Party['creditMode'],
   extra: r.extra as Record<string, unknown>,
   ...stamps(r),
 });
@@ -54,6 +56,14 @@ async function checkGroup(tx: Tx, groupId: string | null | undefined) {
   if (!g)
     throw new AppError('unprocessable', 'Party group not found', [
       { path: 'groupId', message: 'Party group not found' },
+    ]);
+}
+
+/** P2-S4: a credit mode other than none needs a limit to check against. */
+function checkCredit(mode: string | undefined, limit: number | null | undefined) {
+  if (mode && mode !== 'none' && !(Number(limit) > 0))
+    throw new AppError('unprocessable', 'Set a credit limit above zero for this credit mode', [
+      { path: 'creditLimit', message: 'Set a credit limit above zero' },
     ]);
 }
 
@@ -118,6 +128,7 @@ export function partiesModule({ route }: Registrar) {
     status: 201,
     handler: async ({ tx, orgId, body }) => {
       await checkGroup(tx, body.groupId);
+      checkCredit(body.creditMode, body.creditLimit);
       const [row] = await tx
         .insert(parties)
         .values({ ...values(body), orgId })
@@ -142,6 +153,10 @@ export function partiesModule({ route }: Registrar) {
         .where(and(eq(parties.id, params.id), isNull(parties.deletedAt)));
       if (!before) throw notFound('Party');
       await checkGroup(tx, body.groupId);
+      checkCredit(
+        body.creditMode ?? before.creditMode,
+        body.creditLimit !== undefined ? body.creditLimit : before.creditLimit,
+      );
       const [row] = await tx
         .update(parties)
         .set({ ...values(body), updatedAt: new Date() })

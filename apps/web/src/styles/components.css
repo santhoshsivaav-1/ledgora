@@ -273,3 +273,25 @@
 .ui-gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s-4); }
 .ui-gallery-row { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
 .ui-visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Vyapar parity Phase 2: the sale editor's Payment, Additional charges and guard blocks. */
+.sale-block-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-3); }
+.sale-block-head .section-title { margin: 0; }
+.sale-type-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.sale-type-opt { padding: 4px 14px; cursor: pointer; font-size: 0.85rem; }
+.sale-type-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.sale-type-opt.active { background: var(--cta); color: #fff; font-weight: 600; }
+.sale-type-opt:focus-within { box-shadow: var(--focus-ring); }
+.sale-payment-row, .sale-charge-row { display: grid; gap: var(--s-2); align-items: end; margin-bottom: var(--s-2); }
+.sale-payment-row { grid-template-columns: 140px 150px minmax(120px, 1fr) 190px 36px; }
+.sale-charge-row { grid-template-columns: minmax(140px, 1fr) 150px 100px 110px 36px; }
+.sale-charge-row:not(:has(select)) { grid-template-columns: minmax(140px, 1fr) 150px 110px 36px; }
+.sale-cheque-date { display: flex; gap: var(--s-2); align-items: center; }
+.sale-payment-readonly { font-size: 0.85rem; color: var(--text-muted); padding: 4px 0; }
+.sale-payment-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-top: var(--s-2); }
+.sale-payment-totals { display: inline-flex; gap: var(--s-2); align-items: center; font-size: 0.9rem; }
+.sale-guard-banner { border: 1px solid var(--neg); background: var(--tint-neg, #fdecec); color: var(--text); border-radius: 8px; padding: var(--s-3); margin-bottom: var(--s-3); }
+.sale-footer-bar { position: sticky; bottom: 0; display: flex; justify-content: space-between; gap: var(--s-2); padding: var(--s-3); background: var(--card-bg, var(--surface)); border-top: 1px solid var(--border); z-index: 5; }
+@media (max-width: 720px) {
+  .sale-payment-row, .sale-charge-row, .sale-charge-row:not(:has(select)) { grid-template-columns: 1fr 1fr; }
+}

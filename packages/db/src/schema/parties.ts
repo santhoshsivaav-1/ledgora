@@ -53,6 +53,9 @@ export const parties = pgTable(
     isSez: boolean('is_sez').notNull().default(false),
     openingBalance: money('opening_balance').notNull().default(0),
     groupId: uuid('group_id'),
+    /** P2-S4 credit limit (the two P1-S2 fields Phase 2 needs). null = no limit; mode none | warn | block. */
+    creditLimit: money('credit_limit'),
+    creditMode: text('credit_mode').notNull().default('none'),
     extra: jsonb('extra').notNull().default({}),
   },
   (t) => [

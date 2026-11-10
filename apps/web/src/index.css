@@ -3516,3 +3516,246 @@ html:not([data-theme="dark"]) .mobile-topbar-btn { background: rgba(15, 23, 42, 
 .doc-step-tab.active .doc-step-num { background: rgba(255,255,255,0.25); color: #fff; }
 .doc-steps-toggle { margin-left: auto; border: none; background: transparent; color: var(--text-muted); font-family: inherit; font-size: 0.78rem; text-decoration: underline; cursor: pointer; }
 .doc-step-nav { display: flex; justify-content: space-between; gap: 0.75rem; margin: 0.25rem 0 1.5rem; }
+
+/* ========= Document canvas: sales create / edit / view =========
+   The form is laid out like the document it makes: a paper sheet on a dotted desk with the party and the number at
+   the top, items in the middle and terms at the foot. A rail on the right holds the live total, every action and an
+   outline of the sheet. The preview is a drawer over the page instead of a second column. */
+.doc-canvas {
+  --canvas-paper: var(--card-bg);
+  --canvas-ink: var(--text);
+  --canvas-rule: var(--border);
+  --canvas-accent: var(--primary);
+  --canvas-dot: rgba(15, 23, 42, 0.09);
+  --canvas-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  gap: 0;
+}
+[data-theme="dark"] .doc-canvas { --canvas-dot: rgba(148, 163, 184, 0.12); }
+
+/* ---- header ---- */
+.canvas-head {
+  position: sticky; top: 0; z-index: 20; flex-shrink: 0;
+  display: flex; align-items: center; gap: 0.9rem;
+  padding: 0.85rem 0.25rem 0.95rem; background: var(--bg);
+  border-bottom: 1px solid var(--canvas-rule);
+}
+.canvas-back {
+  display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0;
+  border: 1px solid var(--canvas-rule); border-radius: 50%; background: var(--canvas-paper); color: var(--canvas-ink); cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.canvas-back:hover { border-color: var(--canvas-accent); transform: translateX(-2px); }
+.canvas-title { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.canvas-eyebrow { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.canvas-title h1 { margin: 0; display: flex; align-items: baseline; gap: 0.6rem; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; color: var(--canvas-ink); line-height: 1.2; }
+.canvas-docno { font-family: var(--canvas-mono); font-size: 0.85rem; font-weight: 500; letter-spacing: 0; color: var(--text-muted); padding: 0.1rem 0.45rem; border: 1px dashed var(--canvas-rule); border-radius: 6px; }
+.canvas-head-spacer { flex: 1; }
+.canvas-status {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0.3rem 0.7rem; border-radius: 999px;
+  font: 600 0.72rem/1.2 inherit; font-family: inherit; white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--canvas-chip) 35%, transparent);
+  background: color-mix(in srgb, var(--canvas-chip) 12%, transparent); color: var(--canvas-chip);
+}
+.canvas-status:disabled { cursor: default; }
+.canvas-status--draft { --canvas-chip: #d97706; cursor: pointer; }
+.canvas-status--saving { --canvas-chip: #3b82f6; }
+.canvas-status--saved { --canvas-chip: #059669; }
+.canvas-status--idle { --canvas-chip: #64748b; }
+.canvas-status--locked { --canvas-chip: #7c3aed; }
+.canvas-status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.canvas-status--draft .canvas-status-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--canvas-chip) 25%, transparent); }
+.canvas-notice { margin: 0.75rem 0 0; }
+
+/* ---- desk + sheet ---- */
+.canvas-body {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.75rem;
+}
+.canvas-desk {
+  min-width: 0; overflow-y: auto; padding: 1.75rem clamp(0.5rem, 2.5vw, 2.5rem) 3rem;
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.canvas-sheet {
+  position: relative; max-width: 1060px; margin: 0 auto; counter-reset: sheetsec;
+  background: var(--canvas-paper); color: var(--canvas-ink);
+  border: 1px solid var(--canvas-rule); border-top: 5px solid var(--canvas-accent); border-radius: 4px 4px 0 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 18px 40px -18px rgba(15, 23, 42, 0.22);
+}
+/* The tear-off edge at the foot of the sheet. */
+.sheet-tear {
+  height: 12px; margin: 0 -1px -12px; position: relative; top: 1px;
+  background:
+    linear-gradient(-45deg, transparent 8px, var(--canvas-paper) 0) 0 0 / 16px 12px repeat-x,
+    linear-gradient(45deg, transparent 8px, var(--canvas-paper) 0) 0 0 / 16px 12px repeat-x;
+}
+
+/* Every panel inside the sheet drops its card and becomes a band of the paper. */
+.canvas-sheet .glass-panel {
+  background: transparent; border: 0; border-radius: 0; box-shadow: none; margin: 0;
+  padding: 1.5rem 2rem;
+}
+.canvas-sheet .sheet-sec + .sheet-sec,
+.canvas-sheet .sheet-parties,
+.canvas-sheet .sheet-items,
+.canvas-sheet .sheet-foot { border-top: 1px dashed var(--canvas-rule); }
+.canvas-sheet .sheet-sec > .glass-panel + .glass-panel { border-top: 1px dotted var(--canvas-rule); }
+
+/* Section titles read like the ledger's headings: a numbered small-caps label. The masthead keeps its own title. */
+.canvas-sheet .sheet-sec .section-title {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.canvas-sheet .sheet-sec .section-title::before {
+  counter-increment: sheetsec; content: counter(sheetsec, decimal-leading-zero);
+  font-family: var(--canvas-mono); font-size: 0.72rem; letter-spacing: 0; color: var(--canvas-accent);
+  padding: 0.12rem 0.4rem; border: 1px solid color-mix(in srgb, var(--canvas-accent) 40%, transparent); border-radius: 4px;
+}
+
+.sheet-masthead .glass-panel { padding: 1.6rem 2rem 1.25rem; background: color-mix(in srgb, var(--canvas-accent) 4%, transparent); }
+.sheet-masthead .section-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; color: var(--canvas-ink); margin-bottom: 0.25rem; }
+.sheet-masthead .type-desc { max-width: 60ch; }
+
+/* Bill-to and the document's number/dates side by side, like the head of a printed invoice. */
+.sheet-parties { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+.sheet-parties > .sheet-sec + .sheet-sec { border-top: 0; border-left: 1px dashed var(--canvas-rule); }
+.sheet-parties .grid.grid-cols-2 { gap: 0.75rem 1rem; }
+
+/* Labels on the sheet are quieter than inputs, and inputs sit on the paper as underlined fields. */
+.canvas-sheet .form-label { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.canvas-sheet .form-input {
+  border-width: 0 0 1.5px; border-radius: 0; background-color: transparent; padding-left: 0.15rem; padding-right: 0.15rem;
+  box-shadow: none;
+}
+.canvas-sheet .form-input:focus { border-color: var(--canvas-accent); box-shadow: 0 1.5px 0 0 var(--canvas-accent); background-color: color-mix(in srgb, var(--canvas-accent) 4%, transparent); }
+.canvas-sheet textarea.form-input { border-width: 1px; border-radius: 6px; padding: 0.6rem 0.7rem; }
+.canvas-sheet .line-item-row .form-input { border-width: 0 0 1px; }
+[data-theme="dark"] .canvas-sheet .form-input { background-color: transparent; }
+
+/* ---- rail ---- */
+.canvas-rail {
+  position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 84px);
+  min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1.1rem;
+  padding: 1.75rem 0.25rem 2rem 0;
+}
+.rail-total {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 0.2rem;
+  padding: 1.1rem 1.2rem 1.15rem; border-radius: 14px; color: #fff;
+  background: linear-gradient(150deg, var(--canvas-accent), color-mix(in srgb, var(--canvas-accent) 62%, #0f172a));
+  box-shadow: 0 14px 30px -16px color-mix(in srgb, var(--canvas-accent) 80%, transparent);
+}
+.rail-total::after {
+  content: ''; position: absolute; right: -28px; top: -28px; width: 110px; height: 110px; border-radius: 50%;
+  border: 18px solid rgba(255, 255, 255, 0.08);
+}
+.rail-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.85; }
+.rail-amount { font-family: var(--canvas-mono); font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; font-variant-numeric: tabular-nums; word-break: break-all; }
+.rail-sub { font-size: 0.75rem; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.rail-breakdown { margin: 0; padding: 0 0.2rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.rail-row { display: flex; justify-content: space-between; gap: 0.75rem; font-size: 0.8rem; }
+.rail-row dt { color: var(--text-muted); }
+.rail-row dd { margin: 0; font-family: var(--canvas-mono); font-variant-numeric: tabular-nums; color: var(--canvas-ink); }
+.rail-row-strong { padding-top: 0.35rem; border-top: 1px dashed var(--canvas-rule); font-weight: 700; }
+
+.rail-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.rail-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.5rem; }
+.rail-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 40px; padding: 0 0.75rem;
+  border: 1px solid var(--canvas-rule); border-radius: 10px; background: var(--canvas-paper); color: var(--canvas-ink);
+  font: 600 0.82rem/1 inherit; font-family: inherit; cursor: pointer; white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.rail-btn:hover:not(:disabled) { border-color: var(--canvas-accent); }
+.rail-btn:active:not(:disabled) { transform: translateY(1px); }
+.rail-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rail-btn-primary { min-height: 46px; font-size: 0.92rem; background: var(--canvas-ink); color: var(--canvas-paper); border-color: var(--canvas-ink); }
+.rail-btn-primary:hover:not(:disabled) { background: var(--canvas-accent); border-color: var(--canvas-accent); color: #fff; }
+[data-theme="dark"] .rail-btn-primary { background: var(--canvas-accent); border-color: var(--canvas-accent); color: #fff; }
+
+.rail-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); border: 1px solid var(--canvas-rule); border-radius: 10px; overflow: hidden; }
+.rail-icon {
+  display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.55rem 0.25rem;
+  border: 0; background: var(--canvas-paper); color: var(--canvas-ink); font: 600 0.68rem/1 inherit; font-family: inherit; cursor: pointer;
+}
+.rail-icon + .rail-icon { border-left: 1px solid var(--canvas-rule); }
+.rail-icon:hover:not(:disabled) { background: var(--bg-secondary); color: var(--canvas-accent); }
+.rail-icon:disabled { opacity: 0.5; cursor: not-allowed; }
+.rail-icon-wa svg { color: #25d366; }
+
+.rail-outline { list-style: none; margin: 0; padding: 0.35rem 0; border-top: 1px solid var(--canvas-rule); border-bottom: 1px solid var(--canvas-rule); }
+.rail-outline button {
+  width: 100%; display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.25rem; border: 0; background: transparent;
+  color: var(--text-muted); font: 500 0.82rem/1.2 inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 6px;
+}
+.rail-outline button:hover { color: var(--canvas-ink); background: var(--bg-secondary); }
+.rail-outline button.done { color: var(--canvas-ink); }
+.rail-outline-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 20px; flex-shrink: 0;
+  font-family: var(--canvas-mono); font-size: 0.66rem; border: 1px solid var(--canvas-rule); border-radius: 4px;
+}
+.rail-outline button.done .rail-outline-mark { background: var(--canvas-accent); border-color: var(--canvas-accent); color: #fff; }
+
+.rail-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.rail-tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 36px;
+  border: 1px dashed var(--canvas-rule); border-radius: 10px; background: transparent; color: var(--text-muted);
+  font: 600 0.78rem/1 inherit; font-family: inherit; cursor: pointer;
+}
+.rail-tool:hover, .rail-tool.on { border-style: solid; border-color: var(--canvas-accent); color: var(--canvas-accent); }
+.rail-tool.on { background: color-mix(in srgb, var(--canvas-accent) 8%, transparent); }
+
+/* ---- preview drawer ---- */
+.canvas-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, 0.38); animation: canvas-fade 0.18s ease; }
+.doc-canvas .preview-pane.canvas-drawer.open {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61; width: min(880px, 100vw);
+  display: flex; flex-direction: column; align-items: center; align-items: safe center; overflow: auto;
+  padding: 0 1rem 2rem; background: var(--bg); border-left: 1px solid var(--canvas-rule);
+  box-shadow: -24px 0 48px -24px rgba(15, 23, 42, 0.45); animation: canvas-slide 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.canvas-drawer-head {
+  position: sticky; top: 0; z-index: 1; align-self: stretch; display: flex; align-items: center; gap: 0.5rem;
+  margin: 0 -1rem 1rem; padding: 0.75rem 1rem; background: var(--bg); border-bottom: 1px solid var(--canvas-rule);
+}
+.canvas-drawer-title { flex: 1; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
+.canvas-zoom { display: inline-flex; align-items: center; border: 1px solid var(--canvas-rule); border-radius: 999px; overflow: hidden; background: var(--canvas-paper); }
+.canvas-zoom button { padding: 0.3rem 0.7rem; border: 0; background: transparent; color: var(--canvas-ink); font-weight: 700; cursor: pointer; }
+.canvas-zoom span { min-width: 46px; padding: 0.3rem 0.4rem; text-align: center; font-family: var(--canvas-mono); font-size: 0.72rem; border-left: 1px solid var(--canvas-rule); border-right: 1px solid var(--canvas-rule); }
+.canvas-fit { padding: 0.32rem 0.8rem; border: 1px solid var(--canvas-accent); border-radius: 999px; background: transparent; color: var(--canvas-accent); font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.canvas-drawer-close { display: inline-flex; padding: 0.35rem; border: 0; border-radius: 8px; background: transparent; color: var(--canvas-ink); cursor: pointer; }
+.canvas-drawer-close:hover { background: var(--bg-secondary); }
+@keyframes canvas-slide { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes canvas-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- narrower screens ---- */
+@media (max-width: 1280px) {
+  .sheet-parties { grid-template-columns: minmax(0, 1fr); }
+  .sheet-parties > .sheet-sec + .sheet-sec { border-left: 0; border-top: 1px dashed var(--canvas-rule); }
+}
+/* Below 1100px the rail becomes a bar pinned under the sheet: total on the left, actions beside it. */
+@media (max-width: 1100px) {
+  .canvas-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 0; }
+  .canvas-rail {
+    position: sticky; top: auto; bottom: 0; z-index: 15; max-height: none; align-self: auto; overflow: visible; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 0.6rem;
+    padding: 0.6rem 0.25rem; background: var(--bg); border-top: 1px solid var(--canvas-rule);
+  }
+  .rail-breakdown, .rail-outline { display: none; }
+  .rail-total { padding: 0.55rem 0.9rem; border-radius: 10px; min-width: 150px; }
+  .rail-amount { font-size: 1.15rem; }
+  .rail-sub { display: none; }
+  .rail-actions { flex: 1; flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .rail-btn-primary { flex: 1 1 140px; }
+  .rail-pair { flex: 1 1 200px; }
+  .rail-quick { flex: 1 1 180px; }
+  .rail-tools { flex: 0 0 auto; grid-template-columns: auto auto; }
+  .rail-tool { padding: 0 0.75rem; }
+}
+@media (max-width: 640px) {
+  .canvas-desk { padding: 1rem 0 2rem; background-image: none; }
+  .canvas-sheet { border-left: 0; border-right: 0; }
+  .canvas-sheet .glass-panel, .sheet-masthead .glass-panel { padding: 1.1rem 1rem; }
+  .sheet-masthead .section-title { font-size: 1.25rem; }
+  .canvas-title h1 { font-size: 1.05rem; flex-wrap: wrap; }
+  .canvas-status { display: none; }
+}

@@ -4,6 +4,7 @@ import { getCountryConfig, getStatesForCountry, validateTaxId, detectCountryFrom
 import { getRegionMode } from '../../lib/data';
 import { Field } from '../../components/ui/Field';
 import PartyGroupPicker from './PartyGroupPicker';
+import { FEATURES } from '../../config/featureFlags';
 
 export default function ClientModal({ show, onClose, onSave, client, isEditing, defaultCountry }) {
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
@@ -12,6 +13,8 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     name: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
     country: fallbackCountry, isSEZ: false,
     groupId: null,            // P1-S1 party group (id from /v1/party-groups)
+    creditLimit: '',          // P2-S4 credit limit; '' = none
+    creditMode: 'none',       // P2-S4 none | warn | block
     // v1.9.1 — per-client print preferences. When set, they auto-populate
     // invoiceOptions when the user creates a new invoice for this client.
     // Left blank = use app-wide defaults.
@@ -30,6 +33,8 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         email: client.email || '', phone: client.phone || '', country: client.country || fallbackCountry,
         isSEZ: !!client.isSEZ,
         groupId: client.groupId || null,
+        creditLimit: client.creditLimit ?? '',
+        creditMode: client.creditMode || 'none',
         preferredPaperSize: client.preferredPaperSize || '',
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
@@ -70,7 +75,12 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
 
   const handleSave = () => {
     if (!form.name.trim()) return;
-    onSave(form);
+    const { creditLimit, creditMode, ...rest } = form;
+    // Without the Phase 2 flag a client is saved exactly as before (no credit fields).
+    if (!FEATURES.saleInlinePayments) return onSave(rest);
+    const limit = creditLimit === '' || creditLimit == null ? null : Number(creditLimit);
+    if (creditMode !== 'none' && !(limit > 0)) return;
+    onSave({ ...rest, creditLimit: limit, creditMode });
   };
 
   return (
@@ -144,6 +154,28 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
             <label className="form-label">Phone</label>
             <input type="tel" className="form-input" value={form.phone} onChange={e => setForm(prev => ({ ...prev, phone: e.target.value }))} placeholder="+91 98765 43210" />
           </div>
+          {/* Vyapar parity P2-S4: what Save does when an invoice takes this party over its credit limit. */}
+          {FEATURES.saleInlinePayments && (
+            <>
+              <div className="form-group">
+                <label className="form-label" htmlFor="client-credit-limit">Credit limit (₹)</label>
+                <input id="client-credit-limit" type="number" min="0" step="0.01" className="form-input" value={form.creditLimit}
+                  onChange={e => setForm(prev => ({ ...prev, creditLimit: e.target.value }))} placeholder="No limit" />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="client-credit-mode">When over the limit</label>
+                <select id="client-credit-mode" className="form-input" value={form.creditMode}
+                  onChange={e => setForm(prev => ({ ...prev, creditMode: e.target.value }))}>
+                  <option value="none">Do nothing</option>
+                  <option value="warn">Warn before saving</option>
+                  <option value="block">Block the sale</option>
+                </select>
+                {form.creditMode !== 'none' && !(Number(form.creditLimit) > 0) && (
+                  <span className="ui-error" role="alert">Set a credit limit above zero</span>
+                )}
+              </div>
+            </>
+          )}
           {form.country === 'India' && (
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>

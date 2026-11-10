@@ -383,6 +383,7 @@ export default function InvoiceTypePanel({
                     ['showSubtotal', 'Subtotal row'],
                     ['showAmountWords', 'Amount in words'],
                     ['showRoundOff', 'Round-off line'],
+                    ['showChargeRows', 'Each additional charge on its own row'],
                     ['showHsnSummary', 'HSN/SAC tax summary table'],
                     ['showTaxInWords', 'Tax amount in words'],
                   ]},

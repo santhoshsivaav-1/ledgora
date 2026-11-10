@@ -31,6 +31,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'purchases', path: '/purchases', title: 'Purchases' },
   { id: 'recurring', path: '/recurring', title: 'Recurring' },
   { id: 'receipts', path: '/receipts', title: 'Receipts', vyaparPath: '/sales/payment-in' },
+  { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },
   { id: 'reports', path: '/reports', title: 'Reports' },
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },

@@ -17,7 +17,7 @@ function filesUnder(dir, exts) {
 }
 
 // Variables some component sets on itself (inline or in a scoped rule) before reading them.
-const LOCAL = /^--(ad-|pdf-|pill-color|text-muted-safe)/;
+const LOCAL = /^--(ad-|pdf-|canvas-|pill-color|text-muted-safe)/;
 
 const used = new Set();
 for (const f of filesUnder(SRC, ['.css', '.jsx', '.js', '.tsx', '.ts'])) {

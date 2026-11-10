@@ -41,6 +41,7 @@ import AppShell from './app/AppShell';
 import CommandPalette from './app/CommandPalette';
 import ShortcutsHelp from './app/ShortcutsHelp';
 import { viewFromPath, pathForView, legacyViewRedirect, canonicalPath, pathsForView, LEGACY_REDIRECTS } from './app/router';
+import { FEATURES } from './config/featureFlags';
 import { buildClassicNav, NAV, visibleNav, findNavEntry, navScreens, leafPath } from './app/navigation';
 import { useUiMode, setUiMode } from './app/uiMode';
 import VySidebar from './app/nav/VySidebar';
@@ -75,6 +76,7 @@ const ReportsView = lazy(() => import('./features/reports/ReportsView'));
 const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
 const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoices'));
 const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
+const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
 const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
@@ -931,6 +933,9 @@ function App() {
                 {pathsForView('receipts').map((path) => (
                   <Route key={path} path={path} element={<ReceiptVoucher key={businessKey} />} />
                 ))}
+                {FEATURES.saleInlinePayments && (
+                  <Route path={pathForView('salesman')} element={<SalesmenView key={businessKey} />} />
+                )}
                 <Route path="/reports" element={<ReportsView key={businessKey} />} />
                 <Route path="/gst-returns" element={<Navigate to="/gst-returns/gstr1" replace />} />
                 <Route path="/gst-returns/:tab" element={<GstReturnsPage key={businessKey} />} />

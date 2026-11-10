@@ -2,6 +2,7 @@ export * from './platform.ts';
 export * from './business.ts';
 export * from './parties.ts';
 export * from './items.ts';
+export * from './staff.ts';
 export * from './sales.ts';
 export * from './payments.ts';
 export * from './purchases.ts';

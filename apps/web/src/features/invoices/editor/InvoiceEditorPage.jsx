@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowLeft, ArrowRight, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { saveBill, deleteBill, applyStockChanges, getNextInvoiceNumber, getTermsTemplates, getAllClients, saveClient, getAllProducts, getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getAllProfiles, saveRecurring, getAllRecurring, getAllBills } from '../../../lib/data';
@@ -26,8 +26,31 @@ import { DEFAULT_OPTIONS, ACCENT_PRESETS, PDF_STYLES, fitSpacersToOnePage } from
 import { useInvoiceTotals } from './hooks/useInvoiceTotals';
 import { useInvoiceDraft, loadDraft, clearDraft } from './hooks/useInvoiceDraft';
 import { copyFor } from '../../sales/salesFlow';
+import { FEATURES } from '../../../config/featureFlags';
+import PaymentBlock from './PaymentBlock';
+import ChargeRows from './ChargeRows';
+import SalesmanPicker from './SalesmanPicker';
+import { Field, Select } from '../../../components/ui/Field';
+import { creditNoteOverReturns, inlineRowsOf, mergeInlinePayments, orderProgressFromBills, paymentSummary, saveChecks, savedCharges, takesPayment } from './saleExtras';
+
+// Vyapar parity Phase 2 (flag sale.inlinePayments): payments with the sale, additional charges, salesman, save checks,
+// credit-note / sale-order fields, single page by default with Save & New. Off = everything below behaves as before.
+const PHASE2 = FEATURES.saleInlinePayments;
+const RETURN_REASON_OPTIONS = [
+  { value: 'sales-return', label: 'Sales return' },
+  { value: 'post-sale-discount', label: 'Post-sale discount' },
+  { value: 'deficiency-in-service', label: 'Deficiency in service' },
+  { value: 'correction', label: 'Correction' },
+  { value: 'others', label: 'Others' },
+];
+const REFUND_OPTIONS = [
+  { value: 'adjust', label: 'Adjust party balance' },
+  { value: 'cash', label: 'Cash refund' },
+  { value: 'bank', label: 'Bank refund' },
+];
 
 
+// The sheet's sections, in order. The side rail lists them with a tick once each has what it needs.
 const DOC_STEPS = [
   { key: 'customer', label: 'Customer' },
   { key: 'details', label: 'Details' },
@@ -93,11 +116,16 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // that we have to see in invoice preview what we are entering". Focus
   // mode: hide the preview so the editor gets the full width during
   // heavy data entry.
+  // Document canvas: the preview is a drawer over the sheet, closed by default so the sheet has the page. Esc closes it.
   const [previewCollapsed, setPreviewCollapsed] = useState(() => {
-    try { return localStorage.getItem('fgsb_previewCollapsed') === '1'; } catch { return false; }
+    try { return localStorage.getItem('ledgora_previewDrawerOpen') !== '1'; } catch { return true; }
   });
   useEffect(() => {
-    try { localStorage.setItem('fgsb_previewCollapsed', previewCollapsed ? '1' : '0'); } catch { /* sandboxed */ }
+    try { localStorage.setItem('ledgora_previewDrawerOpen', previewCollapsed ? '0' : '1'); } catch { /* sandboxed */ }
+    if (previewCollapsed) return undefined;
+    const onEsc = (e) => { if (e.key === 'Escape') setPreviewCollapsed(true); };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
   }, [previewCollapsed]);
   const [details, setDetails] = useState(draft?.details || {
     invoiceNumber: '',
@@ -140,6 +168,16 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const [customNotes, setCustomNotes] = useState(draft?.customNotes || '');
   const [internalNote, setInternalNote] = useState(draft?.internalNote || '');
   const [extraSections, setExtraSections] = useState(draft?.extraSections || []);
+  // Phase 2 state (only read when PHASE2 is on).
+  const [charges, setCharges] = useState(draft?.charges || []);
+  const [paymentRows, setPaymentRows] = useState(draft?.paymentRows || []);
+  const [saleType, setSaleType] = useState(draft?.saleType || 'credit');
+  const [salesman, setSalesman] = useState(draft?.salesman || { salesmanId: '', salesmanName: '' });
+  const [returnInfo, setReturnInfo] = useState(draft?.returnInfo || { returnReason: 'sales-return', restock: true, refundMode: 'adjust' });
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(draft?.expectedDeliveryDate || '');
+  const guardNotes = useRef({});
+  // The invoice total for checks declared above the totals hook (validateForSave).
+  const totalRef = useRef(0);
   const [savedClients, setSavedClients] = useState([]);
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
   // v1.10.37 — Keyboard nav on client picker. Arrow keys cycle,
@@ -376,7 +414,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   }, [editingSaved]);
 
   // Debounced draft save (see hooks/useInvoiceDraft).
-  useInvoiceDraft({ invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive });
+  useInvoiceDraft({ invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive,
+    ...(PHASE2 ? { charges, paymentRows, saleType, salesman, returnInfo, expectedDeliveryDate } : {}) });
 
   // Mark initialized after first render cycle so auto-save doesn't trigger on load
   useEffect(() => {
@@ -411,6 +450,11 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // reason, so the user is told which field is missing rather than just
   // being refused.
   const validateForSave = useCallback(() => {
+    // P2-S2: over-paying or a cheque without its date stops every save, new or edited.
+    if (PHASE2 && takesPayment(invoiceType) && paymentRows.length) {
+      const pay = paymentSummary(paymentRows, { total: totalRef.current, payments: editingBill && !editingBill._isDuplicate ? editingBill.payments : [] });
+      if (!pay.ok) return pay.errors[0].message;
+    }
     if (editingBill) return null; // an existing bill is already a real record
     if (!client?.name?.trim()) {
       return 'Add a client name before saving.';
@@ -422,7 +466,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       return 'Add at least one item with a quantity and rate before saving.';
     }
     return null;
-  }, [client?.name, items, editingBill]);
+  }, [client?.name, items, editingBill, invoiceType, paymentRows]);
 
   // Debounced auto-save (2s after last change), gated on meaningful content.
   //
@@ -583,6 +627,14 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       const d = editingBill.data;
       setClient(d.client);
       setItems(d.items);
+      if (PHASE2) {
+        setCharges(d.charges || []);
+        // A duplicate or conversion is a new document: it starts with no payments of its own.
+        setPaymentRows(editingBill._isDuplicate ? [] : inlineRowsOf(editingBill));
+        setSalesman({ salesmanId: d.salesmanId || '', salesmanName: d.salesmanName || '' });
+        if (d.returnInfo) setReturnInfo(d.returnInfo);
+        setExpectedDeliveryDate(d.expectedDeliveryDate || '');
+      }
       setInvoiceType(d.invoiceType || 'tax-invoice');
       if (d.customTerms !== undefined) setCustomTerms(d.customTerms);
       if (d.customNotes !== undefined) setCustomNotes(d.customNotes);
@@ -816,7 +868,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     setInvoiceOptions(prev => ({ ...prev, [key]: !invoiceOptionOn(prev, key) }));
   };
 
-  const { totals } = useInvoiceTotals({ allBillsForCredit, client, details, editingBill, items, profile, showGST, taxInclusive, invoiceOptions });
+  const { totals } = useInvoiceTotals({ allBillsForCredit, client, details, editingBill, items, profile, showGST, taxInclusive, invoiceOptions, charges: PHASE2 ? charges : undefined });
+  totalRef.current = totals.total;
 
   // v1.10.24 — Compute available client credit from prior overpayments.
   // Excludes the bill we're editing (that would double-count our own
@@ -1235,6 +1288,11 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       } catch { /* non-fatal — reconciliation pass will catch it */ }
     }
     if (creditPlan?.targetEntry) seedPayments.push(creditPlan.targetEntry);
+    // P2-S2: the Payment block's rows replace this invoice's own inline payments; other payments stay as they are.
+    if (PHASE2 && takesPayment(invoiceType)) {
+      const merged = mergeInlinePayments(seedPayments, paymentRows, { date: details.invoiceDate, invoiceNumber: finalInvoiceNumber });
+      seedPayments.splice(0, seedPayments.length, ...merged);
+    }
     const seedPaidAmount = seedPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
     // v1.10.41 — Recompute status from the merged paid amount rather
     // than trusting editingBill.status. If a payment was recorded on
@@ -1287,9 +1345,16 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive,
         // Which document this one was raised from (quotation -> sales order -> ...), shown in the lists.
         ...(sourceDoc ? { sourceDoc } : {}),
+        // Phase 2 fields, written only when used so older invoices keep their exact shape.
+        ...(PHASE2 && savedCharges(charges).length ? { charges: savedCharges(charges) } : {}),
+        ...(PHASE2 && salesman.salesmanId ? { salesmanId: salesman.salesmanId, salesmanName: salesman.salesmanName } : {}),
+        ...(PHASE2 && invoiceType === 'credit-note' ? { returnInfo } : {}),
+        ...(PHASE2 && invoiceType === 'sales-order' && expectedDeliveryDate ? { expectedDeliveryDate } : {}),
+        ...(PHASE2 && guardNotes.current.cashAcknowledgement ? { cashAcknowledgement: guardNotes.current.cashAcknowledgement } : {}),
         // A converted quotation/proforma/challan's stock moved to its invoice:
         // its own record stays empty, or a save would take the stock twice.
-        stockApplied: isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? {} : stockEffect(items, invoiceType, seedStatus) }
+        // P2-S6: a credit note with "Put returned goods back in stock" off returns no stock.
+        stockApplied: (isIssued && (serverCopy?.convertedTo || editingBill.convertedTo)) || (PHASE2 && invoiceType === 'credit-note' && returnInfo.restock === false) ? {} : stockEffect(items, invoiceType, seedStatus) }
     };
     // Editing an existing bill → always overwrite. NEW bill on second-and-
     // later save this session → also overwrite (same invoice number, would
@@ -2726,16 +2791,62 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     items.some((item) => (item.name || '').trim() && (item.quantity || 0) * (item.rate || 0) > 0),
     false,
   ];
-  // The create page works one step at a time (customer, details, items, terms), with every step still on the page
-  // underneath so nothing is lost moving between them. "Show all steps" returns to one long page, and is remembered.
-  const [step, setStep] = useState(0);
-  const [singlePage, setSinglePage] = useState(() => { try { return localStorage.getItem('ledgora_singlePageEditor') === '1'; } catch { return false; } });
-  const toggleSinglePage = () => setSinglePage((v) => { try { localStorage.setItem('ledgora_singlePageEditor', v ? '0' : '1'); } catch { /* private mode */ } return !v; });
-  const stepperRef = useRef(null);
-  const goStep = (n) => { setStep(n); stepperRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+  const jumpTo = (key) => document.getElementById(`doc-step-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   // A document opened from a sales page (or an existing one) keeps its type; only a plain "New invoice" can choose.
   const lockedType = !!initialType || !!editingBill;
   const partyLabel = copyFor(invoiceType).party;
+
+  // P2-S4: the checks Save runs first. A credit-limit warning asks to continue; a block stops the save; §269ST cash
+  // needs a typed acknowledgement, which is kept on the invoice.
+  const passSaveChecks = async () => {
+    const party = savedClients.find((c) => c.id === selectedClientId)
+      || savedClients.find((c) => (c.name || '').trim().toLowerCase() === (client.name || '').trim().toLowerCase());
+    const editingId = editingBill && !editingBill._isDuplicate ? editingBill.id : savedId.current;
+    const checks = saveChecks({
+      client: { ...client, creditLimit: party?.creditLimit, creditMode: party?.creditMode },
+      bills: allBillsForCredit, invoiceType, total: totals.total,
+      rows: takesPayment(invoiceType) ? paymentRows : [],
+      payments: editingBill && !editingBill._isDuplicate ? editingBill.payments : [],
+      invoiceDate: details.invoiceDate, editingId,
+    });
+    // P2-S6: a credit note may not return more than is left on the invoice it is against.
+    if (invoiceType === 'credit-note' && details.originalInvoiceRef) {
+      const over = creditNoteOverReturns({ bills: allBillsForCredit, againstNumber: details.originalInvoiceRef.trim(), items, editingId });
+      if (over.length) {
+        toast(`More than is left to return on ${details.originalInvoiceRef}: ${over.map((o) => `${o.name || 'item'} (${o.returnable} left)`).join(', ')}`, 'error', 9000);
+        return false;
+      }
+    }
+    for (const c of checks) {
+      if (c.kind === 'credit') {
+        const text = `${c.party} has a limit of ${formatCurrency(c.limit)}. Outstanding ${formatCurrency(c.used)} + this sale = ${formatCurrency(c.after)}. Exceeds by ${formatCurrency(c.exceededBy)}.`;
+        if (c.mode === 'block') {
+          toast(`Credit limit exceeded. ${text} Ask the owner to raise the limit.`, 'error', 9000);
+          return false;
+        }
+        if (!(await confirmAction({ title: 'Credit limit exceeded', message: text, confirmLabel: 'Save anyway', cancelLabel: 'Go back', tone: 'warning' }))) return false;
+      }
+      if (c.kind === 'cash') {
+        const ack = await promptAction({
+          title: 'Cash limit (section 269ST)',
+          message: `Cash from ${c.party} today reaches ${formatCurrency(c.total)}. Receiving ${formatCurrency(c.limit)} or more in cash from one person in a day attracts a penalty equal to the amount. Type an acknowledgement to save anyway.`,
+          placeholder: 'I understand',
+          confirmLabel: 'Save anyway',
+        });
+        if (!ack || !String(ack).trim()) return false;
+        guardNotes.current.cashAcknowledgement = String(ack).trim();
+      }
+    }
+    return true;
+  };
+
+  // P2-S7 Save & New: save, then open a blank document of the same type.
+  const saveAndNew = async () => {
+    const no = await saveOnly();
+    if (!no) return;
+    clearDraft();
+    window.location.assign(`${window.location.pathname.replace(/\/[^/]*$/, '/new')}?type=${encodeURIComponent(invoiceType)}`);
+  };
 
   // Save without downloading: the toolbar's Save button and the last step's button.
   const saveOnly = async () => {
@@ -2744,6 +2855,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       // sequence GST expects to be gapless.
       const problem = validateForSave();
       if (problem) { toast(problem, 'warning'); return; }
+      if (PHASE2 && !(await passSaveChecks())) return;
       try {
         setSaving(true);
         const no = await saveInvoiceToDB();
@@ -2751,6 +2863,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
         clearDraft();
         toast(`${typeConfig?.label || 'Invoice'} saved`, 'success');
         await refreshSavedPdf(no);
+        return no;
       } catch (err) {
         if (err?.status !== 409) {  // 409 already handled by retry inside saveInvoiceToDB
           console.error('Save failed', err);
@@ -2761,382 +2874,380 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       }
   };
 
+  const cur = invoiceOptions.currency || 'INR';
+  const money = (v) => formatCurrency(Number(v) || 0, cur);
+  const taxTotal = (totals.cgst || 0) + (totals.sgst || 0) + (totals.utgst || 0) + (totals.igst || 0);
+  const discountTotal = (totals.totalDiscount || 0) + (totals.invoiceDiscountAmount || 0);
+  const filledLines = items.filter((item) => (item.name || '').trim()).length;
+  const isExisting = !!editingBill && !editingBill._isDuplicate;
+  // The rail's breakdown: only the lines that have something in them, so a plain bill shows two rows, not ten.
+  const breakdown = [
+    ['Subtotal', printedSubtotal(totals), true],
+    ['Discount', -discountTotal, discountTotal > 0],
+    ['Charges', totals.chargesTotal, totals.chargesTotal > 0],
+    [taxLabel || 'Tax', taxTotal, showGST],
+    ['Cess', totals.cess, totals.cess > 0],
+    ['TCS', totals.tcsAmount, totals.tcsAmount > 0],
+    ['Round-off', totals.roundOff, !!totals.roundOff],
+    ['Less TDS', -(totals.tdsAmount || 0), totals.tdsAmount > 0],
+  ].filter(([, , show]) => show);
+
+  // Auto-save state, shown as a chip in the header. On a draft it is a button that focuses the first missing field.
+  const statusChip = (() => {
+    const isSaving = autoSaveStatus === 'saving';
+    const isSaved = autoSaveStatus === 'saved';
+    const isDraft = autoSaveStatus === 'idle' && !isMeaningfulInvoice();
+    const tone = readOnlyDoc ? 'locked' : isSaving ? 'saving' : isSaved ? 'saved' : isDraft ? 'draft' : 'idle';
+    const label = readOnlyDoc ? 'Read-only'
+      : isSaving ? 'Saving…'
+      : isSaved ? 'All changes saved'
+      : isDraft ? 'Draft — click to complete'
+      : (!isExisting && !hasBeenSaved.current) ? 'Not saved yet'
+      : 'Ready';
+    const onClick = () => {
+      if (!isDraft) return;
+      if (!client?.name?.trim()) {
+        clientNameRef.current?.focus();
+        clientNameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      const emptyRow = document.querySelector('.line-item-row input.form-input:placeholder-shown, .line-item-row input.form-input[value=""]');
+      if (emptyRow) {
+        emptyRow.focus();
+        emptyRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+    return (
+      <button type="button" className={`canvas-status canvas-status--${tone}`} onClick={onClick} disabled={!isDraft}
+        title={isDraft ? 'Click to focus the first missing field' : label}>
+        {isSaving ? <Loader size={12} className="spin" /> : isSaved ? <Check size={12} /> : <span className="canvas-status-dot" />}
+        {label}
+      </button>
+    );
+  })();
+
   return (
-    <div className="generator-container">
+    <div className="generator-container doc-canvas">
+      <header className="canvas-head">
+        <button type="button" className="canvas-back" onClick={handleBack} title="Back" aria-label="Back"><ArrowLeft size={18} /></button>
+        <div className="canvas-title">
+          <span className="canvas-eyebrow">
+            {readOnlyDoc ? 'Viewing' : isExisting ? 'Editing' : 'New'}{profile?.businessName ? ` · ${profile.businessName}` : ''}
+          </span>
+          <h1>
+            {typeConfig?.label || 'Invoice'}
+            <span className="canvas-docno">{details.invoiceNumber || '—'}</span>
+          </h1>
+        </div>
+        {statusChip}
+        <span className="canvas-head-spacer" />
+        <HelpButton title="Invoice Generator — how to use" doc="invoices">
+          <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
+            <li><strong>The sheet</strong> — the form is laid out like the printed document: who it is for and its number and dates at the top, then the items, then terms and notes. The panel on the right keeps the total and every action in reach.</li>
+            <li><strong>Line items</strong> — start typing to auto-complete from your Products list. HSN autofills the GST rate for common codes. Click "+ Add description" for a detailed note under the item name.</li>
+            <li><strong>Discount</strong> — per line: pick ₹ (fixed) or % of the line. Below the items: whole-bill discount, applied after tax.</li>
+            <li><strong>Customize</strong> — toggle columns and sections on/off, pick paper size, currency, TDS / TCS, recurring, the invoice title and PDF style. Changes are remembered for your next invoice.</li>
+            <li><strong>Preview</strong> — opens the printed document in a drawer over the sheet. Esc or the scrim closes it.</li>
+            <li><strong>Keyboard</strong> — Ctrl+S save · Ctrl+P PDF · Ctrl+Enter add row · Ctrl+Shift+D duplicate last row · Esc close.</li>
+            <li><strong>Saving</strong> — a new invoice is stored when you first click Save, Save &amp; Download or Print. After that, changes save automatically. Leaving with unsaved changes asks first.</li>
+          </ul>
+        </HelpButton>
+      </header>
+
       {readOnlyDoc && (
-        <div className="notice notice-info" role="status" style={{ marginBottom: '0.75rem' }}>
+        <div className="notice notice-info canvas-notice" role="status">
           {editingBill.convertedTo
             ? `Converted to ${editingBill.convertedTo}. This copy is read-only; you can still download or print it.`
             : 'This invoice is cancelled and read-only; you can still download or print it. Undo the cancel on the Dashboard to change it.'}
         </div>
       )}
-      <div className="generator-toolbar">
-        <div className="flex gap-2 items-center">
-          <button className="btn btn-secondary" onClick={handleBack}><ArrowLeft size={18} /> Back</button>
-          <HelpButton title="Invoice Generator — how to use" doc="invoices">
-            <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
-              <li><strong>Invoice type</strong> — Tax Invoice / Proforma / Bill of Supply / Composition / Credit Note / Delivery Challan. Switching type refreshes the number to that type's counter (or your custom prefix from Print Settings).</li>
-              <li><strong>Line items</strong> — start typing to auto-complete from your Products list. HSN autofills the GST rate for common codes. Click "+ Add description" for a detailed note under the item name.</li>
-              <li><strong>Discount</strong> — per line: pick ₹ (fixed) or % of the line. Below the items: whole-bill discount, applied after tax.</li>
-              <li><strong>Customize</strong> — toggle columns and sections on/off, pick paper size (A4, A5, Letter, Legal, B5, thermal rolls or a custom size), currency, TDS / TCS, recurring, the invoice title and PDF style. Changes are remembered for your next invoice.</li>
-              <li><strong>Hide Preview</strong> — gives the form the full width for long invoices. Show Preview brings it back.</li>
-              <li><strong>Keyboard</strong> — Ctrl+S save · Ctrl+P PDF · Ctrl+Enter add row · Ctrl+Shift+D duplicate last row · Esc close leave modal.</li>
-              <li><strong>Saving</strong> — a new invoice is stored when you first click Save, Save &amp; Download or Print. After that, changes save automatically. Leaving with unsaved changes asks first.</li>
-            </ul>
-          </HelpButton>
-          {/* v1.10.37 — Auto-save status pill. Reported: prior plain
-              grey text next to Back button looked unstyled. Now it's a
-              proper chip with a coloured dot indicator that matches
-              state (blue-pulse saving, green saved, amber draft) and
-              CLICKS to focus the first missing field on the draft
-              state so users can fix what's blocking auto-save. */}
-          {(() => {
-            const saving = autoSaveStatus === 'saving';
-            const saved = autoSaveStatus === 'saved';
-            const isDraft = autoSaveStatus === 'idle' && !isMeaningfulInvoice();
-            const color = saving ? '#3b82f6' : saved ? '#059669' : isDraft ? '#d97706' : '#94a3b8';
-            const bg = saving ? 'rgba(59, 130, 246, 0.12)'
-              : saved ? 'rgba(5, 150, 105, 0.12)'
-              : isDraft ? 'rgba(217, 119, 6, 0.12)'
-              : 'var(--bg-secondary)';
-            const label = saving ? 'Saving…'
-              : saved ? 'All changes saved'
-              : isDraft ? 'Draft — click to complete'
-              : ((!editingBill || editingBill._isDuplicate) && !hasBeenSaved.current) ? 'Not saved yet'
-              : 'Ready';
-            const onClick = () => {
-              if (!isDraft) return;
-              // Focus the first missing input to accelerate the "make
-              // it saveable" path. Client name first (most common
-              // missing field), then the first line item description.
-              if (!client?.name?.trim()) {
-                clientNameRef.current?.focus();
-                clientNameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                return;
-              }
-              const emptyRow = document.querySelector('.line-item-row input.form-input:placeholder-shown, .line-item-row input.form-input[value=""]');
-              if (emptyRow) {
-                emptyRow.focus();
-                emptyRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-            };
-            return (
-              <button type="button" onClick={onClick} disabled={!isDraft}
-                title={isDraft ? 'Click to focus the first missing field' : label}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: '0.75rem', fontWeight: 600,
-                  padding: '0.35rem 0.7rem',
-                  borderRadius: 999,
-                  background: bg,
-                  border: `1px solid ${color}55`,
-                  color: color,
-                  cursor: isDraft ? 'pointer' : 'default',
-                }}>
-                {saving && <Loader size={12} className="spin" />}
-                {saved && <Check size={12} />}
-                {!saving && !saved && (
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: color,
-                    boxShadow: isDraft ? `0 0 0 3px ${color}33` : 'none',
-                  }} />
-                )}
-                {label}
-              </button>
-            );
-          })()}
-        </div>
-        <div className="flex gap-2">
-          {/* v1.10.37 — Explicit Save button. Reported: "invoice page
-              needs a Save button". Previously only Download PDF was
-              the primary action, forcing users who wanted to save
-              without downloading to know Ctrl+S. Now: Save is the
-              PRIMARY action, Download PDF is secondary. Save-only
-              also fires the same "save to Saved Invoices/ folder"
-              + auto-print + Drive sync side effects that generatePDF
-              does — minus the PDF file. */}
-          <button className="btn btn-primary" onClick={saveOnly} disabled={saving}
-          title="Save the invoice without downloading (Ctrl+S)">
-            <Check size={18} /> {saving ? 'Saving…' : 'Save'}
-          </button>
-          <button className="btn btn-secondary" onClick={generatePDF} disabled={saving}
-            title="Save + download the PDF">
-            <Download size={18} /> {saving ? 'Generating...' : 'Save & Download'}
-          </button>
-          <button className="btn btn-secondary" onClick={directPrint} disabled={saving}
-            title={
-              isThermalPaper()
-                ? 'Send directly to your thermal printer'
-                : 'Open browser print dialog (skip the PDF download)'
-            }>
-            <Printer size={18} /> Print
-          </button>
-          <button className="btn btn-secondary" onClick={shareWhatsApp} disabled={saving} style={{ background: '#25d366', color: '#fff', borderColor: '#25d366' }}>
-            <MessageCircle size={18} /> WhatsApp
-          </button>
-          {(invoiceType === 'tax-invoice' || invoiceType === 'delivery-challan') && (
-            <button className="btn btn-secondary" onClick={exportEWayBill} disabled={saving} title="Download E-Way Bill JSON for NIC portal upload">
-              <Truck size={18} /> E-Way Bill
-            </button>
-          )}
-          {/* v1.10.65 — requested (#58 item 2, @sangwanmail-eng): "to access
-              show preview and hide preview button once you are at the bottom
-              of the page, you have to scroll all page."
-              Moved here beside E-Way Bill, and this whole toolbar is now
-              sticky (see .generator-toolbar), so it — and Save, Print and the
-              rest — stay reachable from anywhere on a long invoice. */}
-          {/* v1.10.69 - requested (#71 item 1, @sangwanmail-eng): "Can we move
-              the Customize button so that it appears before the Show Preview
-              button?"
-              It used to sit in the Invoice Type card, which scrolls away. Here
-              it is in the sticky toolbar, next to the preview toggle it pairs
-              with - both change how the invoice looks, so both are reachable
-              from anywhere on a long invoice. The options panel it opens has
-              not moved. */}
-          <button className="btn btn-secondary" type="button"
-            onClick={() => setShowOptions(!showOptions)}
-            title={showOptions ? 'Hide the layout and column options' : 'Choose columns, sections, paper size and PDF style'}>
-            <Settings size={18} /> {showOptions ? 'Hide Options' : 'Customize'}
-          </button>
-          <button className="btn btn-secondary" type="button"
-            onClick={() => setPreviewCollapsed(v => !v)}
-            title={previewCollapsed ? 'Show the live preview' : 'Hide the preview and use the full width for entry'}>
-            {previewCollapsed ? <><Eye size={18} /> Show Preview</> : <><EyeOff size={18} /> Hide Preview</>}
-          </button>
-        </div>
-      </div>
 
-      <div className={`split-view ${previewCollapsed ? 'split-view-focus' : ''}`}>
-        <div className="editor-pane">
-          {/* v1.10.67 (#66 item 6) — the "Billing From (Business Profile)"
-              card was removed. The company picker at the top of the sidebar
-              already sets which business an invoice belongs to; a second
-              picker here only made it possible to issue the invoice from a
-              company other than the one on screen. */}
-          <div ref={stepperRef} className="doc-steps" role="tablist" aria-label="Steps">
-            {DOC_STEPS.map((st, i) => (
-              <button key={st.key} type="button" role="tab" aria-selected={!singlePage && step === i}
-                className={`doc-step-tab${!singlePage && step === i ? ' active' : ''}${stepDone[i] ? ' done' : ''}`}
-                onClick={() => (singlePage ? document.getElementById(`doc-step-${st.key}`)?.scrollIntoView({ behavior: 'smooth' }) : goStep(i))}>
-                <span className="doc-step-num">{stepDone[i] ? <Check size={12} /> : i + 1}</span>{st.label}
-              </button>
-            ))}
-            <button type="button" className="doc-steps-toggle" onClick={toggleSinglePage}>{singlePage ? 'One step at a time' : 'Show all steps'}</button>
-          </div>
-
-                    {/* Client Modal */}
+      <div className="canvas-body">
+        <main className="canvas-desk">
           <ClientModal show={showClientModal} onClose={() => setShowClientModal(false)} onSave={handleClientModalSave} client={modalClient} isEditing={isEditingClient} defaultCountry={profile?.country} />
 
-          <div id="doc-step-customer" className="doc-step" hidden={!singlePage && step !== 0}>
-          <InvoiceTypePanel
-            details={details}
-            handleTypeChange={handleTypeChange}
-            invoiceOptions={invoiceOptions}
-            invoiceType={invoiceType}
-            isIssuedInvoice={isIssuedInvoice}
-            profile={profile}
-            setInvoiceOptions={setInvoiceOptions}
-            showOptions={showOptions}
-            toggleOption={toggleOption}
-            typeConfig={typeConfig}
-            lockedType={lockedType}
-            sourceDoc={editingBill?._convertToType ? { number: editingBill.invoiceNumber, type: editingBill.invoiceType || 'tax-invoice' } : editingBill?.data?.sourceDoc}
-          />
-          <PartyPicker
-            client={client}
-            clientCredit={clientCredit}
-            clientNameRef={clientNameRef}
-            clientPickerIdx={clientPickerIdx}
-            clientSuggestionsRef={clientSuggestionsRef}
-            creditToApply={creditToApply}
-            editingBill={editingBill}
-            filteredClients={filteredClients}
-            gstinHint={gstinHint}
-            handleClientGstinBlur={handleClientGstinBlur}
-            invoiceOptions={invoiceOptions}
-            openAddClientModal={openAddClientModal}
-            openEditClientModal={openEditClientModal}
-            profile={profile}
-            savedClients={savedClients}
-            selectSavedClient={selectSavedClient}
-            selectedClientId={selectedClientId}
-            setClient={setClient}
-            setClientPickerIdx={setClientPickerIdx}
-            setCreditToApply={setCreditToApply}
-            setGstinHint={setGstinHint}
-            setInvoiceOptions={setInvoiceOptions}
-            setSelectedClientId={setSelectedClientId}
-            setShowClientSuggestions={setShowClientSuggestions}
-            showClientSuggestions={showClientSuggestions}
-            totals={totals}
-            partyLabel={partyLabel}
-          />
-          </div>
-          <div id="doc-step-details" className="doc-step" hidden={!singlePage && step !== 1}>
-          <InvoiceDetailsPanel
-            details={details}
-            invoiceOptions={invoiceOptions}
-            invoiceType={invoiceType}
-            profile={profile}
-            setDetails={setDetails}
-          />
-          </div>
-          <div id="doc-step-items" className="doc-step" hidden={!singlePage && step !== 2}>
-          <LineItemsGrid
-            addDeliveryCharge={addDeliveryCharge}
-            addItem={addItem}
-            clampNonNeg={clampNonNeg}
-            countryTaxRates={countryTaxRates}
-            getProductSuggestions={getProductSuggestions}
-            handleAddCustomUnit={handleAddCustomUnit}
-            handleItemChange={handleItemChange}
-            handleRemoveCustomUnit={handleRemoveCustomUnit}
-            hasDeliveryCharge={hasDeliveryCharge}
-            invoiceOptions={invoiceOptions}
-            items={items}
-            profile={profile}
-            removeItem={removeItem}
-            selectProduct={selectProduct}
-            setInvoiceOptions={setInvoiceOptions}
-            setProductSearch={setProductSearch}
-            setTaxInclusive={setTaxInclusive}
-            showGST={showGST}
-            taxInclusive={taxInclusive}
-            taxLabel={taxLabel}
-            units={units}
-          />
-          </div>
-          <div id="doc-step-terms" className="doc-step" hidden={!singlePage && step !== 3}>
-          <TermsPanel
-            _psPrintForRates={_psPrintForRates}
-            customNotes={customNotes}
-            customTerms={customTerms}
-            handleTermsSelect={handleTermsSelect}
-            internalNote={internalNote}
-            invoiceOptions={invoiceOptions}
-            selectedTermsId={selectedTermsId}
-            setCustomNotes={setCustomNotes}
-            setCustomTerms={setCustomTerms}
-            setInternalNote={setInternalNote}
-            setInvoiceOptions={setInvoiceOptions}
-            setSelectedTermsId={setSelectedTermsId}
-            termsTemplates={termsTemplates}
-          />
-          <ExtraSectionsPanel
-            extraSections={extraSections}
-            setExtraSections={setExtraSections}
-          />
+          <article className="canvas-sheet" aria-label={`${typeConfig?.label || 'Invoice'} sheet`}>
+            <div className="sheet-masthead">
+              <InvoiceTypePanel
+                details={details}
+                handleTypeChange={handleTypeChange}
+                invoiceOptions={invoiceOptions}
+                invoiceType={invoiceType}
+                isIssuedInvoice={isIssuedInvoice}
+                profile={profile}
+                setInvoiceOptions={setInvoiceOptions}
+                showOptions={showOptions}
+                toggleOption={toggleOption}
+                typeConfig={typeConfig}
+                lockedType={lockedType}
+                sourceDoc={editingBill?._convertToType ? { number: editingBill.invoiceNumber, type: editingBill.invoiceType || 'tax-invoice' } : editingBill?.data?.sourceDoc}
+              />
+            </div>
+
+            <div className="sheet-parties">
+              <section id="doc-step-customer" className="sheet-sec">
+                <PartyPicker
+                  client={client}
+                  clientCredit={clientCredit}
+                  clientNameRef={clientNameRef}
+                  clientPickerIdx={clientPickerIdx}
+                  clientSuggestionsRef={clientSuggestionsRef}
+                  creditToApply={creditToApply}
+                  editingBill={editingBill}
+                  filteredClients={filteredClients}
+                  gstinHint={gstinHint}
+                  handleClientGstinBlur={handleClientGstinBlur}
+                  invoiceOptions={invoiceOptions}
+                  openAddClientModal={openAddClientModal}
+                  openEditClientModal={openEditClientModal}
+                  profile={profile}
+                  savedClients={savedClients}
+                  selectSavedClient={selectSavedClient}
+                  selectedClientId={selectedClientId}
+                  setClient={setClient}
+                  setClientPickerIdx={setClientPickerIdx}
+                  setCreditToApply={setCreditToApply}
+                  setGstinHint={setGstinHint}
+                  setInvoiceOptions={setInvoiceOptions}
+                  setSelectedClientId={setSelectedClientId}
+                  setShowClientSuggestions={setShowClientSuggestions}
+                  showClientSuggestions={showClientSuggestions}
+                  totals={totals}
+                  partyLabel={partyLabel}
+                />
+              </section>
+              <section id="doc-step-details" className="sheet-sec">
+                <InvoiceDetailsPanel
+                  details={details}
+                  invoiceOptions={invoiceOptions}
+                  invoiceType={invoiceType}
+                  profile={profile}
+                  setDetails={setDetails}
+                />
+                {PHASE2 && (
+                  <div className="glass-panel p-6 mb-6 sale-details-extra">
+                    <SalesmanPicker value={salesman.salesmanId} name={salesman.salesmanName} onChange={setSalesman} />
+                    {invoiceType === 'sales-order' && (
+                      <Field label="Expected delivery">
+                        <input type="date" className="ui-input" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} />
+                      </Field>
+                    )}
+                    {invoiceType === 'credit-note' && (
+                      <>
+                        <Field label="Reason" help="Shown in GSTR-1 CDNR">
+                          <Select value={returnInfo.returnReason} onChange={(v) => setReturnInfo((r) => ({ ...r, returnReason: v }))} options={RETURN_REASON_OPTIONS} />
+                        </Field>
+                        <Field label="Refund">
+                          <Select value={returnInfo.refundMode} onChange={(v) => setReturnInfo((r) => ({ ...r, refundMode: v }))} options={REFUND_OPTIONS} />
+                        </Field>
+                        <label className="ui-check">
+                          <input type="checkbox" checked={returnInfo.restock !== false} onChange={(e) => setReturnInfo((r) => ({ ...r, restock: e.target.checked }))} />
+                          Put returned goods back in stock
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <section id="doc-step-items" className="sheet-sec sheet-items">
+              <LineItemsGrid
+                addDeliveryCharge={addDeliveryCharge}
+                addItem={addItem}
+                clampNonNeg={clampNonNeg}
+                countryTaxRates={countryTaxRates}
+                getProductSuggestions={getProductSuggestions}
+                handleAddCustomUnit={handleAddCustomUnit}
+                handleItemChange={handleItemChange}
+                handleRemoveCustomUnit={handleRemoveCustomUnit}
+                hasDeliveryCharge={hasDeliveryCharge}
+                invoiceOptions={invoiceOptions}
+                items={items}
+                profile={profile}
+                removeItem={removeItem}
+                selectProduct={selectProduct}
+                setInvoiceOptions={setInvoiceOptions}
+                setProductSearch={setProductSearch}
+                setTaxInclusive={setTaxInclusive}
+                showGST={showGST}
+                taxInclusive={taxInclusive}
+                taxLabel={taxLabel}
+                units={units}
+              />
+              {PHASE2 && (
+                <ChargeRows charges={charges} onChange={setCharges} totals={totals} currency={cur} showGST={showGST} />
+              )}
+              {PHASE2 && invoiceType === 'sales-order' && isExisting && (() => {
+                const prog = orderProgressFromBills(editingBill, allBillsForCredit);
+                return (
+                  <div className="glass-panel p-6 mb-6">
+                    <div className="sale-block-head">
+                      <h3 className="section-title">Order progress</h3>
+                      <span>{{ open: 'Open', 'partially-invoiced': 'Partially invoiced', closed: 'Closed', cancelled: 'Cancelled' }[prog.status]}</span>
+                    </div>
+                    <table className="data-table" style={{ width: '100%' }}>
+                      <thead><tr><th>Item</th><th style={{ textAlign: 'right' }}>Ordered</th><th style={{ textAlign: 'right' }}>Invoiced</th><th style={{ textAlign: 'right' }}>Pending</th></tr></thead>
+                      <tbody>
+                        {prog.lines.map((l, i) => (
+                          <tr key={i}><td>{l.name}</td><td style={{ textAlign: 'right' }}>{l.ordered}</td><td style={{ textAlign: 'right' }}>{l.invoiced}</td><td style={{ textAlign: 'right' }}>{l.pending}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+              {PHASE2 && takesPayment(invoiceType) && (
+                <PaymentBlock
+                  rows={paymentRows}
+                  onRowsChange={setPaymentRows}
+                  saleType={saleType}
+                  onSaleTypeChange={setSaleType}
+                  total={totals.total}
+                  payments={isExisting ? editingBill.payments : []}
+                  currency={cur}
+                  isOrder={invoiceType === 'sales-order'}
+                />
+              )}
+            </section>
+
+            <section id="doc-step-terms" className="sheet-sec sheet-foot">
+              <TermsPanel
+                _psPrintForRates={_psPrintForRates}
+                customNotes={customNotes}
+                customTerms={customTerms}
+                handleTermsSelect={handleTermsSelect}
+                internalNote={internalNote}
+                invoiceOptions={invoiceOptions}
+                selectedTermsId={selectedTermsId}
+                setCustomNotes={setCustomNotes}
+                setCustomTerms={setCustomTerms}
+                setInternalNote={setInternalNote}
+                setInvoiceOptions={setInvoiceOptions}
+                setSelectedTermsId={setSelectedTermsId}
+                termsTemplates={termsTemplates}
+              />
+              <ExtraSectionsPanel
+                extraSections={extraSections}
+                setExtraSections={setExtraSections}
+              />
+            </section>
+            <div className="sheet-tear" aria-hidden="true" />
+          </article>
+        </main>
+
+        <aside className="canvas-rail" aria-label="Total and actions">
+          <div className="rail-total">
+            <span className="rail-label">{invoiceType === 'credit-note' ? 'Credit amount' : 'Amount due'}</span>
+            <strong className="rail-amount">{money(totals.total)}</strong>
+            <span className="rail-sub">
+              {filledLines} {filledLines === 1 ? 'line' : 'lines'}{client?.name?.trim() ? ` · ${client.name.trim()}` : ''}
+            </span>
           </div>
 
-          {!singlePage && (
-            <div className="doc-step-nav">
-              <button type="button" className="btn btn-secondary" disabled={step === 0} onClick={() => goStep(step - 1)}>
-                <ArrowLeft size={16} /> {step > 0 ? DOC_STEPS[step - 1].label : 'Back'}
-              </button>
-              {step < DOC_STEPS.length - 1 ? (
-                <button type="button" className="btn btn-primary" onClick={() => goStep(step + 1)}>
-                  Next: {DOC_STEPS[step + 1].label} <ArrowRight size={16} />
+          <dl className="rail-breakdown">
+            {breakdown.map(([label, value]) => (
+              <div key={label} className="rail-row">
+                <dt>{label}</dt>
+                <dd>{money(value)}</dd>
+              </div>
+            ))}
+            {totals.tdsAmount > 0 && (
+              <div className="rail-row rail-row-strong">
+                <dt>Net receivable</dt>
+                <dd>{money(totals.netReceivable)}</dd>
+              </div>
+            )}
+          </dl>
+
+          <div className="rail-actions">
+            <button type="button" className="rail-btn rail-btn-primary" onClick={saveOnly} disabled={saving || readOnlyDoc}
+              title="Save without downloading (Ctrl+S)">
+              <Check size={17} /> {saving ? 'Saving…' : `Save ${typeConfig?.label || ''}`.trim()}
+            </button>
+            <div className="rail-pair">
+              {PHASE2 && (
+                <button type="button" className="rail-btn" onClick={saveAndNew} disabled={saving || readOnlyDoc}
+                  title="Save, then start a blank one of the same type">
+                  <Plus size={16} /> Save &amp; New
                 </button>
-              ) : (
-                <button type="button" className="btn btn-primary" onClick={saveOnly} disabled={saving}>
-                  <Check size={16} /> {saving ? 'Saving…' : `Save ${typeConfig?.label || 'document'}`}
+              )}
+              <button type="button" className="rail-btn" onClick={generatePDF} disabled={saving} title="Save + download the PDF">
+                <Download size={16} /> {saving ? 'Working…' : 'Download'}
+              </button>
+            </div>
+            <div className="rail-quick">
+              <button type="button" className="rail-icon" onClick={directPrint} disabled={saving}
+                title={isThermalPaper() ? 'Send directly to your thermal printer' : 'Open the print dialog (no PDF download)'}>
+                <Printer size={17} /><span>Print</span>
+              </button>
+              <button type="button" className="rail-icon rail-icon-wa" onClick={shareWhatsApp} disabled={saving} title="Share on WhatsApp">
+                <MessageCircle size={17} /><span>WhatsApp</span>
+              </button>
+              {(invoiceType === 'tax-invoice' || invoiceType === 'delivery-challan') && (
+                <button type="button" className="rail-icon" onClick={exportEWayBill} disabled={saving} title="Download E-Way Bill JSON for NIC portal upload">
+                  <Truck size={17} /><span>E-Way</span>
                 </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Live Preview — visually hidden in focus mode (v1.10.22) but
-            kept in the DOM so printRef stays live for PDF generation.
-            v1.10.26 — reported: "in this mode print not working" for focus
-            mode. Root cause: `display: none` removes the element from
-            layout entirely, so html2canvas renders a 0×0 canvas → blank
-            PDF and blank print. Fix: move the pane off-screen (position:
-            absolute, left: -99999px) instead. The element keeps real
-            dimensions so html2canvas can snapshot it, but it's invisible
-            to the user and out of the flex flow (so the editor still
-            takes the full viewport width in focus mode). */}
-        <div ref={previewPaneRef} className="preview-pane" style={previewCollapsed
+          <ol className="rail-outline" aria-label="Sections">
+            {DOC_STEPS.map((st, i) => (
+              <li key={st.key}>
+                <button type="button" className={stepDone[i] ? 'done' : ''} onClick={() => jumpTo(st.key)}>
+                  <span className="rail-outline-mark">{stepDone[i] ? <Check size={11} /> : String(i + 1).padStart(2, '0')}</span>
+                  {st.key === 'customer' ? partyLabel : st.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+
+          <div className="rail-tools">
+            <button type="button" className={`rail-tool${previewCollapsed ? '' : ' on'}`} onClick={() => setPreviewCollapsed((v) => !v)}
+              title="Open the printed document in a drawer">
+              <Eye size={16} /> Preview
+            </button>
+            <button type="button" className={`rail-tool${showOptions ? ' on' : ''}`} onClick={() => setShowOptions(!showOptions)}
+              title="Choose columns, sections, paper size and PDF style">
+              <Settings size={16} /> Customize
+            </button>
+          </div>
+        </aside>
+      </div>
+
+      {/* The preview drawer. Closed, it stays mounted off-screen (not display:none) so printRef keeps real dimensions
+          and html2canvas can still snapshot it for PDF and print. */}
+      {!previewCollapsed && <div className="canvas-scrim" onClick={() => setPreviewCollapsed(true)} />}
+      <div ref={previewPaneRef} className={`preview-pane canvas-drawer${previewCollapsed ? '' : ' open'}`}
+        role={previewCollapsed ? undefined : 'dialog'} aria-label="Document preview"
+        style={previewCollapsed
           ? { position: 'absolute', left: '-99999px', top: 0, width: '794px', pointerEvents: 'none', opacity: 0 }
           : undefined}>
-          {/* v1.10.37 — Preview label + zoom control bar redesign.
-              Reported: prior label was a plain span with tiny black
-              zoom buttons squeezed on the right — visually unfinished.
-              Now: single-line pill bar with a preview icon + short
-              label, a proper segmented zoom cluster (− / % / +) and
-              a dedicated Fit button, all styled consistently with
-              the rest of the panel's design language. */}
-          <div className="preview-pane-label" style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '0.55rem 0.85rem',
-            background: 'var(--card-bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 999,
-            marginBottom: '0.5rem',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-            gap: '0.75rem',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: '0.85rem' }}>👁</span>
-              Live preview
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              {/* Segmented zoom cluster — three cells welded into one pill */}
-              <div style={{
-                display: 'inline-flex', alignItems: 'center',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 999,
-                overflow: 'hidden',
-              }}>
-                <button type="button" title="Zoom out"
-                  onClick={() => setPreviewZoom(z => Math.max(50, z - 10))}
-                  style={{ padding: '0.25rem 0.7rem', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1 }}>−</button>
-                <span style={{ padding: '0.25rem 0.55rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text)', minWidth: 42, textAlign: 'center', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>{previewZoom}%</span>
-                <button type="button" title="Zoom in"
-                  onClick={() => setPreviewZoom(z => Math.min(200, z + 10))}
-                  style={{ padding: '0.25rem 0.7rem', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1 }}>+</button>
-              </div>
-              {/* v1.10.33 — REAL fit-to-width. Prior code was
-                  setPreviewZoom(100), which just set 100%, not "fit". */}
-              <button type="button" title="Fit preview to the pane width"
-                onClick={handleFitToWidth}
-                style={{
-                  padding: '0.28rem 0.75rem',
-                  border: '1px solid var(--primary)',
-                  background: 'var(--primary-light, rgba(30,64,175,0.08))',
-                  color: 'var(--primary)',
-                  cursor: 'pointer',
-                  fontSize: '0.72rem', fontWeight: 700,
-                  borderRadius: 999,
-                  letterSpacing: '0.02em',
-                }}>Fit</button>
-            </span>
+        <div className="canvas-drawer-head">
+          <span className="canvas-drawer-title">Preview</span>
+          <div className="canvas-zoom">
+            <button type="button" title="Zoom out" onClick={() => setPreviewZoom(z => Math.max(50, z - 10))}>−</button>
+            <span>{previewZoom}%</span>
+            <button type="button" title="Zoom in" onClick={() => setPreviewZoom(z => Math.min(200, z + 10))}>+</button>
           </div>
-          {/* v1.10.48 — The frame reserves the SCALED size (natural × zoom)
-              so the pane's layout matches what is painted. See the
-              previewNatural measurement above for why.
-
-              This also subsumes the v1.10.46 thermal-centering hack: that
-              used `transform-origin: top center` to stop a 58/80mm receipt
-              hugging the left edge, which worked visually but left the
-              layout box at full sheet width. Now the frame is exactly the
-              receipt's scaled width and .preview-pane centres it, so
-              thermal and sheet both land correctly with one origin. */}
-          <div className="preview-scaler-frame" style={previewNatural.w ? {
-            width: previewNatural.w * (previewZoom / 100),
-            height: previewNatural.h * (previewZoom / 100),
-          } : undefined}>
-            <div className="preview-scaler" style={{
-              transform: `scale(${previewZoom / 100})`,
-              transformOrigin: 'top left',
-            }}>
-              <InvoicePreview ref={printRef} profile={profile} client={client} details={details}
-                items={items} totals={totals} invoiceType={invoiceType} customTerms={customTerms}
-                customNotes={customNotes} extraSections={extraSections} options={invoiceOptions}
-                cancelled={editingBill?.status === 'cancelled'} />
-            </div>
+          <button type="button" className="canvas-fit" title="Fit preview to the drawer width" onClick={handleFitToWidth}>Fit</button>
+          <button type="button" className="canvas-drawer-close" title="Close preview (Esc)" aria-label="Close preview" onClick={() => setPreviewCollapsed(true)}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="preview-scaler-frame" style={previewNatural.w ? {
+          width: previewNatural.w * (previewZoom / 100),
+          height: previewNatural.h * (previewZoom / 100),
+        } : undefined}>
+          <div className="preview-scaler" style={{
+            transform: `scale(${previewZoom / 100})`,
+            transformOrigin: 'top left',
+          }}>
+            <InvoicePreview ref={printRef} profile={profile} client={client} details={details}
+              items={items} totals={totals} invoiceType={invoiceType} customTerms={customTerms}
+              customNotes={customNotes} extraSections={extraSections} options={invoiceOptions}
+              cancelled={editingBill?.status === 'cancelled'} />
           </div>
         </div>
       </div>

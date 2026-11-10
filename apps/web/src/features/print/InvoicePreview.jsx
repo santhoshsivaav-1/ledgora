@@ -237,6 +237,14 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       r.taxable += l.taxable; r.tax += l.tax;
       map.set(k, r);
     }
+    // P2-S3: additional charges are supplies at their own rate and SAC; they join the summary like any line.
+    for (const c of totals?.charges || []) {
+      if (!c.hsn && !(c.tax > 0)) continue;
+      const k = `${c.hsn || ''}|${c.taxPct}`;
+      const r = map.get(k) || { hsn: c.hsn || '', rate: c.taxPct, taxable: 0, tax: 0 };
+      r.taxable += c.taxable; r.tax += c.tax;
+      map.set(k, r);
+    }
     return [...map.values()];
   })();
   const pdfStyleForOptions = pdfStyleRaw;

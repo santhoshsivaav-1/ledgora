@@ -21,6 +21,19 @@ export default function TotalsPanel({
               <span>- {fmt(totals.totalDiscount)}</span>
             </div>
           )}
+          {/* Vyapar parity P2-S3: additional charges, before tax (their GST is in the tax rows below). One row each,
+              or one "Additional charges" row when the print option showChargeRows is off. */}
+          {totals.charges?.length > 0 && (options.showChargeRows === false ? (
+            <div className="inv-total-row">
+              <span>Additional charges</span>
+              <span>{fmt(totals.chargesTotal)}</span>
+            </div>
+          ) : totals.charges.map((c, i) => (
+            <div key={c.id || i} className="inv-total-row">
+              <span>{c.name}{showGST && c.taxPct > 0 ? ` (GST ${c.taxPct}%)` : ''}</span>
+              <span>{fmt(c.taxable)}</span>
+            </div>
+          )))}
           <TaxSummary
             fmt={fmt}
             isIndia={isIndia}

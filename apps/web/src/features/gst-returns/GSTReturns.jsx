@@ -4,7 +4,7 @@ import { getAllBills, getAllExpenses, getAllPurchases, getProfile } from '../../
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
-import { nilExemptSummary, exportSection } from './gstReturnTables';
+import { nilExemptSummary, exportSection, withChargeLines } from './gstReturnTables';
 import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
@@ -77,7 +77,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       // v1.10.64 (#55) — a GST return must cover ONE GSTIN. Showing another
       // business's invoices here would misstate the return being filed.
       // v1.10.67 (#66 item 12) — a cancelled invoice is not reported.
-      setBills((b || []).filter(bill => belongsToProfile(bill, p) && !isCancelledBill(bill)));
+      // Additional charges (P2-S3) become lines here, once, so every table below reports them.
+      setBills((b || []).filter(bill => belongsToProfile(bill, p) && !isCancelledBill(bill)).map(withChargeLines));
       setCancelledBills((b || []).filter(bill => belongsToProfile(bill, p) && isCancelledBill(bill)));
       // v1.10.66 (#64) — and only its own expenses and purchases. Left
       // unfiltered, GSTR-3B Table 4 claimed input tax credit on purchases made

@@ -13,6 +13,7 @@ import { base, money, qty } from './common.ts';
 import { businesses } from './business.ts';
 import { parties } from './parties.ts';
 import { items } from './items.ts';
+import { staff } from './staff.ts';
 
 /** One counter per business and counter key, e.g. `counter_INV`. Locked FOR UPDATE while an invoice is numbered. */
 export const numberSeries = pgTable(
@@ -55,6 +56,8 @@ export const invoices = pgTable(
     total: money('total').notNull().default(0),
     paidAmount: money('paid_amount').notNull().default(0),
     generatedFromId: uuid('generated_from_id'),
+    /** P2-S1: the salesman the sale is credited to. */
+    salesmanId: uuid('salesman_id'),
     cancelledAt: date('cancelled_at'),
     /** Everything the print layout needs that has no column of its own: totals breakdown, terms, notes, options. */
     data: jsonb('data').notNull().default({}),
@@ -64,6 +67,8 @@ export const invoices = pgTable(
     // A live invoice number is unique per business; trashed or cancelled copies may repeat it.
     index('invoices_org_date_idx').on(t.orgId, t.invoiceDate),
     index('invoices_party_idx').on(t.orgId, t.partyId),
+    index('invoices_salesman_idx').on(t.orgId, t.salesmanId),
+    foreignKey({ columns: [t.orgId, t.salesmanId], foreignColumns: [staff.orgId, staff.id] }),
     foreignKey({
       columns: [t.orgId, t.businessId],
       foreignColumns: [businesses.orgId, businesses.id],

@@ -64,6 +64,13 @@
       "when": 1794194397386,
       "tag": "0008_masters_parties",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794295017333,
+      "tag": "0009_sale_enhancements",
+      "breakpoints": true
     }
   ]
 }

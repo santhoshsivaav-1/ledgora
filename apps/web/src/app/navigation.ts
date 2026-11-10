@@ -28,6 +28,7 @@ import {
 import type { Permission } from '../lib/permissions';
 import { SALES_PAGES } from '../features/sales/salesFlow';
 import { DOCS_URL } from '../utils';
+import { FEATURES } from '../config/featureFlags';
 import { pathForView, viewFromPath } from './router';
 
 // One source for the menus (Vyapar parity P0-S2): the new sidebar, its breadcrumbs, Open Anything and the page
@@ -137,7 +138,14 @@ export const NAV: NavEntry[] = [
     icon: TrendingUp,
     children: [
       { id: 'reminders', label: 'Payment Reminders', path: '/grow/reminders', planned: 'P9' },
-      { id: 'salesman', label: 'Salesman Tracking', path: '/grow/salesman', planned: 'P9' },
+      // The salesman master and its performance table (P2-S1) ship with the Phase 2 flag; visits/check-ins stay P9.
+      {
+        id: 'salesman',
+        label: 'Salesman',
+        view: 'salesman',
+        perm: 'staff:read',
+        ...(FEATURES.saleInlinePayments ? {} : { planned: 'P2' }),
+      },
     ],
   },
   {

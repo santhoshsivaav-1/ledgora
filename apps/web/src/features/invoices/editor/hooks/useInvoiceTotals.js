@@ -3,7 +3,8 @@ import { clientYearToDate, computeInvoiceTotals } from '../../../../utils';
 
 // The invoice's totals (change 3.9): GST split, rounding, TDS and TCS. Pure maths lives in the tax engine
 // (computeInvoiceTotals); this hook decides what to feed it and when to recompute.
-export function useInvoiceTotals({ allBillsForCredit, client, details, editingBill, items, profile, showGST, taxInclusive, invoiceOptions }) {
+// `charges` (Vyapar parity P2-S3) are the additional charges; left out, the totals are exactly as before.
+export function useInvoiceTotals({ allBillsForCredit, client, details, editingBill, items, profile, showGST, taxInclusive, invoiceOptions, charges }) {
   // v1.10.4 — useMemo replaces the prior useEffect+setTotals pair. Same
   // math (extracted to pure `computeInvoiceTotals` in v1.10.1), but
   // computed inline during render so React doesn't double-render on
@@ -22,6 +23,7 @@ export function useInvoiceTotals({ allBillsForCredit, client, details, editingBi
   const totals = useMemo(() => computeInvoiceTotals({
     items, profile, client, details, showGST, taxInclusive,
     invoiceOptions: { ...invoiceOptions, tcsCumulativeThisYear: clientYtd, tdsCumulativeThisYear: clientYtd },
-  }), [clientYtd, invoiceOptions.tcsSection, invoiceOptions.tdsSection, items, client.state, client?.country, client?.gstin, client?.isSEZ, profile?.state, profile?.country, profile?.gstin, showGST, taxInclusive, invoiceOptions.showRoundOff, invoiceOptions.showTDS, invoiceOptions.tdsRate, invoiceOptions.tdsCumulativeThisYear, invoiceOptions.showTCS, invoiceOptions.tcsRate, invoiceOptions.tcsCumulativeThisYear, invoiceOptions.reverseCharge, invoiceOptions.invoiceDiscountValue, invoiceOptions.invoiceDiscountType, details?.placeOfSupply]);
+    ...(charges ? { charges } : {}),
+  }), [charges, invoiceOptions.roundOffMode, clientYtd, invoiceOptions.tcsSection, invoiceOptions.tdsSection, items, client.state, client?.country, client?.gstin, client?.isSEZ, profile?.state, profile?.country, profile?.gstin, showGST, taxInclusive, invoiceOptions.showRoundOff, invoiceOptions.showTDS, invoiceOptions.tdsRate, invoiceOptions.tdsCumulativeThisYear, invoiceOptions.showTCS, invoiceOptions.tcsRate, invoiceOptions.tcsCumulativeThisYear, invoiceOptions.reverseCharge, invoiceOptions.invoiceDiscountValue, invoiceOptions.invoiceDiscountType, details?.placeOfSupply]);
   return { clientYtd, totals };
 }

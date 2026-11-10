@@ -10,3 +10,4 @@ export * from './files.ts';
 export * from './platform.ts';
 export * from './permissions.ts';
 export * from './team.ts';
+export * from './staff.ts';

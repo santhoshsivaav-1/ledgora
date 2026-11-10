@@ -19,6 +19,9 @@ export const partyInput = z.object({
   openingBalance: z.number().default(0),
   /** The party's group (P1-S1); null or left out = no group. */
   groupId: uuid.nullish(),
+  /** P2-S4 credit limit. null = no limit; `warn` asks before an invoice goes over it, `block` refuses it. */
+  creditLimit: z.number().min(0).nullish(),
+  creditMode: z.enum(['none', 'warn', 'block']).default('none'),
   extra: z.record(z.string(), z.unknown()).default({}),
 });
 export type PartyInput = z.infer<typeof partyInput>;

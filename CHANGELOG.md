@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sale enhancements (Vyapar parity Phase 2).** API, tax engine and database ship on; the web screens are behind
+  `VITE_ENABLE_SALE_INLINE_PAYMENTS=true` (off by default, so the app is unchanged until it is turned on).
+  - **Salesman** (P2-S1): `GET/POST/PATCH/DELETE /v1/staff`, `GET /v1/staff/:id/performance?from&to&basis`
+    (sales net of GST and returns, collected, outstanding, commission, % of monthly target). Invoices take a
+    `salesmanId` and `GET /v1/invoices?salesmanId=` filters by it. A Salesman login linked to a staff row sees only
+    their own invoices. Web: Grow Your Business › **Salesman**, and a Salesman field on the invoice.
+  - **Payment with the sale** (P2-S2): `payments[]` on `POST/PUT /v1/invoices` (cash, UPI, bank, cheque, card; up to
+    6 rows) creates the payments and allocations in the same transaction; over-paying is `422 over_allocated`; a cash
+    sale without a customer uses a "Cash Sale" party; cancelling reverses the invoice's own payments. Web: a Payment
+    block (Credit / Cash, rows, received, balance, post-dated cheque chip).
+  - **Additional charges** (P2-S3): `charges[]` (name, amount before tax, GST %, SAC) are taxed at their own rate
+    and reported in GSTR-1 / 3B / HSN as their own lines; printed one per row (print option to group them).
+    Round-off can go up or down (`roundOffMode`). Totals of invoices without charges are byte-identical (20 golden
+    fixtures).
+  - **Save checks** (P2-S4): party credit limit (`creditLimit`, `creditMode` none / warn / block), §269ST cash of
+    ₹2 lakh or more from one party in a day (typed acknowledgement), negative stock (warn / block when set), period
+    lock and filed GST months (owner override with a reason, audited).
+  - **Payment In** (P2-S5): discount allowed and TDS deducted settle invoices alongside the money; cheque date;
+    receipts are numbered `RCT-n`; `PUT /v1/payments/:id` edits a receipt and re-settles every invoice it touched.
+  - **Credit notes and sale orders** (P2-S6): credit notes against an invoice can not return more than is left
+    (`GET /v1/invoices/:id/returnable`), with a return reason, restock switch and cash / bank refund. Sale orders take
+    an advance and convert part by part (`POST /v1/invoices/:id/convert`, `GET /v1/invoices/:id/progress`: open,
+    partially invoiced, closed).
+  - **Single-page editor** (P2-S7): with the flag on, Add Sale opens as one page beside the live preview, with
+    **Save & New**; the step-by-step view is still a click away.
+  - Migration `0009_sale_enhancements.sql`: table `staff` (row-level security), `invoices.salesman_id`,
+    `parties.credit_limit` / `credit_mode`, new `payments` columns (direction, account, cheque date, discount, TDS,
+    source, invoice, number), `payment_allocations.purchase_id`. Additive only.
+
 - **Party Groups (Vyapar parity P1-S1).** Clients › **Party Groups** lists your groups as a tree ("Retail › Chennai")
   with how many parties each holds; add, rename, nest and delete them there. A group that is still used can not be
   deleted until you pick where its parties and child groups go (**Move and delete** does both in one step). Add /

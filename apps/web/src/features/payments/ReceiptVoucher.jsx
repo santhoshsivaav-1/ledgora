@@ -4,7 +4,10 @@ import { getAllReceipts, saveReceipt, deleteReceipt, getAllBills, getProfile, ge
 import { formatCurrency, numberToWords, belongsToProfile, isUnassignedToBusiness, countsAsSales, businessKeyOf, localToday, amountDue, paymentStatusFor, isCancelledBill } from '../../utils';
 import UnassignedBanner from '../../app/UnassignedBanner';
 import { toast } from '../../components/ui/Toast';
-import { confirmAction } from '../../components/ui/ConfirmModal';
+import { confirmAction, promptAction } from '../../components/ui/ConfirmModal';
+import { cashLimitCheck } from '@ledgora/tax-engine';
+import { FEATURES } from '../../config/featureFlags';
+import { dayCashFromBills } from '../invoices/editor/saleExtras';
 import HelpButton from '../../components/ui/HelpButton';
 
 const PAYMENT_MODES = ['Bank Transfer', 'UPI', 'Cash', 'Cheque', 'Card', 'Other'];
@@ -22,6 +25,11 @@ const emptyForm = {
   againstInvoice: '',
   note: '',
 };
+// Vyapar parity P2-S5 (flag sale.inlinePayments): discount allowed, TDS the payer kept, and the cheque's date. The
+// invoice is settled by money + discount + TDS.
+const PHASE2 = FEATURES.saleInlinePayments;
+const phase2Blank = { discount: '', tds: '', chequeDate: '' };
+const num = (v) => parseFloat(v) || 0;
 
 export default function ReceiptVoucher() {
   const [receipts, setReceipts] = useState([]);
@@ -83,7 +91,7 @@ export default function ReceiptVoucher() {
   const openAdd = async () => {
     const receiptNo = await getNextReceiptNo();
     previewedNoRef.current = receiptNo;
-    setForm({ ...emptyForm, date: localToday(), receiptNo });
+    setForm({ ...emptyForm, ...(PHASE2 ? phase2Blank : {}), date: localToday(), receiptNo });
     setEditingId(null);
     setShowForm(true);
   };
@@ -104,6 +112,7 @@ export default function ReceiptVoucher() {
       referenceNo: rcp.referenceNo || '',
       againstInvoice: rcp.againstInvoice || '',
       note: rcp.note || '',
+      ...(PHASE2 ? { discount: rcp.discount ? String(rcp.discount) : '', tds: rcp.tds ? String(rcp.tds) : '', chequeDate: rcp.chequeDate || '' } : {}),
     });
     setEditingId(rcp.id);
     setShowForm(true);
@@ -128,6 +137,26 @@ export default function ReceiptVoucher() {
   const handleSave = async () => {
     if (!form.clientName.trim()) { toast('Client name required', 'warning'); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast('Enter valid amount', 'warning'); return; }
+    if (PHASE2 && form.paymentMode === 'Cheque' && !form.chequeDate) { toast('Enter the cheque date', 'warning'); return; }
+    let cashAck = '';
+    if (PHASE2 && form.paymentMode === 'Cash') {
+      const sameDay = receipts.filter(r => r.id !== editingId && r.paymentMode === 'Cash' && r.date === form.date
+        && (r.clientName || '').trim().toLowerCase() === form.clientName.trim().toLowerCase());
+      const cash = cashLimitCheck({
+        // Receipts and cash recorded straight on invoices, without counting a receipt twice.
+        dayCashTotal: Math.max(sameDay.reduce((t, r) => t + num(r.amount), 0), dayCashFromBills(bills, form.clientName, form.date)),
+        newCash: num(form.amount),
+      });
+      if (cash.breached) {
+        cashAck = await promptAction({
+          title: 'Cash limit (section 269ST)',
+          message: `Cash from ${form.clientName} on ${form.date} reaches ${formatCurrency(cash.total)}. Receiving ${formatCurrency(cash.limit)} or more in cash from one person in a day attracts a penalty equal to the amount. Type an acknowledgement to save anyway.`,
+          placeholder: 'I understand',
+          confirmLabel: 'Save anyway',
+        });
+        if (!cashAck || !String(cashAck).trim()) return;
+      }
+    }
     try {
       // v1.10.16 — Edit mode preserves the original receipt number and id so
       // the server upserts in place. Only new receipts reserve a fresh
@@ -147,8 +176,11 @@ export default function ReceiptVoucher() {
       // to" banner, never as a side effect of fixing a typo while some other
       // business happens to be selected.
       const existing = editingId ? receipts.find(r => r.id === editingId) : null;
+      const { discount, tds, chequeDate, ...base } = form;
       const receipt = {
-        ...form,
+        ...(PHASE2 ? form : base),
+        ...(PHASE2 ? { discount: num(discount), tds: num(tds), chequeDate: form.paymentMode === 'Cheque' ? chequeDate : '' } : {}),
+        ...(cashAck ? { cashAcknowledgement: String(cashAck).trim() } : {}),
         receiptNo,
         amount: parseFloat(form.amount),
         ownerGstin: existing ? (existing.ownerGstin || '') : (profile?.gstin || ''),
@@ -168,7 +200,8 @@ export default function ReceiptVoucher() {
       // edited. If the linked invoice was changed, we remove the old
       // propagation and add a fresh one to the new invoice.
       const modeMap = { 'Bank Transfer': 'bank-transfer', 'UPI': 'upi', 'Cash': 'cash', 'Cheque': 'cheque', 'Card': 'card', 'Other': 'other' };
-      const paidAmount = parseFloat(form.amount);
+      // What the receipt settles on the invoice: the money, plus (P2-S5) discount allowed and TDS kept by the payer.
+      const paidAmount = parseFloat(form.amount) + (PHASE2 ? num(form.discount) + num(form.tds) : 0);
       // A cancelled invoice stays cancelled (un-cancel it on the Dashboard,
       // which also fixes its stock); otherwise paid once the payments cover
       // the total less TDS.
@@ -213,6 +246,10 @@ export default function ReceiptVoucher() {
               note: `Receipt ${receiptNo}${form.referenceNo ? ' · ref ' + form.referenceNo : ''}`,
               recordedAt: priorIdx >= 0 ? priorPayments[priorIdx].recordedAt : new Date().toISOString(),
               receiptNo,
+              ...(PHASE2 && (num(form.discount) || num(form.tds))
+                ? { cash: parseFloat(form.amount), discount: num(form.discount), tds: num(form.tds) }
+                : {}),
+              ...(PHASE2 && form.paymentMode === 'Cheque' ? { chequeDate: form.chequeDate } : {}),
             };
             const nextPayments = priorIdx >= 0
               ? priorPayments.map((p, i) => i === priorIdx ? nextEntry : p)
@@ -383,12 +420,36 @@ export default function ReceiptVoucher() {
                 <label className="form-label">Amount *</label>
                 <input type="number" className="form-input" value={form.amount} onChange={e => updateField('amount', e.target.value)} min="0" />
               </div>
+              {PHASE2 && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="rcp-discount">Discount given</label>
+                    <input id="rcp-discount" type="number" className="form-input" value={form.discount ?? ''} onChange={e => updateField('discount', e.target.value)} min="0" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="rcp-tds">TDS deducted</label>
+                    <input id="rcp-tds" type="number" className="form-input" value={form.tds ?? ''} onChange={e => updateField('tds', e.target.value)} min="0" />
+                  </div>
+                  {(num(form.discount) > 0 || num(form.tds) > 0) && (
+                    <div className="form-group" style={{ gridColumn: 'span 2', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Settles {formatCurrency(num(form.amount) + num(form.discount) + num(form.tds))} on the invoice
+                      ({formatCurrency(num(form.amount))} received + {formatCurrency(num(form.discount))} discount + {formatCurrency(num(form.tds))} TDS).
+                    </div>
+                  )}
+                </>
+              )}
               <div className="form-group">
                 <label className="form-label">Payment Mode</label>
                 <select className="form-input" value={form.paymentMode} onChange={e => updateField('paymentMode', e.target.value)}>
                   {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
+              {PHASE2 && form.paymentMode === 'Cheque' && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="rcp-cheque-date">Cheque date *</label>
+                  <input id="rcp-cheque-date" type="date" className="form-input" value={form.chequeDate || ''} onChange={e => updateField('chequeDate', e.target.value)} />
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label">Reference / Transaction No</label>
                 <input type="text" className="form-input" value={form.referenceNo} onChange={e => updateField('referenceNo', e.target.value)} />

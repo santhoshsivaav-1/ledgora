@@ -157,3 +157,21 @@ export function planCreditApplication(
 
   return { amountApplied: amount, sourcePatches, targetEntry, consumedFrom };
 }
+
+// Vyapar parity P2-S4: a party's credit limit. `used` is what the party already owes (outstanding receivable, plus
+// unbilled open orders when that setting is on); `newAmount` is the unpaid part of the sale being saved. Mode `none`
+// or no limit always passes; `warn` asks the user to confirm; `block` refuses the save (API code CREDIT_LIMIT).
+export function creditCheck(o: {
+  limit?: number | null;
+  mode?: string | null;
+  used?: number;
+  newAmount?: number;
+}) {
+  const mode = o.mode === 'warn' || o.mode === 'block' ? o.mode : 'none';
+  const limit = Number(o.limit) || 0;
+  const used = Math.round((Number(o.used) || 0) * 100) / 100;
+  const after = Math.round((used + Math.max(0, Number(o.newAmount) || 0)) * 100) / 100;
+  const exceededBy =
+    mode !== 'none' && limit > 0 ? Math.max(0, Math.round((after - limit) * 100) / 100) : 0;
+  return { ok: exceededBy <= 0, exceededBy, mode, limit, used, after };
+}

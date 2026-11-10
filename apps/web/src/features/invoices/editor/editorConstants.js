@@ -18,6 +18,7 @@ export const DEFAULT_OPTIONS = {
   showDueDate: true,
   showItemQty: true,
   showRoundOff: true, // v1.10.75 - on for new installs; a saved choice still wins
+  showChargeRows: true, // P2-S3 - additional charges print one row each; off = one "Additional charges" row
   invoiceMode: 'goods',    // 'goods' | 'services' | 'mixed' — drives default unit + dropdown filter
   // Paper / print size (v1.8.1+). See PAPER_SIZES in utils.js.
   //   Sheet: 'a4' | 'a4Landscape' | 'a5' | 'a5Landscape'

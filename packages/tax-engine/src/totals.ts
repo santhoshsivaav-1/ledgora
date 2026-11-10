@@ -6,6 +6,7 @@ import { finiteNonNeg, r2, sum } from './money.ts';
 import { resolveLineDiscount } from './lineTax.ts';
 import { getStateCode, isUnionTerritoryWithoutLegislature } from './gstin.ts';
 import { INVOICE_TYPES } from './invoiceTypes.ts';
+import { cleanCharges } from './sale.ts';
 
 // ============================================================================
 // v1.10.1 — Pure invoice totals computation.
@@ -44,6 +45,7 @@ import { INVOICE_TYPES } from './invoiceTypes.ts';
 //     showTDS?: boolean, tdsRate?: number, tdsCumulativeThisYear?: number,
 //     showTCS?: boolean, tcsRate?: number, tcsCumulativeThisYear?: number,
 //   },
+//   charges?: Array,         // P2-S3 additional charges { name, amount, gstRate, hsn, taxable }
 // }}
 // @returns totals object with { subtotal, totalDiscount, taxableAmount,
 //   cgst, sgst, utgst, igst, cess, tcsAmount, tdsAmount, roundOff,
@@ -108,8 +110,22 @@ export function computeInvoiceTotals(opts: Rec) {
 
   const subtotal = r2(sum(lines.map((l: Rec) => l.gross)));
   const totalDiscount = r2(sum(lines.map((l: Rec) => l.disc)));
-  const taxableAmount = r2(sum(lines.map((l: Rec) => l.taxable)));
-  const taxTotal = r2(sum(lines.map((l: Rec) => l.tax)));
+  // Vyapar parity P2-S3 — additional charges (shipping, packaging...) are taxable supplies at their own rate. Each is
+  // a pseudo-line whose amount is before tax, even on a tax-inclusive invoice; it adds to taxable value and to tax,
+  // split CGST/SGST or IGST with the rest. Not in `subtotal` (the goods), so the totals card shows them on their own
+  // row. With no charges every figure below is computed exactly as before (golden test totalsGolden.test.js).
+  const chargeRows = cleanCharges(rawOpts.charges).map((c) => {
+    const taxPct = showGST && c.taxable ? c.gstRate : 0;
+    return { ...c, taxPct, taxable: c.amount, tax: r2((c.amount * taxPct) / 100) };
+  });
+  const chargesTotal = r2(sum(chargeRows.map((c: Rec) => c.taxable)));
+  const chargesTax = r2(sum(chargeRows.map((c: Rec) => c.tax)));
+  const taxableAmount = chargeRows.length
+    ? r2(sum(lines.map((l: Rec) => l.taxable)) + chargesTotal)
+    : r2(sum(lines.map((l: Rec) => l.taxable)));
+  const taxTotal = chargeRows.length
+    ? r2(sum(lines.map((l: Rec) => l.tax)) + chargesTax)
+    : r2(sum(lines.map((l: Rec) => l.tax)));
   const cessTotal = r2(sum(lines.map((l: Rec) => l.cess)));
 
   // Place of supply / interstate detection.
@@ -182,7 +198,7 @@ export function computeInvoiceTotals(opts: Rec) {
   const baseTotal = isReverseCharge
     ? taxableAmount
     : taxInclusive && showGST
-      ? subtotal - totalDiscount
+      ? subtotal - totalDiscount + chargesTotal + chargesTax
       : taxableAmount + taxTotal;
 
   // v1.10.1 — TDS 194Q / TCS 206C(1H): correct BASE and enforce the
@@ -265,9 +281,15 @@ export function computeInvoiceTotals(opts: Rec) {
       : Math.min(preInvDiscTotal, r2(invDiscValue));
 
   const totalBeforeRound = preInvDiscTotal - invoiceDiscountAmount;
-  const roundOff = invoiceOptions.showRoundOff
-    ? r2(Math.round(totalBeforeRound) - totalBeforeRound)
-    : 0;
+  // P2-S3: Settings can round up or down instead of to the nearest rupee. The tiny epsilon stops a total that is
+  // already whole (but carries float dust, 130.00000001) from being pushed a whole rupee.
+  const roundTo =
+    invoiceOptions.roundOffMode === 'up'
+      ? Math.ceil(totalBeforeRound - 1e-9)
+      : invoiceOptions.roundOffMode === 'down'
+        ? Math.floor(totalBeforeRound + 1e-9)
+        : Math.round(totalBeforeRound);
+  const roundOff = invoiceOptions.showRoundOff ? r2(roundTo - totalBeforeRound) : 0;
   const total = r2(totalBeforeRound + roundOff);
 
   // Under RCM, portal-facing tax breakdown still shows on the PDF
@@ -322,6 +344,12 @@ export function computeInvoiceTotals(opts: Rec) {
     lines,
   };
 
+  if (chargeRows.length) {
+    result.charges = chargeRows;
+    result.chargesTotal = chargesTotal;
+    result.chargesTax = chargesTax;
+  }
+
   if (isReverseCharge) {
     result.rcmTaxCgst = cgst;
     result.rcmTaxSgst = sgst;
@@ -359,6 +387,7 @@ export const templateTotals = (tpl: Rec, profile: Rec, extraOptions: Rec = {}) =
     showGST: typeof invoiceOptions.showGST === 'boolean' ? invoiceOptions.showGST : typeShowsGst,
     taxInclusive: !!t.taxInclusive,
     invoiceOptions,
+    charges: t.charges,
   });
 };
 
@@ -411,7 +440,13 @@ export const setOffITC = (liability: Rec | null | undefined, credit: Rec | null 
 // rows added the tax twice on paper (Subtotal 2,400 + tax 320 "=" Total 2,400).
 // Printed instead: taxable value before discount, so that
 // Subtotal - Discount + taxes = Total, the same as for exclusive prices.
+// Additional charges (P2-S3) print on their own rows, so they are taken back out of the taxable value here.
 export const printedSubtotal = (t: Rec | null | undefined) =>
   t?.taxInclusive
-    ? Math.round(((Number(t.taxableAmount) || 0) + (Number(t.totalDiscount) || 0)) * 100) / 100
+    ? Math.round(
+        ((Number(t.taxableAmount) || 0) +
+          (Number(t.totalDiscount) || 0) -
+          (Number(t.chargesTotal) || 0)) *
+          100,
+      ) / 100
     : Number(t?.subtotal) || 0;

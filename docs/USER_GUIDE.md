@@ -499,3 +499,26 @@ inside another (**Retail › Chennai**), and filtering by a group includes the g
   itself or one of its own groups.
 - Who can change groups: anyone whose role may edit parties (Owner, Admin, Salesman, Biller). Viewers and accountants
   can see them.
+
+## 12. Sale enhancements (beta)
+
+Turned on with `VITE_ENABLE_SALE_INLINE_PAYMENTS=true` while in beta.
+
+- **Payment with the sale.** Add Sale has a **Payment** block under the items. Pick **Cash** to fill one Cash row with
+  the total, or keep **Credit** and add rows (UPI, bank, cheque, card) for what the customer paid now. The balance and
+  a **Paid** chip update as you type; paying more than the total stops Save. A cheque needs its date and shows
+  **Post-dated** when it is in the future. Payments recorded earlier through a receipt show above the rows.
+- **Additional charges.** Add shipping, packaging or any charge with its own GST rate and SAC. Charges are taxed at
+  their own rate and appear in GSTR-1 and the HSN summary like any other line.
+- **Salesman.** Grow Your Business › **Salesman** lists each salesman with this month's sales, collections and
+  commission. Pick a salesman on the invoice to credit the sale to them. Link a salesman to a team login and that
+  person sees only their own invoices.
+- **Credit limit.** In Add / Edit Client, set a credit limit and choose **Warn before saving** or **Block the sale**.
+- **Cash limit.** Taking ₹2,00,000 or more in cash from one person in a day breaks section 269ST of the Income Tax
+  Act. The app asks you to type an acknowledgement before saving such a sale or receipt.
+- **Payment In.** Enter **Discount given** and **TDS deducted** along with the amount received; the invoice is settled
+  by all three.
+- **Credit notes.** Choose the reason (shown in GSTR-1), whether goods go back to stock, and how the money is
+  refunded. A credit note can not return more than is left on the original invoice.
+- **Sale orders.** An order can take an advance and shows its progress (ordered, invoiced, pending).
+

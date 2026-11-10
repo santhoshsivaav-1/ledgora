@@ -21,6 +21,7 @@ import { itemsModule } from './modules/items.ts';
 import { partiesModule } from './modules/parties.ts';
 import { partyGroupsModule } from './modules/partyGroups.ts';
 import { paymentsModule } from './modules/payments.ts';
+import { staffModule } from './modules/staff.ts';
 import { purchasesModule } from './modules/purchases.ts';
 import { recurringModule } from './modules/recurring.ts';
 import { templatesModule } from './modules/templates.ts';
@@ -78,6 +79,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     itemsModule,
     invoicesModule,
     paymentsModule,
+    staffModule,
     purchasesModule,
     recurringModule,
     templatesModule,

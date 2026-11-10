@@ -64,3 +64,56 @@ Judgement calls inside the guide's rules, listed so a reviewer can overturn them
    be reused, but there is no restore yet; adding them to `TRASH_ENTITIES` is left for a later slice.
 6. **P1-S1: 422 uses the existing `unprocessable` code** (the guide says `VALIDATION`), with zod-style
    `details: [{ path, message }]` so forms can show the message under the field.
+
+## Notes recorded during Phase 2 (2026-11-10)
+
+Judgement calls inside the guide's rules, listed so a reviewer can overturn them.
+
+1. **Golden fixtures for `computeTotals`.** The function is `computeInvoiceTotals` (there is no `computeTotals`), and
+   `apps/web/test/tax.test.js` calls it 8 times (5 directly, 3 through `templateTotals`), not 20. The 20 frozen
+   fixtures (`apps/web/test/fixtures/totalsFixtures.js`, outputs in `totals.golden.json`, captured before
+   `totals.ts` changed) are those 8 plus 12 covering the branches they miss: mixed rates with cess, intra-UT, RCM +
+   inclusive, TCS over threshold with round-off, TDS 194J, invoice discount % and capped fixed, export, SEZ, blank
+   business state, non-India seller, garbage input. `totalsGolden.test.js` checks each with no charges and with
+   `charges: []`. Re-capture only on purpose (`CAPTURE_TOTALS_GOLDEN=1`).
+2. **Charges are a top-level `charges` option** of `computeInvoiceTotals`, amounts before tax even on a
+   tax-inclusive invoice, left out of `subtotal` (goods) and added to taxable value and tax. Output gains
+   `charges`, `chargesTotal`, `chargesTax` only when there are charges. `roundOffMode` (`up` / `down`) is new;
+   unset keeps the old nearest-rupee code path.
+3. **One migration for the phase, numbered `0009`.** The guide's map says `0010_sale_enhancements` with `0009` for
+   P1-S4/S5, but those slices are not written and the journal must stay contiguous. Later Phase 1 migrations take
+   the next free number.
+4. **Two P1-S2 columns came forward.** P2-S4 needs `parties.credit_limit` / `credit_mode`, and P1-S2 is not done, so
+   `0009` adds just those two (contract rule: a mode other than `none` needs a limit > 0). The rest of P1-S2 is
+   untouched.
+5. **Salesman scope is opt-in.** A member with role Salesman sees only their own invoices once their login is linked
+   to a staff row (`staff.user_id`). An unlinked salesman sees what they saw before Phase 2 (the existing
+   business-limit test depends on it). A linked salesman creating an invoice is credited automatically and can not
+   credit someone else (403).
+6. **New error codes** (lowercase like the rest): `over_allocated` and `over_return` (422); `credit_limit`,
+   `cash_limit`, `negative_stock`, `period_locked` (409: allowed only after the user confirms, acknowledges, or the
+   owner overrides with a reason, which is audited as `guard.override`).
+7. **Guards that changed nothing before stay off by default.** Negative stock is `allow` unless Settings > Transaction
+   (`business_settings.preferences.transaction.negativeStock`) says `warn` or `block`; the lock date and filed months
+   are read from the same preferences (`transaction.lockDate`, `filedMonths`). A credit mode of `none` (the default
+   for every existing party) never stops a sale.
+8. **`PUT /v1/invoices/:id` without `payments` keeps the saved inline payments** (with it, they are replaced), so a
+   client that predates Phase 2 can not wipe them by editing.
+9. **Receipts settle `amount + discount + TDS`.** Allocations may total up to that; `unallocated` is the advance. A
+   receipt gets `RCT-n` from its own `number_series` row when no number is given. Inline payments carry the invoice
+   number and can only be edited from the invoice (422 on `PUT /v1/payments/:id`).
+10. **Sale-order advance is unallocated money** linked by `payments.invoice_id`; converting the order applies it to the
+    new invoice first. Order status is derived (`GET /v1/invoices/:id/progress`) and also stamped on the order as
+    `data.orderStatus` after each conversion.
+11. **The web screens still save workspace documents**, so on the web the Phase 2 data lives on the bill:
+    `payments[]` entries with `source: 'invoice_inline'`, `data.charges`, `data.salesmanId/salesmanName`,
+    `data.returnInfo`, `data.expectedDeliveryDate`, and credit fields on client documents. GST returns turn
+    `data.charges` into `isCharge` lines in one place (`withChargeLines`), so every table reports them; a bill without
+    charges is passed through unchanged.
+12. **`sale.inlinePayments` stays off by default** (`VITE_ENABLE_SALE_INLINE_PAYMENTS=true` turns it on). The P2-S2
+    acceptance list passes at the API level, but the guide flips the default only after acceptance, and the web block
+    has not had the timed "cash sale in 60 seconds" run. The flag also gates the Salesman menu entry, charges,
+    guards, the Payment In fields and the single-page default, so a flag-off build is today's build.
+13. **Web Save & New reloads `/invoices/new`** rather than resetting the editor in place: the editor peeks its number
+    and loads its defaults on mount, and a reload reuses that path exactly.
+
