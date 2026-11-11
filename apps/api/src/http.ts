@@ -15,6 +15,7 @@ import {
   type OrgContext,
 } from './middleware/index.ts';
 import type { Permission } from '@ledgora/contracts';
+import { checkQuery, clampResult, hasRange } from './middleware/range.ts';
 
 /** What every module gets: the pool, the settings and file storage. */
 export interface Deps {
@@ -141,11 +142,15 @@ export function createRegistrar(app: Hono, deps: Deps) {
           // The real path, not the route pattern: a pattern like /v1/workspace/collections/:collection says nothing about which collection.
           requirePermission(ctx, spec.method, c.req.path, spec.permission);
           await requireFeature(ctx, spec.feature);
+          // P7-S6: a member limited to a date range sees only that range (queries outside it are refused, rows cut).
+          const limited = spec.method === 'get' && hasRange(ctx);
+          if (limited) checkQuery(ctx, query.data);
           result = await withTenant(deps.db, ctx.orgId, (tx) => run(tx, ctx), {
             businessIds: ctx.businessIds,
             actorId: ctx.user.id,
             ip: ctx.ip,
           });
+          if (limited && !(result instanceof Response)) result = clampResult(ctx, result);
         }
       }
       if (result instanceof Response) return result;

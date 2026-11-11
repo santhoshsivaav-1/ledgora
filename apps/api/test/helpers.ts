@@ -97,6 +97,7 @@ export function makeHarness(opts: HarnessOptions = {}) {
       password,
       cookie,
       call,
+      app: () => app,
     };
   }
 

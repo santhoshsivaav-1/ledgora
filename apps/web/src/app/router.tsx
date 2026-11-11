@@ -37,6 +37,13 @@ export const VIEW_ROUTES: ViewRoute[] = [
   // Vyapar parity Phase 4: the books. /accounting/:tab is one screen with tabs; viewFromPath maps every tab to it.
   { id: 'accounting', path: '/accounting', title: 'Accounting' },
   { id: 'verify', path: '/utilities/verify', title: 'Verify My Data' },
+  // Vyapar parity Phase 7: the utilities.
+  { id: 'barcode', path: '/utilities/barcode', title: 'Barcode Generator' },
+  { id: 'tally', path: '/utilities/tally', title: 'Export to Tally' },
+  { id: 'close-fy', path: '/utilities/close-fy', title: 'Close Financial Year' },
+  { id: 'backup', path: '/utilities/backup', title: 'Backup & Restore' },
+  { id: 'setup', path: '/utilities/setup', title: 'Setup your business' },
+  { id: 'trash', path: '/utilities/trash', title: 'Trash' },
   { id: 'recurring', path: '/recurring', title: 'Recurring' },
   { id: 'receipts', path: '/receipts', title: 'Receipts', vyaparPath: '/sales/payment-in' },
   { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },

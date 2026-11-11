@@ -30,7 +30,12 @@ export async function requireOrg(c: Context, db: Database, auth: AuthContext): P
   }
   if (!orgId) throw new AppError('forbidden', 'This account has no organization yet');
   const [m] = await db
-    .select({ id: schema.member.id, role: schema.member.role })
+    .select({
+      id: schema.member.id,
+      role: schema.member.role,
+      dataFrom: schema.member.dataFrom,
+      dataTo: schema.member.dataTo,
+    })
     .from(schema.member)
     .where(and(eq(schema.member.userId, auth.user.id), eq(schema.member.organizationId, orgId)));
   // Same answer for "no such organization" and "not yours": do not confirm that an id exists.
@@ -47,5 +52,13 @@ export async function requireOrg(c: Context, db: Database, auth: AuthContext): P
     );
     if (rows.length) businessIds = rows.map((r) => r.businessId);
   }
-  return { ...auth, orgId, memberId: m.id, role, businessIds };
+  return {
+    ...auth,
+    orgId,
+    memberId: m.id,
+    role,
+    businessIds,
+    dataFrom: m.dataFrom ?? null,
+    dataTo: m.dataTo ?? null,
+  };
 }

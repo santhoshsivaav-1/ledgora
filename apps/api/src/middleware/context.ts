@@ -24,4 +24,7 @@ export interface OrgContext extends AuthContext {
   role: Role;
   /** null = every business of the organization. */
   businessIds: string[] | null;
+  /** P7-S6: a member (a CA) limited to reports for these dates. null = no limit. */
+  dataFrom: string | null;
+  dataTo: string | null;
 }

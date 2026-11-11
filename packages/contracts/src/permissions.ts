@@ -56,6 +56,7 @@ export const ROLES = [
   'owner',
   'admin',
   'accountant',
+  'ca',
   'salesman',
   'biller',
   'stock_keeper',
@@ -68,6 +69,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   owner: 'Owner',
   admin: 'Admin',
   accountant: 'Accountant',
+  ca: 'CA (read-only)',
   salesman: 'Salesman',
   biller: 'Biller',
   stock_keeper: 'Stock keeper',
@@ -97,6 +99,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'cashbank:write',
     'report:profit',
   ],
+  // P7-S6 Share with CA: sees the books, reports and exports; can not create, edit or delete anything.
+  ca: [...bookReads, 'audit:read', 'data:export', 'report:profit'],
   salesman: [
     'invoice:read',
     'invoice:write',
@@ -200,6 +204,16 @@ export function permissionFor(method: string, path: string): Permission | null {
     return read ? 'cashbank:read' : 'cashbank:write';
   // Phase 12 (POS): its settings are a setting; the counter's lookups and bills are invoices.
   if (/^\/v1\/pos\/settings/.test(path)) return read ? 'invoice:read' : 'settings:write';
+  // Phase 7: barcodes edit items; Tally is an export; Close FY is an accounting decision; backups are exports, restoring
+  // and the schedule are settings (and restore is owner-only in the handler); the setup card reads business data.
+  if (/^\/v1\/utilities\/barcodes/.test(path)) return 'item:write';
+  if (/^\/v1\/utilities\/tally/.test(path)) return 'data:export';
+  if (/^\/v1\/utilities\/fy-/.test(path)) return read ? 'ledger:read' : 'accounting:manage';
+  if (/^\/v1\/backups\/drive/.test(path)) return 'settings:write';
+  if (/^\/v1\/backups\/(restore|settings)/.test(path))
+    return read ? 'data:export' : 'settings:write';
+  if (/^\/v1\/backups/.test(path)) return m === 'delete' ? 'settings:write' : 'data:export';
+  if (/^\/v1\/setup/.test(path)) return read ? 'business:read' : 'business:write';
   if (/^\/v1\/tds/.test(path)) return read ? 'payment:read' : 'payment:write';
   const table: [RegExp, string][] = [
     [/^\/v1\/(invoices|pos)/, 'invoice'],

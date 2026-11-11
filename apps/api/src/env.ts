@@ -26,6 +26,8 @@ const schema = z.object({
   SMTP_URL: z.string().optional(),
   MSG91_AUTH_KEY: z.string().optional(),
   MSG91_TEMPLATE_ID: z.string().optional(),
+  /** Key the server derives per-organization passwords from for scheduled backups. Falls back to AUTH_SECRET; set it to rotate independently. */
+  BACKUP_ENCRYPTION_KEY: z.string().min(16).optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /**

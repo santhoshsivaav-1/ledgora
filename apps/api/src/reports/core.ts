@@ -1,7 +1,7 @@
 // Vyapar parity Phase 6, the core reports (P6-S2 Day Book and Cash Flow, P6-S3 Party Statement and Payable Ageing,
 // P6-S7 Profit & Loss, Trial Balance and Balance Sheet). Every total is worked out here, on the server, from the whole
 // period: the screen never adds up a page of rows.
-import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import { schema } from '@ledgora/db';
 import { uuid } from '@ledgora/contracts';
 import {
@@ -31,7 +31,7 @@ import {
   totalsWithGroup,
 } from './shared.ts';
 
-const { accounts, parties, purchases } = schema;
+const { accounts, ledgerEntries, parties, purchases } = schema;
 const periodOf = (p: { from?: string; to?: string }) => ({
   from: p.from ?? fyStartOf(p.to ?? today()),
   to: p.to ?? today(),
@@ -341,11 +341,25 @@ export const balanceSheetReport = defineReport({
     const accts = await totalsWithGroup(tx, p.businessId, undefined, asOf);
     const stock = await stockFigures(tx, asOf);
     const current = await pnlOf(tx, p.businessId, fyStartOf(asOf), asOf);
+    // P7-S3: once the year is closed (on or before this date) its profit is in Retained Earnings, an account on the
+    // sheet, so it is not shown a second time as "current year".
+    const [closed] = await tx
+      .select({ id: ledgerEntries.id })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.businessId, p.businessId),
+          eq(ledgerEntries.refType, 'fy_close'),
+          gte(ledgerEntries.txnDate, fyStartOf(asOf)),
+          lte(ledgerEntries.txnDate, asOf),
+        ),
+      )
+      .limit(1);
     const bs = balanceSheet({
       accounts: accts,
       closingStock: stock.closing,
       openingStock: stock.initial,
-      currentProfit: current.totals.netProfit,
+      currentProfit: closed ? 0 : current.totals.netProfit,
     });
     const rows: Record<string, unknown>[] = [];
     const put = (

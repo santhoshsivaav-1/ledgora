@@ -31,6 +31,9 @@ import { chequesModule } from './modules/cheques.ts';
 import { loansModule } from './modules/loans.ts';
 import { ifscModule } from './modules/ifsc.ts';
 import { posModule } from './modules/pos.ts';
+import { utilitiesModule } from './modules/utilities.ts';
+import { backupsModule } from './modules/backups.ts';
+import { setupModule } from './modules/setup.ts';
 import { reportsModule } from './modules/reports.ts';
 import { recurringModule } from './modules/recurring.ts';
 import { templatesModule } from './modules/templates.ts';
@@ -99,6 +102,9 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     ifscModule,
     reportsModule,
     posModule,
+    utilitiesModule,
+    backupsModule,
+    setupModule,
     recurringModule,
     templatesModule,
     filesModule,

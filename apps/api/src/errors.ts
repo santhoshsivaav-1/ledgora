@@ -23,6 +23,7 @@ const STATUS: Record<Code, number> = {
   credit_limit: 409,
   cash_limit: 409,
   negative_stock: 409,
+  ledger_required: 409,
   period_locked: 409,
   // Phase 3: a repeated supplier bill number is saved after the user confirms; receiving more than is ordered is wrong.
   duplicate_bill: 409,

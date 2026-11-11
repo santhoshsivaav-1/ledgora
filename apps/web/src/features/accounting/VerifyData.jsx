@@ -33,7 +33,7 @@ export default function VerifyData({ businessId }) {
   useEffect(() => { run(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [businessId]);
 
   const fix = async (c) => {
-    if (!(await confirmAction({ title: `Fix: ${c.title}`, message: c.fix === 'repost' ? 'The ledger of the documents is rebuilt. The old postings are reversed, nothing is deleted.' : 'Allocations that exceed what a payment is, or what an invoice owes, are trimmed.', confirmLabel: 'Fix automatically' }))) return;
+    if (!(await confirmAction({ title: `Fix: ${c.title}`, message: c.fix === 'repost' ? 'The ledger of the documents is rebuilt. The old postings are reversed, nothing is deleted.' : c.fix === 'reclose' ? 'The year-end closing entry is posted again from the books as they are now (the old one is reversed). The year stays closed.' : 'Allocations that exceed what a payment is, or what an invoice owes, are trimmed.', confirmLabel: 'Fix automatically' }))) return;
     try {
       const r = await fixCheck(c.id, businessId);
       toast(r.fixed ? `Fixed ${r.fixed}` : 'Nothing needed fixing', 'success');

@@ -127,6 +127,20 @@
       "when": 1794387125598,
       "tag": "0017_pos_loyalty_barcode",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794388384647,
+      "tag": "0018_utilities_backup_fyclose_ca",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794390705415,
+      "tag": "0019_backup_keys_drive",
+      "breakpoints": true
     }
   ]
 }

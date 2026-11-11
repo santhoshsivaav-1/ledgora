@@ -22,6 +22,7 @@ import { buildCtx, ledgerEnabled, repost, seedChart } from './ledgerRules.ts';
 import { dueOf, refreshInvoices } from './saleRules.ts';
 import { refreshPurchases } from './purchaseRules.ts';
 import { tdsView } from './tdsRules.ts';
+import { recloseStale, staleClosings } from './utilities.ts';
 
 const {
   items,
@@ -256,6 +257,7 @@ async function gather(tx: Tx, businessId: string): Promise<VerifyData> {
         )
       : [],
     documentDates: dates,
+    staleClosings: ledgerOn ? await staleClosings(tx, businessId) : [],
   };
 }
 
@@ -343,7 +345,7 @@ export function verifyModule({ route }: Registrar) {
     path: '/v1/verify/:checkId/fix',
     tag: 'Utilities',
     summary:
-      'Fix one check automatically: rebuild the ledger of the documents (repost) or trim over-allocated payments. Idempotent and audited',
+      'Fix one check automatically: rebuild the ledger of the documents (repost), trim over-allocated payments, or post a stale year-end closing entry again. Idempotent and audited',
     params: z.object({ checkId: z.string().max(40) }),
     body: z.object({ businessId: z.string().uuid() }),
     response: verifyFixResult,
@@ -358,7 +360,8 @@ export function verifyModule({ route }: Registrar) {
           throw new AppError('conflict', 'The ledger is off for this business');
         await seedChart(tx, orgId, body.businessId);
         fixed = await repostDocuments(tx, orgId, body.businessId);
-      } else fixed = await trimAllocations(tx, body.businessId);
+      } else if (before.fix === 'reclose') fixed = await recloseStale(tx, orgId, body.businessId);
+      else fixed = await trimAllocations(tx, body.businessId);
       await audit(tx, orgId, 'verify.fix', 'business', body.businessId, {
         after: { check: params.checkId, fixed },
       });

@@ -198,7 +198,7 @@ export const NAV: NavEntry[] = [
     icon: RefreshCw,
     children: [
       { id: 'backup', label: 'Backup & Restore', view: 'settings-data', perm: 'data:export' },
-      { id: 'auto-backup', label: 'Auto Backup', path: '/backup', planned: 'P7' },
+      { id: 'auto-backup', label: 'Auto Backup', view: 'backup', perm: 'data:export' },
     ],
   },
   {
@@ -208,10 +208,12 @@ export const NAV: NavEntry[] = [
     children: [
       { id: 'import-items', label: 'Import Items', path: '/utilities/import-items', planned: 'P1' },
       { id: 'bulk-update', label: 'Bulk Update', path: '/utilities/bulk-update', planned: 'P7' },
-      { id: 'barcode', label: 'Barcode Generator', path: '/utilities/barcode', planned: 'P7' },
+      { id: 'barcode', label: 'Barcode Generator', view: 'barcode', module: 'inventory', perm: 'item:read' },
       { id: 'verify', label: 'Verify My Data', view: 'verify', perm: 'verify:run' },
-      { id: 'tally', label: 'Export to Tally', path: '/utilities/tally', planned: 'P7' },
-      { id: 'close-fy', label: 'Close Financial Year', path: '/utilities/close-fy', planned: 'P7' },
+      { id: 'tally', label: 'Export to Tally', view: 'tally', perm: 'data:export' },
+      { id: 'close-fy', label: 'Close Financial Year', view: 'close-fy', perm: 'accounting:manage' },
+      { id: 'setup', label: 'Setup My Business', view: 'setup', perm: 'business:read' },
+      { id: 'trash', label: 'Trash', view: 'trash', perm: 'trash:manage' },
       { id: 'all-documents', label: 'All Documents', view: 'invoices', module: 'invoicing', perm: 'invoice:read' },
       { id: 'user-guide', label: 'User Guide', href: DOCS_URL, icon: HelpCircle },
     ],

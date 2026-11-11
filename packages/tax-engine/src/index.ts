@@ -30,3 +30,7 @@ export * from './recon.ts';
 export * from './cashbank.ts';
 export * from './reports.ts';
 export * from './pos.ts';
+export * from './barcode.ts';
+export * from './tally.ts';
+export * from './fiscal.ts';
+export * from './setup.ts';

@@ -245,17 +245,24 @@ describe('two-factor (2.5)', () => {
 // ---- 2.7 / 2.8 access and roles ------------------------------------------------------------------------------------------------
 
 describe('roles and permissions (2.7, 2.8)', () => {
-  it('defines the 7 built-in roles, and a viewer can only read', () => {
+  it('defines the 8 built-in roles (CA added in Phase 7), and a viewer can only read', () => {
     expect([...ROLES]).toEqual([
       'owner',
       'admin',
       'accountant',
+      'ca',
       'salesman',
       'biller',
       'stock_keeper',
       'viewer',
     ]);
     expect(ROLE_PERMISSIONS.viewer.every((p) => p.endsWith(':read'))).toBe(true);
+    // Share with CA: reads and exports, nothing that writes
+    expect(
+      ROLE_PERMISSIONS.ca.every(
+        (p) => p.endsWith(':read') || ['data:export', 'report:profit'].includes(p),
+      ),
+    ).toBe(true);
     expect(can('admin', 'billing:manage')).toBe(false);
     expect(can('owner', 'billing:manage')).toBe(true);
     expect(permissionFor('POST', '/v1/invoices/abc/cancel')).toBe('invoice:cancel');

@@ -29,6 +29,8 @@ export const member = z.object({
   phoneNumber: z.string().nullable(),
   role,
   businessIds: z.array(uuid).nullable(),
+  dataFrom: z.string().nullable().optional(),
+  dataTo: z.string().nullable().optional(),
   joinedAt: z.string(),
 });
 export const memberPatch = z.object({
@@ -45,8 +47,22 @@ export const invitationInput = z
       .optional(),
     role: role.exclude(['owner']),
     businessIds: z.array(uuid).default([]),
+    /** P7-S6 (Share with CA): how many days the link works (default 7, up to 30) and the dates the member may see. */
+    expiresInDays: z.number().int().min(1).max(30).optional(),
+    dataFrom: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullish(),
+    dataTo: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullish(),
   })
-  .refine((v) => v.email || v.phone, 'Give an e-mail or a phone number');
+  .refine((v) => v.email || v.phone, 'Give an e-mail or a phone number')
+  .refine(
+    (v) => !v.dataFrom || !v.dataTo || v.dataFrom <= v.dataTo,
+    'The first date is after the last',
+  );
 export const invitation = z.object({
   id: z.string(),
   email: z.string(),
@@ -54,6 +70,8 @@ export const invitation = z.object({
   role,
   businessIds: z.array(uuid),
   status: z.enum(['pending', 'accepted', 'revoked']),
+  dataFrom: z.string().nullable().optional(),
+  dataTo: z.string().nullable().optional(),
   expiresAt: z.string(),
   createdAt: z.string(),
 });

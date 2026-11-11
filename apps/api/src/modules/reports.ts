@@ -82,6 +82,36 @@ const ewayInput = z.object({
   notes: z.string().max(300).default(''),
 });
 
+/**
+ * P7-S6: a member limited to a date range (a CA given one year) runs reports only inside it. A missing date becomes the
+ * edge of the range; a date outside it is refused.
+ */
+export function limitToRange(
+  auth: { dataFrom: string | null; dataTo: string | null },
+  query: Record<string, string>,
+) {
+  if (!auth.dataFrom && !auth.dataTo) return query;
+  const q = { ...query };
+  if (auth.dataFrom) {
+    if (q.from && q.from < auth.dataFrom) throw rangeError(auth);
+    q.from ||= auth.dataFrom;
+  }
+  if (auth.dataTo) {
+    if (q.to && q.to > auth.dataTo) throw rangeError(auth);
+    q.to ||= auth.dataTo;
+  }
+  return q;
+}
+const rangeError = (a: { dataFrom: string | null; dataTo: string | null }) =>
+  new AppError(
+    'forbidden',
+    `You can see reports from ${a.dataFrom ?? 'the start'} to ${a.dataTo ?? 'today'} only`,
+    {
+      from: a.dataFrom,
+      to: a.dataTo,
+    },
+  );
+
 export function reportsModule({ route }: Registrar) {
   const mine = async (
     tx: Parameters<Parameters<Registrar['route']>[0]['handler']>[0]['tx'],
@@ -429,7 +459,12 @@ export function reportsModule({ route }: Registrar) {
         throw new AppError('forbidden', 'Your role can not see profit reports', {
           needs: 'report:profit',
         });
-      const { result: r } = await runReport(tx, orgId, params.id, c.req.query());
+      const { result: r } = await runReport(
+        tx,
+        orgId,
+        params.id,
+        limitToRange(auth, c.req.query()),
+      );
       const rows = r.rows.slice(0, MAX_EXPORT_ROWS);
       const body = csvStream(rows);
       await audit(tx, orgId, 'report.export', 'report', null, {
@@ -461,7 +496,12 @@ export function reportsModule({ route }: Registrar) {
         throw new AppError('forbidden', 'Your role can not see profit reports', {
           needs: 'report:profit',
         });
-      const { def, result: r } = await runReport(tx, orgId, params.id, c.req.query());
+      const { def, result: r } = await runReport(
+        tx,
+        orgId,
+        params.id,
+        limitToRange(auth, c.req.query()),
+      );
       return {
         rows: r.rows,
         totals: r.totals ?? {},

@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   foreignKey,
   index,
   integer,
@@ -108,6 +109,9 @@ export const member = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     /** One of the built-in roles in packages/contracts/src/permissions.ts. */
     role: text('role').notNull().default('viewer'),
+    /** P7-S6: a member (a CA) may be limited to reports for this date range. null = no limit. */
+    dataFrom: date('data_from'),
+    dataTo: date('data_to'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -128,6 +132,8 @@ export const invitation = pgTable(
     phone: text('phone'),
     role: text('role').notNull().default('viewer'),
     businessIds: jsonb('business_ids').notNull().default([]),
+    dataFrom: date('data_from'),
+    dataTo: date('data_to'),
     status: text('status').notNull().default('pending'), // pending | accepted | revoked
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     inviterId: text('inviter_id')

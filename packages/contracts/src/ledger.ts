@@ -205,7 +205,7 @@ export const verifyCheck = z.object({
   severity: z.enum(['error', 'warn', 'info']),
   count: z.number(),
   rows: z.array(z.record(z.string(), z.unknown())),
-  fix: z.enum(['repost', 'trim_allocations']).optional(),
+  fix: z.enum(['repost', 'trim_allocations', 'reclose']).optional(),
 });
 export const verifyResult = z.object({
   ranAt: z.string(),

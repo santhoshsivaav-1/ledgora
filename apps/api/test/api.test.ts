@@ -58,8 +58,10 @@ describe('errors and plumbing', () => {
         .items,
     ).toBeTruthy();
   });
-  it('has no backup endpoints: backups are managed Postgres point-in-time recovery now', async () => {
-    expect((await t.call('GET', '/v1/backups')).status).toBe(404);
+  it('backups are snapshot files of the organization (Phase 7), alongside the managed database recovery', async () => {
+    const r = await t.call('GET', '/v1/backups');
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.data)).toBe(true);
   });
 });
 

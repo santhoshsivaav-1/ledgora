@@ -13,3 +13,4 @@ export * from './ledger.ts';
 export * from './cashbank.ts';
 export * from './reports.ts';
 export * from './pos.ts';
+export * from './utilities.ts';

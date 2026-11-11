@@ -16,7 +16,7 @@ export interface Check {
   count: number;
   rows: Record<string, unknown>[];
   /** What "Fix automatically" does: repost = rebuild the ledger of the documents; trim = trim allocations. */
-  fix?: 'repost' | 'trim_allocations';
+  fix?: 'repost' | 'trim_allocations' | 'reclose';
 }
 const n = (v: Numeric) => Number(v) || 0;
 const make = (
@@ -56,6 +56,8 @@ export interface VerifyData {
   documentsWithoutLedger?: { kind: string; id: string; label: string }[];
   orphanMovements?: { id: string; refType: string; refId: string }[];
   partyMismatches?: { partyId: string; name: string; ledger: number; documents: number }[];
+  /** P7-S3: a year closed with Close FY whose books changed since (profit moved vs profit now). */
+  staleClosings?: { yearId: string; label: string; closed: number; now: number }[];
   documentDates?: { kind: string; id: string; label: string; date: string }[];
 }
 
@@ -189,6 +191,19 @@ export function runVerify(d: VerifyData): Check[] {
       'error',
       d.ledgerOn ? (d.documentsWithoutLedger || []).map((x) => ({ ...x })) : [],
       'repost',
+    ),
+  );
+  checks.push(
+    make(
+      'fy_close_stale',
+      'Closed years whose closing entry no longer matches their profit',
+      'error',
+      d.ledgerOn
+        ? (d.staleClosings || [])
+            .filter((c) => Math.abs(n(c.closed) - n(c.now)) > 0.005)
+            .map((c) => ({ ...c, difference: r2(n(c.now) - n(c.closed)) }))
+        : [],
+      'reclose',
     ),
   );
   checks.push(

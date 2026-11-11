@@ -159,3 +159,21 @@ the ledger on it posts in the same transaction: Dr Cash / Bank (the amount kept,
 Accounts Receivable for what is left on credit, Cr Sales and Cr output GST; stock leaves with the invoice. Free quantity
 and a bill discount reduce the taxable value, so GST is on what is charged. Loyalty points are not money and are not
 posted; the points a bill spends take the same amount off its taxable value. Cancelling a bill reverses all of it.
+
+## Close financial year (Phase 7)
+
+Closing 2025-26 posts one voucher, `fy_close`, dated 31 March 2026: Dr each income account (and Cr each expense account)
+by its balance for the year, and Cr Retained Earnings (3100) with the net profit (Dr for a loss). Nothing else is
+re-posted, because the ledger is continuous: the new year opens on every balance-sheet account as it stands. The entry
+is left out of period reports (`accountTotals` with a from date), so that year's Profit & Loss still shows its profit,
+and it is the reason the Balance Sheet stops showing that profit as "current year" once the year is closed. Reopen
+(owner, with a reason) reverses it through `repost`, like any document change. The guards are `closeProblems` and
+`reopenProblems` in `packages/tax-engine/src/fiscal.ts`.
+
+## Export to Tally (Phase 7)
+
+Reads invoices, credit notes, purchase bills and debit notes of a period from the typed tables and writes Tally Prime
+import XML (`packages/tax-engine/src/tally.ts`): the party takes the document total (debit on a sale, credit on a
+purchase), taxes, charges and round off take the other side, and each item line carries its taxable amount to the sales
+or purchase ledger. A voucher that does not balance, an empty mapped ledger or two parties with the same name once
+Tally ignores case are errors and block the download.

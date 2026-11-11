@@ -102,7 +102,7 @@ const requireLedger = async (tx: Tx, businessId: string) => {
 };
 
 /** Financial years from the first document to the current one, created the first time they are asked for. */
-async function ensureFinancialYears(tx: Tx, orgId: string, businessId: string) {
+export async function ensureFinancialYears(tx: Tx, orgId: string, businessId: string) {
   const mins = await Promise.all([
     tx
       .select({ d: sql<string | null>`min(${invoices.invoiceDate})` })
@@ -699,6 +699,25 @@ export function ledgerModule({ route }: Registrar) {
           .where(and(eq(financialYears.id, params.id), isNull(financialYears.deletedAt)));
         if (!y) throw notFound('Financial year');
         const closed = action === 'close';
+        // P7-S3: a year closed with Close FY has a closing entry; reopening it must reverse that entry, which only
+        // the Close FY screen's reopen (owner, with a reason) does.
+        if (!closed) {
+          const [cf] = await tx
+            .select({ id: schema.fyCloses.id })
+            .from(schema.fyCloses)
+            .where(
+              and(
+                eq(schema.fyCloses.yearId, y.id),
+                isNull(schema.fyCloses.reopenedAt),
+                isNull(schema.fyCloses.deletedAt),
+              ),
+            );
+          if (cf)
+            throw new AppError(
+              'conflict',
+              `${y.label} was closed with Close financial year. Reopen it from Utilities › Close Financial Year, which reverses the closing entry.`,
+            );
+        }
         const [row] = await tx
           .update(financialYears)
           .set({

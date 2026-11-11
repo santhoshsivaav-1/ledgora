@@ -30,6 +30,8 @@ export const ERROR_CODES = [
   'period_locked',
   'cash_limit',
   'negative_stock',
+  // Phase 7: a utility that needs the accounting ledger (Tally export, Close FY) while it is off; the screen shows Enable accounting.
+  'ledger_required',
   'over_return',
   // Vyapar parity Phase 3: a supplier bill number already on another bill this year; receiving more than is ordered.
   'duplicate_bill',

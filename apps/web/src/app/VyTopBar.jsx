@@ -3,6 +3,7 @@ import BusinessNameField from './BusinessNameField';
 import FYSwitcher from './FYSwitcher';
 import Menu from '../components/ui/Menu';
 import { Avatar, Badge } from '../components/ui/Display';
+import { SetupDot } from '../features/utilities/SetupPage';
 
 // The new top bar (Vyapar parity P0-S2): business name (with the set-up dot), where you are, then the FY, the
 // page's New button, notifications, settings and the account menu. Everything the classic sidebar kept at its
@@ -73,6 +74,7 @@ export default function VyTopBar({
           </button>
         )}
         <span className="vy-icon-wrap">
+          <SetupDot />
           <button type="button" className="ui-icon-btn" onClick={onBell} aria-label={notifTotal ? `Notifications, ${notifTotal} new` : 'Notifications'} title="Notifications">
             <Bell size={18} />
           </button>

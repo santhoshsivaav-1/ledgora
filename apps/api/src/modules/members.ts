@@ -19,7 +19,6 @@ import { sendMail, sendSms } from '../mail/index.ts';
 import { invitationMail } from '../mail/templates.ts';
 
 const { member, user, invitation, memberBusinesses, businesses, organizations, session } = schema;
-const WEEK = 7 * 86_400_000;
 const rank = (r: string) => (r === 'owner' ? 3 : r === 'admin' ? 2 : 1);
 
 /** An owner can manage anyone; an admin can manage everyone below admin; nobody manages their own level or above. */
@@ -56,6 +55,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
             phoneNumber: u.phoneNumber,
             role: m.role as Role,
             businessIds: ids.length ? ids : null,
+            dataFrom: m.dataFrom,
+            dataTo: m.dataTo,
             joinedAt: m.createdAt.toISOString(),
           };
         }),
@@ -160,6 +161,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
     phone: i.phone,
     role: i.role as Role,
     businessIds: (i.businessIds as string[]) ?? [],
+    dataFrom: i.dataFrom,
+    dataTo: i.dataTo,
     status: (i.expiresAt.getTime() < Date.now() && i.status === 'pending'
       ? 'revoked'
       : i.status) as 'pending' | 'accepted' | 'revoked',
@@ -233,7 +236,9 @@ export function membersModule({ route, documented: _d }: Registrar) {
           phone: body.phone ?? null,
           role: body.role,
           businessIds: ids,
-          expiresAt: new Date(Date.now() + WEEK),
+          expiresAt: new Date(Date.now() + (body.expiresInDays ?? 7) * 86_400_000),
+          dataFrom: body.dataFrom ?? null,
+          dataTo: body.dataTo ?? null,
           inviterId: auth.user.id,
         })
         .returning();
@@ -374,6 +379,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
         organizationId: row.organizationId,
         userId: auth.user.id,
         role: row.role,
+        dataFrom: row.dataFrom,
+        dataTo: row.dataTo,
       });
       await deps.db.update(invitation).set({ status: 'accepted' }).where(eq(invitation.id, row.id));
       await deps.db

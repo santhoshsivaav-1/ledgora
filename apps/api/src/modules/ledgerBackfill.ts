@@ -184,6 +184,8 @@ export async function accountTotals(tx: Tx, businessId: string, asOf?: string, f
   const conds = [eq(ledgerEntries.businessId, businessId)];
   if (asOf) conds.push(sql`${ledgerEntries.txnDate} <= ${asOf}`);
   if (fromDate) conds.push(gte(ledgerEntries.txnDate, fromDate));
+  // P7-S3: a report of a period shows what happened in it; the entry that closes a year into Retained Earnings is not that.
+  if (fromDate) conds.push(sql`${ledgerEntries.refType} <> 'fy_close'`);
   return tx
     .select({
       id: accounts.id,

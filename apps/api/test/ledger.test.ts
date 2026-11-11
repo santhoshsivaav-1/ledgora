@@ -589,7 +589,7 @@ describe('P4-S4 party opening balances', () => {
 });
 
 describe('P4-S5 Verify My Data', () => {
-  it('runs 13 checks, finds seeded problems, and the fixes are idempotent and audited', async () => {
+  it('runs 14 checks, finds seeded problems, and the fixes are idempotent and audited', async () => {
     const v = await h.newTenant();
     const p = await party(v, 'Bad GSTIN', { gstin: '29ABCDE1234F1Z0' });
     const inv = (
@@ -598,7 +598,7 @@ describe('P4-S5 Verify My Data', () => {
     await enable(v);
     const run = async () => (await v.call('GET', `/v1/verify?businessId=${v.businessId}`)).body;
     const first = await run();
-    expect(first.checks).toHaveLength(13);
+    expect(first.checks).toHaveLength(14);
     expect(first.checks.find((c: any) => c.id === 'gstin_invalid').count).toBe(1);
     expect(first.checks.find((c: any) => c.id === 'hsn_missing').count).toBe(1);
     expect(first.checks.find((c: any) => c.id === 'invoice_total_mismatch').count).toBe(0);

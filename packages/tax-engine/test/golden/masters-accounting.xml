@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+ <HEADER>
+  <TALLYREQUEST>Import Data</TALLYREQUEST>
+ </HEADER>
+ <BODY>
+  <IMPORTDATA>
+   <REQUESTDESC>
+    <REPORTNAME>All Masters</REPORTNAME>
+    <STATICVARIABLES>
+     <SVCURRENTCOMPANY>Corner Store &amp; Sons</SVCURRENTCOMPANY>
+    </STATICVARIABLES>
+   </REQUESTDESC>
+   <REQUESTDATA>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Output CGST" ACTION="Create">
+      <NAME>Output CGST</NAME>
+      <PARENT>Duties &amp; Taxes</PARENT>
+      <TAXTYPE>GST</TAXTYPE>
+      <GSTDUTYHEAD>CGST</GSTDUTYHEAD>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Input CGST" ACTION="Create">
+      <NAME>Input CGST</NAME>
+      <PARENT>Duties &amp; Taxes</PARENT>
+      <TAXTYPE>GST</TAXTYPE>
+      <GSTDUTYHEAD>CGST</GSTDUTYHEAD>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Output SGST" ACTION="Create">
+      <NAME>Output SGST</NAME>
+      <PARENT>Duties &amp; Taxes</PARENT>
+      <TAXTYPE>GST</TAXTYPE>
+      <GSTDUTYHEAD>SGST/UTGST</GSTDUTYHEAD>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Input SGST" ACTION="Create">
+      <NAME>Input SGST</NAME>
+      <PARENT>Duties &amp; Taxes</PARENT>
+      <TAXTYPE>GST</TAXTYPE>
+      <GSTDUTYHEAD>SGST/UTGST</GSTDUTYHEAD>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Bank Account" ACTION="Create">
+      <NAME>Bank Account</NAME>
+      <PARENT>Bank Accounts</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Discount Allowed" ACTION="Create">
+      <NAME>Discount Allowed</NAME>
+      <PARENT>Indirect Expenses</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="TDS Receivable" ACTION="Create">
+      <NAME>TDS Receivable</NAME>
+      <PARENT>Duties &amp; Taxes</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Cash" ACTION="Create">
+      <NAME>Cash</NAME>
+      <PARENT>Cash-in-Hand</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Discount Received" ACTION="Create">
+      <NAME>Discount Received</NAME>
+      <PARENT>Indirect Incomes</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Office Rent" ACTION="Create">
+      <NAME>Office Rent</NAME>
+      <PARENT>Indirect Expenses</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Commission" ACTION="Create">
+      <NAME>Commission</NAME>
+      <PARENT>Indirect Incomes</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Round Off" ACTION="Create">
+      <NAME>Round Off</NAME>
+      <PARENT>Indirect Expenses</PARENT>
+     </LEDGER>
+    </TALLYMESSAGE>
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+     <LEDGER NAME="Asha Kumar" ACTION="Create">
+      <NAME>Asha Kumar</NAME>
+      <PARENT>Sundry Debtors</PARENT>
+      <GSTREGISTRATIONTYPE>Unregistered</GSTREGISTRATIONTYPE>
+     </LEDGER>
+    </TALLYMESSAGE>
+   </REQUESTDATA>
+  </IMPORTDATA>
+ </BODY>
+</ENVELOPE>

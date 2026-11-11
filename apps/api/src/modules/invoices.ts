@@ -178,7 +178,9 @@ async function allocateNumber(
 ) {
   const prefix = INVOICE_TYPES[invoiceType]?.prefix ?? 'INV';
   const series = await seriesSettings(tx, businessId);
-  const counterKey = counterKeyFor(prefix, series, '');
+  // P7-S3: a series set to restart each financial year (resetOn: 'fy') keeps one counter per year.
+  const fyLabel = getFinancialYearLabel(new Date(`${invoiceDate}T00:00:00`));
+  const counterKey = counterKeyFor(prefix, series, '', fyLabel);
   await tx.insert(numberSeries).values({ orgId, businessId, counterKey }).onConflictDoNothing();
   for (let attempt = 0; attempt < 50; attempt++) {
     const [row] = await tx
@@ -195,7 +197,7 @@ async function allocateNumber(
       settings: series,
       typePrefix: prefix,
       next,
-      fyLabel: getFinancialYearLabel(new Date(`${invoiceDate}T00:00:00`)),
+      fyLabel,
     });
     // A counter that lags behind hand-typed or imported numbers must never hand one out twice.
     const [taken] = await tx

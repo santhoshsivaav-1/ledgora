@@ -3,6 +3,7 @@ import { createDb, runMigrations } from '@ledgora/db';
 import { createApp } from './app.ts';
 import { loadEnv } from './env.ts';
 import { whenJobsIdle } from './modules/transfer.ts';
+import { startBackupScheduler } from './backup/scheduler.ts';
 import { startReportScheduler } from './reports/schedules.ts';
 import { createStorage } from './storage.ts';
 
@@ -10,8 +11,14 @@ const env = loadEnv();
 if (env.RUN_MIGRATIONS) await runMigrations(env.DATABASE_URL);
 
 const { db, close } = createDb(env.DATABASE_URL, { max: env.DB_POOL_MAX });
-const app = createApp({ db, env, storage: createStorage(env) });
-const stopScheduler = startReportScheduler(db, env);
+const storage = createStorage(env);
+const app = createApp({ db, env, storage });
+const stopReports = startReportScheduler(db, env);
+const stopBackups = startBackupScheduler(db, { storage, env }, env);
+const stopScheduler = () => {
+  stopReports();
+  stopBackups();
+};
 const server = serve({ fetch: app.fetch, port: env.API_LISTEN_PORT }, (info) => {
   console.log(`Ledgora API on http://localhost:${info.port}  (docs: /v1/docs, health: /health)`);
 });

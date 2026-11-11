@@ -187,8 +187,8 @@ describe('Verify My Data', () => {
   });
   it('summarises a run, and a clean run passes everything', () => {
     const clean = runVerify(base);
-    expect(clean).toHaveLength(13);
-    expect(verifySummary(clean)).toEqual({ passed: 13, warnings: 0, errors: 0 });
+    expect(clean).toHaveLength(14); // 13 from Phase 4 and the stale year-end closing check from Phase 7
+    expect(verifySummary(clean)).toEqual({ passed: 14, warnings: 0, errors: 0 });
     expect(
       verifySummary(
         runVerify({
@@ -197,7 +197,7 @@ describe('Verify My Data', () => {
           vouchers: [{ voucherId: 'v', debit: 2, credit: 1 }],
         }),
       ),
-    ).toEqual({ passed: 11, warnings: 1, errors: 1 });
+    ).toEqual({ passed: 12, warnings: 1, errors: 1 });
     expect(numberParts('INV-12')).toEqual(['INV-', 12]);
     expect(numberParts('NOPE')).toBeNull();
   });

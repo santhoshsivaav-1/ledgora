@@ -2771,6 +2771,8 @@ Totals must come from SQL, never from summing a paginated page on the client.
 
 # PHASE 7: Utilities
 
+**Status (2026-11-11)**: P7-S1…S6 implemented (bulk update was P1-S8). Pure first: `packages/tax-engine/src/barcode.ts`, `tally.ts`, `fiscal.ts`, `setup.ts` with golden tests (`test/golden/*.xml`) before any route; then migration `0018`, `apps/api/src/modules/utilities.ts` (barcodes, Tally, Close FY), `backups.ts` with `backup/` (snapshot file, restore, scheduler), `setup.ts`, the trash and CA changes, and the screens under `/utilities/*`. Tally export and Close FY answer 409 `ledger_required` with an **Enable accounting** button while `accounting.ledger` is off. The restore is non-destructive and takes a safety snapshot first. What differs from this section, and what is left, is in the Phase 7 notes of `docs/DECISIONS.md` (including the follow-up that added QR, Tally receipts/payments/expenses and the older screens' documents, encrypted scheduled backups, attachments and Google Drive in backups, the stale-closing check and the CA range on every screen). The manual Tally Prime import is `docs/TALLY_IMPORT_CHECK.md`.
+
 **Goal**: the housekeeping tools Vyapar users expect: barcode labels, bulk update (done P1-S8), Tally export, close financial year, backup.
 **Prerequisites**: P4 (Tally and Close FY need ledger), P1 (items).
 **Slices**: P7-S1 Barcode generator · P7-S2 Export to Tally · P7-S3 Close financial year · P7-S4 Backup, restore and scheduler · P7-S5 Setup My Business checklist · P7-S6 Trash upgrades and Share with CA.

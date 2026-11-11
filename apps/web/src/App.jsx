@@ -77,6 +77,12 @@ const SecurityPage = lazy(() => import('./features/settings/security/SecurityPag
 const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
 const ClientsView = lazy(() => import('./features/parties/ClientsView'));
 const InventoryView = lazy(() => import('./features/items/InventoryView'));
+const BarcodePage = lazy(() => import('./features/utilities/BarcodePage'));
+const TallyPage = lazy(() => import('./features/utilities/TallyPage'));
+const CloseFyPage = lazy(() => import('./features/utilities/CloseFyPage'));
+const BackupPage = lazy(() => import('./features/utilities/BackupPage'));
+const SetupPage = lazy(() => import('./features/utilities/SetupPage'));
+const TrashPage = lazy(() => import('./features/utilities/TrashPage'));
 const PosPage = lazy(() => import('./features/pos/PosPage'));
 const ReportsView = lazy(() => import('./features/reports/ReportsView'));
 const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
@@ -948,6 +954,12 @@ function App() {
                 <Route path={pathForView('purchase-returns')} element={<DebitNotes key={businessKey} />} />
                 <Route path="/accounting" element={<Navigate to="/accounting/setup" replace />} />
                 <Route path="/accounting/:tab" element={<AccountingPage key={businessKey} />} />
+                <Route path={pathForView('barcode')} element={<BarcodePage key={businessKey} />} />
+                <Route path={pathForView('tally')} element={<TallyPage key={businessKey} />} />
+                <Route path={pathForView('close-fy')} element={<CloseFyPage key={businessKey} />} />
+                <Route path={pathForView('backup')} element={<BackupPage key={businessKey} />} />
+                <Route path={pathForView('setup')} element={<SetupPage key={businessKey} />} />
+                <Route path={pathForView('trash')} element={<TrashPage key={businessKey} />} />
                 <Route path="/pos" element={<PosPage key={businessKey} />} />
                 <Route path="/cash-bank" element={<Navigate to="/cash-bank/accounts" replace />} />
                 <Route path="/cash-bank/:tab" element={<CashBankPage key={businessKey} />} />

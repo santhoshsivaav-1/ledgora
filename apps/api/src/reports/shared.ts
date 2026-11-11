@@ -154,6 +154,7 @@ export const REF_LABELS: Record<string, string> = {
   loan_interest: 'Interest credited',
   opening: 'Opening balance',
   journal: 'Journal',
+  fy_close: 'Year-end closing',
 };
 
 /** Every account of the business with its group and its totals in a period (or up to a date). */

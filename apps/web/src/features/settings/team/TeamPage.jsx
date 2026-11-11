@@ -30,15 +30,20 @@ export default function TeamPage() {
   const revoke = useMutation({ mutationFn: (id) => apiClient.delete(`/v1/invitations/${id}`), onSuccess: refresh, onError });
   const invite = useMutation({
     mutationFn: (body) => apiClient.post('/v1/invitations', body),
-    onSuccess: (inv) => { refresh(); setForm({ to: '', role: 'salesman', businessIds: [] }); toast(`Invitation sent. Link: ${inv.acceptUrl}`, 'success', 9000); },
+    onSuccess: (inv) => { refresh(); setForm({ to: '', role: 'salesman', businessIds: [], expiresInDays: 7, dataFrom: '', dataTo: '' }); toast(`Invitation sent. Link: ${inv.acceptUrl}`, 'success', 9000); },
     onError,
   });
 
-  const [form, setForm] = useState({ to: '', role: 'salesman', businessIds: [] });
+  const [form, setForm] = useState({ to: '', role: 'salesman', businessIds: [], expiresInDays: 7, dataFrom: '', dataTo: '' });
   const sendInvite = (e) => {
     e.preventDefault();
     const to = form.to.trim();
-    invite.mutate({ role: form.role, businessIds: form.businessIds, ...(to.startsWith('+') ? { phone: to } : { email: to }) });
+    invite.mutate({
+      role: form.role,
+      businessIds: form.businessIds,
+      ...(form.role === 'ca' ? { expiresInDays: Number(form.expiresInDays) || 7, dataFrom: form.dataFrom || null, dataTo: form.dataTo || null } : {}),
+      ...(to.startsWith('+') ? { phone: to } : { email: to }),
+    });
   };
   const toggleBiz = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   const bizName = (id) => bizList.find((b) => b.id === id)?.name ?? 'Unknown';
@@ -106,6 +111,17 @@ export default function TeamPage() {
                 {ROLES.filter((r) => r !== 'owner').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select></div>
           </div>
+          {form.role === 'ca' && (
+            <fieldset className="form-group" style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.6rem 0.8rem' }}>
+              <legend className="form-label" style={{ padding: '0 6px' }}>Share with your CA (read-only)</legend>
+              <p className="field-hint" style={{ marginTop: 0 }}>They can see the books, reports and exports, and change nothing. Limit them to a period if you like.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0 1rem' }}>
+                <label className="form-label">Can see from<input className="form-input" type="date" value={form.dataFrom} onChange={(e) => setForm({ ...form, dataFrom: e.target.value })} /></label>
+                <label className="form-label">Can see until<input className="form-input" type="date" value={form.dataTo} onChange={(e) => setForm({ ...form, dataTo: e.target.value })} /></label>
+                <label className="form-label">Link works for (days)<input className="form-input" type="number" min="1" max="30" value={form.expiresInDays} onChange={(e) => setForm({ ...form, expiresInDays: e.target.value })} /></label>
+              </div>
+            </fieldset>
+          )}
           {bizList.length > 1 && (
             <div className="form-group"><span className="form-label">Limit to these businesses (none ticked = all)</span>
               {bizList.map((b) => (<label key={b.id} style={{ marginRight: '1rem' }}><input type="checkbox" checked={form.businessIds.includes(b.id)} onChange={() => setForm({ ...form, businessIds: toggleBiz(form.businessIds, b.id) })} /> {b.name}</label>))}

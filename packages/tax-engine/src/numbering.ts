@@ -65,8 +65,13 @@ export const counterKeyFor = (
   typePrefix: string,
   series: Rec | null | undefined,
   businessKey: string,
-) =>
-  series?.own && businessKey ? `counter_${typePrefix}@${businessKey}` : `counter_${typePrefix}`;
+  fyLabel = '',
+) => {
+  const base =
+    series?.own && businessKey ? `counter_${typePrefix}@${businessKey}` : `counter_${typePrefix}`;
+  // P7-S3: a series set to restart each financial year keeps a counter per year.
+  return series?.resetOn === 'fy' && fyLabel ? `${base}#fy:${fyLabel}` : base;
+};
 
 // A document number. With a brand prefix, tax invoices print the brand alone
 // (ACME/2026-27/0001) and every other type the brand and its type
