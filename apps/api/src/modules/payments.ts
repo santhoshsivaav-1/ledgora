@@ -23,6 +23,11 @@ import { nextSeriesNumber } from './series.ts';
 import { guardPeriod } from './saleRules.ts';
 import { syncLedger, unpostLedger } from './ledgerRules.ts';
 import { syncTds } from './tdsRules.ts';
+import {
+  afterPaymentSaved,
+  assertPaymentChangeable,
+  beforePaymentDeleted,
+} from './cashbankRules.ts';
 
 const { payments, paymentAllocations, invoices, purchases, parties } = schema;
 
@@ -286,6 +291,60 @@ const columns = (body: PaymentInput) => {
   };
 };
 
+/**
+ * Records a Payment In or Out: checks, allocations, the documents it settles, the ledger and TDS. The route below and
+ * the cheque register (Phase 5, which adds a cheque with its payment) both come here.
+ */
+export async function recordPayment(tx: Tx, orgId: string, body: PaymentInput) {
+  await checkReceipt(tx, orgId, body);
+  const { plan, total } = await planAllocations(tx, body);
+  const out = body.direction === 'out';
+  const number =
+    body.number || (await nextSeriesNumber(tx, orgId, body.businessId, out ? 'PAY' : 'RCT'));
+  const [row] = await tx
+    .insert(payments)
+    .values({ ...columns(body), number, orgId, source: out ? 'payment' : 'receipt' })
+    .returning();
+  await insertAllocations(tx, orgId, row.id, plan);
+  await refreshTargets(tx, plan);
+  await syncLedger(tx, orgId, 'payment', row.id);
+  await syncTds(tx, orgId, 'payment', row.id);
+  await audit(tx, orgId, 'payment.create', 'payment', row.id, {
+    after: {
+      amount: row.amount,
+      discount: row.discountAmount,
+      tds: row.tdsAmount,
+      tdsSection: row.tdsSection,
+      direction: row.direction,
+      allocated: total,
+    },
+  });
+  return { row, plan };
+}
+
+/**
+ * Voids a payment whose cheque bounced or was cancelled (Phase 5): its allocations go, the invoices or bills it paid
+ * reopen, and it is soft-deleted, which reverses its postings (paymentPostings posts nothing for a deleted payment) and
+ * drops its accrued TDS. The row stays for the history; the cheque points at it.
+ */
+export async function voidPayment(tx: Tx, orgId: string, paymentId: string) {
+  const allocs = await tx
+    .select()
+    .from(paymentAllocations)
+    .where(eq(paymentAllocations.paymentId, paymentId));
+  await tx.delete(paymentAllocations).where(eq(paymentAllocations.paymentId, paymentId));
+  await tx
+    .update(payments)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(payments.id, paymentId));
+  await syncLedger(tx, orgId, 'payment', paymentId);
+  await syncTds(tx, orgId, 'payment', paymentId);
+  await refreshTargets(tx, allocs);
+  await audit(tx, orgId, 'payment.void', 'payment', paymentId, {
+    after: { reopened: allocs.length },
+  });
+}
+
 export function paymentsModule({ route }: Registrar) {
   route({
     method: 'get',
@@ -349,29 +408,9 @@ export function paymentsModule({ route }: Registrar) {
         body.paymentDate,
         c.req.header('x-override-reason'),
       );
-      await checkReceipt(tx, orgId, body);
-      const { plan, total } = await planAllocations(tx, body);
-      const out = body.direction === 'out';
-      const number =
-        body.number || (await nextSeriesNumber(tx, orgId, body.businessId, out ? 'PAY' : 'RCT'));
-      const [row] = await tx
-        .insert(payments)
-        .values({ ...columns(body), number, orgId, source: out ? 'payment' : 'receipt' })
-        .returning();
-      await insertAllocations(tx, orgId, row.id, plan);
-      await refreshTargets(tx, plan);
-      await syncLedger(tx, orgId, 'payment', row.id);
-      await syncTds(tx, orgId, 'payment', row.id);
-      await audit(tx, orgId, 'payment.create', 'payment', row.id, {
-        after: {
-          amount: row.amount,
-          discount: row.discountAmount,
-          tds: row.tdsAmount,
-          tdsSection: row.tdsSection,
-          direction: row.direction,
-          allocated: total,
-        },
-      });
+      const { row, plan } = await recordPayment(tx, orgId, body);
+      // Phase 5: a payment by cheque goes into the cheque register (Cash & Bank on).
+      await afterPaymentSaved(tx, orgId, row);
       return toPayment(row, asAllocations(plan));
     },
   });
@@ -406,6 +445,7 @@ export function paymentsModule({ route }: Registrar) {
           'unprocessable',
           'A payment in can not become a payment out, or the reverse',
         );
+      await assertPaymentChangeable(tx, params.id);
       await checkReceipt(tx, orgId, body, params.id);
       const { plan, total } = await planAllocations(tx, body, params.id);
       const old = await tx
@@ -425,6 +465,7 @@ export function paymentsModule({ route }: Registrar) {
       await refreshTargets(tx, [...old, ...plan]);
       await syncLedger(tx, orgId, 'payment', row.id);
       await syncTds(tx, orgId, 'payment', row.id);
+      await afterPaymentSaved(tx, orgId, row);
       await audit(tx, orgId, 'payment.update', 'payment', row.id, {
         before: { amount: before.amount },
         after: { amount: row.amount, allocated: total },
@@ -454,6 +495,7 @@ export function paymentsModule({ route }: Registrar) {
         row.paymentDate,
         c.req.header('x-override-reason'),
       );
+      await beforePaymentDeleted(tx, orgId, params.id);
       const allocs = await tx
         .select()
         .from(paymentAllocations)

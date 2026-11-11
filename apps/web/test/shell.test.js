@@ -33,7 +33,8 @@ describe('navigation (one source for the new menu)', () => {
   it('hides planned screens, then entries the role may not open, then switched-off modules', () => {
     const visibleIds = leaves(visibleNav(NAV, allowAll)).map((l) => l.id);
     expect(visibleIds).not.toContain('party-groups');
-    expect(visibleIds).not.toContain('cheques');
+    expect(visibleIds).not.toContain('reminders'); // planned for P9
+    expect(visibleIds).toContain('cheques'); // shipped in Phase 5
     const noPurchases = visibleNav(NAV, {
       can: (p) => p !== 'purchase:read',
       moduleOn: () => true,
@@ -49,12 +50,20 @@ describe('navigation (one source for the new menu)', () => {
     expect(isGroup(parties)).toBe(false); // only All Parties exists before Phase 1
     expect(parties.label).toBe('Parties');
     expect(parties.view).toBe('clients');
-    expect(nav.find((e) => e.id === 'cashbank')).toBeUndefined(); // all of Cash & Bank is Phase 5
+    // Cash & Bank shipped in Phase 5: one screen, a tab per entry, all behind cashbank:read.
+    const cb = nav.find((e) => e.id === 'cashbank');
+    expect(cb.children.map((c) => c.id)).toEqual(['bank-accounts', 'cash-in-hand', 'transfers', 'cheques', 'loans', 'reconcile']);
+    expect(leaves(visibleNav(NAV, { can: (p) => p !== 'cashbank:read', moduleOn: () => true })).map((l) => l.id)).not.toContain('cheques');
     expect(isGroup(nav.find((e) => e.id === 'sale'))).toBe(true);
   });
 
   it('lights the entry for the current address, exact address first', () => {
     const nav = visibleNav(NAV, allowAll);
+    // Phase 5 / 6: a Cash & Bank tab and any report light their own entries, not Dashboard.
+    expect(findNavEntry(nav, '/cash-bank/cheques').leaf.id).toBe('cheques');
+    expect(findNavEntry(nav, '/reports/day-book').leaf.id).toBe('reports');
+    expect(viewFromPath('/reports/balance-sheet')).toBe('reports');
+    expect(viewFromPath('/cash-bank/loans')).toBe('cashbank');
     expect(findNavEntry(nav, '/gst-returns/tds').leaf.id).toBe('tds-tcs');
     expect(findNavEntry(nav, '/gst-returns/gstr3b').leaf.id).toBe('gst-returns');
     expect(findNavEntry(nav, '/settings/documents').leaf.id).toBe('settings');

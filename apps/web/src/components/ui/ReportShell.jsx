@@ -15,7 +15,7 @@ import { cellValue } from './lib/table';
 //   id, title, group, description?,
 //   filters: FilterSpec[],       // { kind: 'period' } | { kind: 'select', id, label, options } | { kind: 'toggle', id, label } | { kind: 'search' }
 //   columns: ColumnSpec[],       // DataTable columns
-//   summary?: (rows) => Chip[],
+//   summary?: (rows, totals, meta) => Chip[],   // totals and meta as the server sent them (Phase 6: server totals)
 //   fetch: (params) => Promise<{ rows, totals?, meta? }>,
 //   drilldown?: (row) => string | null,   // a route to open for the row
 //   exports: ('pdf'|'xlsx'|'print'|'share')[],
@@ -25,7 +25,8 @@ import { cellValue } from './lib/table';
 export function initialParams(def, { fyStartMonth = 4, today } = {}) {
   const params = {};
   for (const f of def.filters || []) {
-    if (f.kind === 'period') params.period = periodRange(f.default || 'this-month', { fyStartMonth, today });
+    if (f.kind === 'period')
+      params.period = periodRange(f.default || 'this-month', { fyStartMonth, today });
     else if (f.kind === 'select') params[f.id] = f.default ?? f.options?.[0]?.value ?? '';
     else if (f.kind === 'toggle') params[f.id] = !!f.default;
     else if (f.kind === 'search') params.q = '';
@@ -39,15 +40,44 @@ export const searchRows = (rows, columns, q) => {
     .trim()
     .toLowerCase();
   if (!needle) return rows;
-  return rows.filter((r) => columns.some((c) => String(cellValue(c, r) ?? '').toLowerCase().includes(needle)));
+  return rows.filter((r) =>
+    columns.some((c) =>
+      String(cellValue(c, r) ?? '')
+        .toLowerCase()
+        .includes(needle),
+    ),
+  );
 };
 
 const EXPORT_FORMATS = { pdf: 'print', print: 'print', xlsx: 'xlsx', share: 'share', csv: 'csv' };
 
-export default function ReportShell({ def, fyStartMonth = 4, breadcrumb }) {
+// Props beyond the definition (Phase 6): `initial` filter values to start from (a saved view), `onParams` told whenever the
+// filters change (so a screen can save them), `headerExtra` beside Export (star, save view, schedule) and `businessLine`
+// (business name, GSTIN) printed under the title of an export.
+export default function ReportShell({
+  def,
+  fyStartMonth = 4,
+  breadcrumb,
+  initial,
+  onParams,
+  headerExtra,
+  businessLine,
+}) {
   const navigate = useNavigate();
-  const [params, setParams] = useState(() => initialParams(def, { fyStartMonth }));
-  const [state, setState] = useState({ loading: true, error: null, rows: [], meta: null });
+  const [params, setParams] = useState(() => ({
+    ...initialParams(def, { fyStartMonth }),
+    ...(initial || {}),
+  }));
+  useEffect(() => {
+    onParams?.(params);
+  }, [params]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [state, setState] = useState({
+    loading: true,
+    error: null,
+    rows: [],
+    meta: null,
+    totals: null,
+  });
   const { q, ...fetchParams } = params;
   const fetchKey = JSON.stringify(fetchParams);
 
@@ -55,8 +85,28 @@ export default function ReportShell({ def, fyStartMonth = 4, breadcrumb }) {
     let live = true;
     setState((s) => ({ ...s, loading: true, error: null }));
     Promise.resolve(def.fetch(JSON.parse(fetchKey)))
-      .then((res) => live && setState({ loading: false, error: null, rows: res?.rows || [], meta: res?.meta || null }))
-      .catch((err) => live && setState({ loading: false, error: err?.message || 'Could not load this report', rows: [], meta: null }));
+      .then(
+        (res) =>
+          live &&
+          setState({
+            loading: false,
+            error: null,
+            rows: res?.rows || [],
+            meta: res?.meta || null,
+            totals: res?.totals || null,
+          }),
+      )
+      .catch(
+        (err) =>
+          live &&
+          setState({
+            loading: false,
+            error: err?.body?.error?.message || err?.message || 'Could not load this report',
+            rows: [],
+            meta: null,
+            totals: null,
+          }),
+      );
     return () => {
       live = false;
     };
@@ -65,7 +115,12 @@ export default function ReportShell({ def, fyStartMonth = 4, breadcrumb }) {
 
   const rows = useMemo(() => searchRows(state.rows, def.columns, q), [state.rows, def.columns, q]);
   const set = (k, v) => setParams((p) => ({ ...p, [k]: v }));
-  const subtitle = params.period ? `${params.period.label}: ${params.period.from} to ${params.period.to}` : '';
+  const subtitle = [
+    businessLine,
+    params.period ? `${params.period.label}: ${params.period.from} to ${params.period.to}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const formats = [...new Set((def.exports || []).map((e) => EXPORT_FORMATS[e]).filter(Boolean))];
 
   return (
@@ -75,29 +130,64 @@ export default function ReportShell({ def, fyStartMonth = 4, breadcrumb }) {
         title={def.title}
         breadcrumb={breadcrumb || [{ label: 'Reports', to: '/reports' }, { label: def.title }]}
         actions={
-          formats.length > 0 && (
-            <ExportMenu
-              title={def.title}
-              subtitle={subtitle}
-              filename={def.id}
-              formats={formats}
-              headers={def.columns.map((c) => (typeof c.header === 'string' ? c.header : c.id))}
-              getRows={() => rows.map((r) => def.columns.map((c) => cellValue(c, r) ?? ''))}
-            />
-          )
+          <>
+            {headerExtra}
+            {formats.length > 0 && (
+              <ExportMenu
+                title={def.title}
+                subtitle={subtitle}
+                filename={def.id}
+                formats={formats}
+                headers={def.columns.map((c) => (typeof c.header === 'string' ? c.header : c.id))}
+                getRows={() => rows.map((r) => def.columns.map((c) => cellValue(c, r) ?? ''))}
+              />
+            )}
+          </>
         }
       />
-      {def.description && <p className="ui-help" style={{ margin: '0 0 var(--s-3)' }}>{def.description}</p>}
+      {def.description && (
+        <p className="ui-help" style={{ margin: '0 0 var(--s-3)' }}>
+          {def.description}
+        </p>
+      )}
       <FilterBar>
         {(def.filters || []).map((f) => {
-          if (f.kind === 'period') return <PeriodPicker key="period" value={params.period} onChange={(v) => set('period', v)} fyStartMonth={fyStartMonth} />;
-          if (f.kind === 'select') return <Select key={f.id} aria-label={f.label} value={params[f.id]} options={f.options} onChange={(v) => set(f.id, v)} />;
-          if (f.kind === 'toggle') return <Switch key={f.id} label={f.label} checked={params[f.id]} onChange={(v) => set(f.id, v)} />;
-          if (f.kind === 'search') return <SearchInput key="search" value={q} onChange={(v) => set('q', v)} />;
+          if (f.kind === 'period')
+            return (
+              <PeriodPicker
+                key="period"
+                value={params.period}
+                onChange={(v) => set('period', v)}
+                fyStartMonth={fyStartMonth}
+              />
+            );
+          if (f.kind === 'select')
+            return (
+              <Select
+                key={f.id}
+                aria-label={f.label}
+                value={params[f.id]}
+                options={f.options}
+                onChange={(v) => set(f.id, v)}
+              />
+            );
+          if (f.kind === 'toggle')
+            return (
+              <Switch
+                key={f.id}
+                label={f.label}
+                checked={params[f.id]}
+                onChange={(v) => set(f.id, v)}
+              />
+            );
+          if (f.kind === 'search')
+            return <SearchInput key="search" value={q} onChange={(v) => set('q', v)} />;
           return null;
         })}
       </FilterBar>
-      {def.summary && !state.loading && !state.error && <SummaryChips chips={def.summary(rows)} />}
+      {def.summary && !state.loading && !state.error && (
+        <SummaryChips chips={def.summary(rows, state.totals || {}, state.meta || {})} />
+      )}
       <DataTable
         id={`report.${def.id}`}
         columns={def.columns}
@@ -110,7 +200,14 @@ export default function ReportShell({ def, fyStartMonth = 4, breadcrumb }) {
         stickyFirstColumn
         hiddenByFilters={state.rows.length - rows.length}
         onClearFilters={() => set('q', '')}
-        onRowClick={def.drilldown ? (r) => { const to = def.drilldown(r); if (to) navigate(to); } : undefined}
+        onRowClick={
+          def.drilldown
+            ? (r) => {
+                const to = def.drilldown(r);
+                if (to) navigate(to);
+              }
+            : undefined
+        }
         caption={def.title}
       />
     </div>

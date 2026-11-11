@@ -57,6 +57,11 @@ import { LoadingState } from './components/ui/States';
 import ScreenBoundary from './app/ScreenBoundary';
 import ConfirmModalContainer from './components/ui/ConfirmModal';
 import WelcomeGuide from './features/onboarding/WelcomeGuide';
+/** The Cash & Bank reports moved into the report engine (/reports/:id); old links still land there. */
+function CashBankReportRedirect() {
+  const { reportId } = useParams();
+  return <Navigate to={`/reports/${reportId}`} replace />;
+}
 function GstReturnsPage() {
   const { tab } = useParams();
   const navigate = useNavigate();
@@ -72,6 +77,7 @@ const SecurityPage = lazy(() => import('./features/settings/security/SecurityPag
 const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
 const ClientsView = lazy(() => import('./features/parties/ClientsView'));
 const InventoryView = lazy(() => import('./features/items/InventoryView'));
+const PosPage = lazy(() => import('./features/pos/PosPage'));
 const ReportsView = lazy(() => import('./features/reports/ReportsView'));
 const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
 const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoices'));
@@ -84,6 +90,9 @@ const PurchaseOrders = lazy(() => import('./features/purchases/PurchaseOrders'))
 const DebitNotes = lazy(() => import('./features/purchases/DebitNotes'));
 const PaymentVoucher = lazy(() => import('./features/payments/PaymentVoucher'));
 const AccountingPage = lazy(() => import('./features/accounting/AccountingPage'));
+const CashBankPage = lazy(() => import('./features/cashbank/CashBankPage'));
+const ReportsHub = lazy(() => import('./features/reports/ReportsHub'));
+const ReportPage = lazy(() => import('./features/reports/ReportPage'));
 import AppFooter from './app/AppFooter';
 import SalesOverview from './features/sales/SalesOverview';
 import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
@@ -939,6 +948,9 @@ function App() {
                 <Route path={pathForView('purchase-returns')} element={<DebitNotes key={businessKey} />} />
                 <Route path="/accounting" element={<Navigate to="/accounting/setup" replace />} />
                 <Route path="/accounting/:tab" element={<AccountingPage key={businessKey} />} />
+                <Route path="/pos" element={<PosPage key={businessKey} />} />
+                <Route path="/cash-bank" element={<Navigate to="/cash-bank/accounts" replace />} />
+                <Route path="/cash-bank/:tab" element={<CashBankPage key={businessKey} />} />
                 <Route path={pathForView('verify')} element={<AccountingPage key={`${businessKey}-verify`} initialTab="verify" />} />
                 <Route path={pathForView('other-income')} element={<ExpenseTracker kind="income" key={`${businessKey}-income`} />} />
                 <Route
@@ -951,7 +963,10 @@ function App() {
                 {FEATURES.saleInlinePayments && (
                   <Route path={pathForView('salesman')} element={<SalesmenView key={businessKey} />} />
                 )}
-                <Route path="/reports" element={<ReportsView key={businessKey} />} />
+                <Route path="/reports" element={<ReportsHub key={businessKey} />} />
+                <Route path="/reports/classic" element={<ReportsView key={businessKey} />} />
+                <Route path="/reports/cash-bank/:reportId" element={<CashBankReportRedirect />} />
+                <Route path="/reports/:reportId" element={<ReportPage key={businessKey} />} />
                 <Route path="/gst-returns" element={<Navigate to="/gst-returns/gstr1" replace />} />
                 <Route path="/gst-returns/:tab" element={<GstReturnsPage key={businessKey} />} />
                 <Route

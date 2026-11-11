@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight, Package, Plus, Settings } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
@@ -72,6 +72,9 @@ function BarList({ rows, currency, total, empty }) {
     </ol>
   );
 }
+
+// Loaded on its own so Home does not carry the Cash & Bank code; it renders nothing while Cash & Bank is off.
+const CashBankWidgets = lazy(() => import('../cashbank/CashBankWidgets'));
 
 export default function AnalyticsDashboard({ onNew, onEdit, onOpenProducts, onOpenSettings, activeProfile }) {
   const navigate = useNavigate();
@@ -160,6 +163,9 @@ export default function AnalyticsDashboard({ onNew, onEdit, onOpenProducts, onOp
           <button className="btn btn-primary" onClick={() => onNew()}><Plus size={16} /> New invoice</button>
         </div>
       </header>
+
+      {/* Vyapar parity P5-S7: Cash & Bank widgets; nothing shows while Cash & Bank is off. */}
+      <Suspense fallback={null}><CashBankWidgets /></Suspense>
 
       {attention.length > 0 && (
         <ul className="ad-attn" aria-label="Needs your attention">

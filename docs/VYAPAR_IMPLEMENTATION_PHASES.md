@@ -35,6 +35,7 @@ Legend, same as the blueprint: ✅ exists · 🟡 partial · 🆕 new · ⚠️ 
 | **Phase 8** | Settings: 11 tabs |
 | **Phase 9** | Grow your business: reminders, messages, salesman tracking, service reminders, multi-currency |
 | **Phase 10** | Compliance polish: Table 11 advances, RCM, 3B 4(B), e-invoice, TDS ledger, ITR-3 map |
+| **Phase 12** | Point of Sale: counter billing screen, shortcuts, held bills, split / credit payments, loyalty points, POS settings (added 2026-11-11; built before Phase 11 so the hardening covers it) |
 | **Phase 11** | Hardening, performance, accessibility, release |
 | **Reference R1–R13** | Journeys, state machines, table columns, RLS templates, sample payloads, seed data, slice tracker, extra wireframes, UI-state matrix, copy deck, keyboard map |
 | **Appendices** | Permission keys, API catalogue, migration map, error catalogue, test matrix, use-case catalogue, glossary |
@@ -161,7 +162,8 @@ P0  UI foundation (U0 tokens → U1 shell → U2 components)
 | P8 | Settings 11 tabs | 2 wk | P0 | none |
 | P9 | Grow & messaging | 3 wk | P2, P8 | `messaging` |
 | P10 | Compliance polish | 3 wk | P3, P4 | none |
-| P11 | Hardening | 2 wk | all | none |
+| P12 | Point of Sale | 2 wk | P2, P4 (P5 for bank-received modes) | none (a menu entry; its settings are `preferences.pos`) |
+| P11 | Hardening | 2 wk | all (P12 included) | none |
 
 Total ≈ 34 engineer-weeks sequential; with API and UI in parallel ≈ 20 calendar weeks.
 
@@ -2109,6 +2111,7 @@ ledger_entries outside repost(). If backfill diffs are non-zero, stop and print 
 **Prerequisites**: P4 merged, flag `accounting.ledger` on.
 **Flag**: `cashbank`.
 **Slices**: P5-S1 Bank accounts · P5-S2 Cash in Hand and adjustments · P5-S3 Transfers · P5-S4 Cheques · P5-S5 Loans · P5-S6 Bank reconciliation · P5-S7 Dashboard widgets.
+**Status (2026-11-11)**: P5-S1…S7 implemented behind `cashbank` (needs `accounting.ledger`): tax engine, migration `0012`, API and the `/cash-bank/:tab` screen. See the Cash & Bank section of `docs/ACCOUNTING.md` and the Phase 5 notes in `docs/DECISIONS.md` for the choices made and what is left.
 
 ## P5-S1 Bank accounts
 
@@ -2388,6 +2391,7 @@ After each slice run the trial-balance check from Verify My Data; if Dr≠Cr sto
 **Goal**: 45+ reports from one engine. Adding a report means adding a definition, not a screen.
 **Prerequisites**: P0-S3.7 (`ReportShell`), P4 (ledger) for ledger-based reports; document-based reports (Sale, Purchase, Stock, GST) can ship earlier, in slice order below.
 **Slices**: P6-S1 Engine and hub · P6-S2 Transaction reports · P6-S3 Party reports · P6-S4 Item and stock reports · P6-S5 GST reports · P6-S6 Expense, bank, order, loan reports · P6-S7 Financial statements (P&L, Trial Balance, Balance Sheet, Cash Flow) · P6-S8 Exports, favourites, scheduling.
+**Status (2026-11-11)**: core done: P6-S1 engine and hub, and the ledger reports Day Book, Cash Flow, Party Statement, Payable Ageing, Profit & Loss, Trial Balance and Balance Sheet, with `apps/api/test/report-crosschecks.test.ts`; plus Bank Statement, Loan Statement and Cheque Register from Phase 5. The rest of the index (document reports, item/stock, GST rate/HSN/SAC, expense, order, salesman), favourites, saved views, scheduled email and the 100k streaming export are not built; see the Phase 6 notes in `docs/DECISIONS.md`.
 
 ## P6-S1 Engine and hub
 
@@ -3697,6 +3701,97 @@ Implement Phase 10 slice by slice. For each GST cell touched, first add a fixtur
 run it red, implement the pure function in tax-engine, then wire the report. Do not alter unrelated sections. If a rule is
 marked ⚠️, stop and ask for the CA decision before coding it. Credentials for e-invoice must never be logged or returned by the API.
 ```
+
+---
+
+# PHASE 12: Point of Sale (POS)
+
+**Status (2026-11-11)**: P12-S1…S6 implemented: `packages/tax-engine/src/pos.ts`, migration `0017`, `apps/api/src/modules/pos.ts`, and the `/pos` screen. See the Phase 12 notes in `docs/DECISIONS.md` for the choices made and what is left.
+
+**Goal**: a counter billing screen for shops: scan or search, a fast bill table, keyboard shortcuts for everything, several bills held at once, cash with change, split and credit payments, loyalty points, a receipt on a thermal printer, and POS settings. A POS bill is not a new kind of document: it is a tax invoice, so stock, payments, the ledger, GST returns and every report already see it.
+**Slices**: P12-S1 Cart engine and settings (pure) · P12-S2 Sale API, lookups and loyalty ledger · P12-S3 Counter screen and shortcuts · P12-S4 Payments: change, split, credit · P12-S5 Loyalty, discounts, charges, free quantity · P12-S6 POS settings drawer, receipt and recent bills.
+**Reference screens**: Vyapar POS billing screen, the POS settings drawer and the Transaction settings page (the settings that also apply to a POS bill are listed in "Settings map" below).
+
+## Rules specific to this phase
+1. **One sale path.** `POST /v1/pos/sales` builds the invoice lines with `posInvoiceLines` and saves through `createInvoice`: the same numbering series, guards (period lock, negative stock, credit limit, §269ST cash), inline payments, stock movements and ledger posting as an invoice made on the invoice screen. Never insert into `invoices`, `payments` or `ledger_entries` from the POS module.
+2. **One calculation.** The screen totals with `posTotals` and the server with `computeInvoiceTotals` over `posInvoiceLines`; a test pins them equal and the API refuses (409) a bill whose server total differs from the screen total.
+3. **A bill discount is a pre-GST discount.** It is spread over the lines in proportion to their value after line discounts, in paise, the last line taking the remainder (`spreadDiscount`), so the GST of each line falls with it and the parts always add up to the whole. Loyalty points redeemed are a bill discount too.
+4. **Free quantity** goes on the line's quantity (it leaves stock) and its value is added to the line's discount (it is not charged), with a note `Includes n free` on the line.
+5. **Only cash can be tendered above the bill.** UPI, card, bank and cheque above the total are refused; cash above it is change and is never recorded as received. Unpaid money is credit and needs a named customer.
+6. **A retried save returns the same bill.** Each bill tab has a `clientKey`; the API stores it on the invoice (`data.pos.clientKey`) and a second `POST` with it returns the first bill (`replayed: true`) instead of selling twice.
+7. **Points follow the bill.** `loyalty_points` rows belong to the invoice that earned or spent them; a customer's balance counts only live bills, so cancelling or deleting a bill gives back what it spent and takes back what it earned with no second write.
+
+## P12-S1 Cart engine and settings (pure)
+Files: `packages/tax-engine/src/pos.ts`, `packages/tax-engine/test/pos.test.js`.
+Exports: `posSettings(raw)` (any stored shape made whole; cash always a mode), `cartAdd`, `cartUpdate`, `counterRate` (price as the counter shows it: with or without GST per `pricing`), `posInvoiceLines`, `posTotals`, `billDiscountAmount`, `spreadDiscount`, `pointsEarned`, `maxRedeemable`, `pointsValue`, `settleTender`, `cashSuggestions`, `parseQtyPrefix`.
+Acceptance: 300 random carts: Σ discount parts = min(discount, Σ lines) and no part exceeds its line; `posTotals` equals `computeInvoiceTotals` on the lines it hands the server; GST follows the bill discount; IGST for an interstate customer.
+
+## P12-S2 Sale API, lookups and loyalty ledger
+Data: `loyalty_points` (migration `0017`: business, party, invoice, `kind` earn|redeem, signed `points`, `value`; RLS; check earn > 0, redeem < 0). A barcode lives in `items.extra.barcode`, unique per organization among live items (partial unique index on `lower(extra->>'barcode')`, 409 `Another item already has this barcode`); a price stored with GST has `items.extra.salePriceInclTax = true`.
+Endpoints (permission `invoice:read` / `invoice:write`; settings write is `settings:write`):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET / PUT | `/v1/pos/settings` | POS settings (`business_settings.preferences.pos`); PUT merges only the keys sent |
+| GET | `/v1/pos/items?q=` | Exact barcode or item code first (`exact: true` = a scan), then name / code / HSN; price, GST, stock |
+| GET | `/v1/pos/customers?q=` | By name or phone; loyalty points and what they owe |
+| POST | `/v1/pos/sales` | Save a counter bill (below) |
+
+`POST /v1/pos/sales` takes `lines`, `billDiscount`, `billTaxPercent`, `charges`, `redeemPoints`, `tenders`, `remarks`, `salesmanId`, `confirm` and `clientKey`, and answers `{ invoiceId, number, total, paid, change, credit, pointsEarned, pointsBalance, replayed }`. 422 when a feature (bill discount, free quantity, bill tax, loyalty, a payment mode) is off in POS settings, when UPI/card/bank/cheque exceed the bill, when credit is left with no customer, or when more points are redeemed than allowed.
+Acceptance: a cash bill leaves stock reduced, the invoice `paid`, the payment recorded for the amount kept (not the cash handed over); a credit bill shows as a due on the customer; a retried `clientKey` does not sell twice; after any run of POS bills with the ledger on, the trial balance and Verify My Data are clean.
+
+## P12-S3 Counter screen and shortcuts
+Route `/pos` (Sale › POS, `invoice:write`). Layout: bill tabs on top (held bills, kept in the browser so a refresh loses nothing), search box, bill table, right panel (date, customer, total, payment, save), action buttons.
+
+```text
+┌ #1 Asha ✕ │ #2 · 3 items ✕ │ + New Bill [Ctrl+T] ───────────────────── 🖨 ⛶ ⚙ ┐
+│ [ Scan or search by item code, barcode or item name                       ] │ Date 11/11/2026
+│ # │ Code │ Item Name │ Qty │ Unit │ Price/Unit ex-tax │ Disc │ Tax │ Total   │ [Search customer… F11]
+│ 1 │ LUX1 │ Lux Soap  │ [2] │ PCS  │            100.00 │ 0.00 │36.00│ 236.00  │       Total ₹551.00
+│ 2 │ RICE │ Basmati   │ [3] │ KG   │            100.00 │ 0.00 │15.00│ 315.00  │   2 items, quantity 5
+│                                                                             │      [Full Breakup Ctrl+F]
+│ [Change Quantity F2][Item Discount F3][Remove Item F4][Change Unit F6]      │ Payment Mode [Cash ▾]
+│ [Additional Charges F8][Bill Discount F9][Loyalty Points F10][Remarks F12]  │ Amount Received [ 600 ]
+└                                                                             │ Change to Return ₹49.00
+                                                                              │ [Other / Credit Payments Ctrl+M]
+                                                                              │ [Save & Print Bill Ctrl+P]
+                                                                              │ [Save & New Ctrl+Enter]
+```
+
+Keyboard map (`features/pos/posKeys.js` is the single table; `F1` shows it): `Ctrl+T` / `Alt+N` new bill · `Ctrl+W` / `Alt+W` close bill · `Ctrl+1…9` go to a bill · `Ctrl+K` or `/` search · `F2` quantity · `F3` item discount · `F4` / `Delete` remove item · `F6` unit · `F8` charges · `F9` bill discount · `F10` loyalty · `F11` customer · `F12` remarks · `Ctrl+F` full breakup · `Ctrl+P` save and print · `Ctrl+Enter` save and new · `Ctrl+M` other / credit payments · `Ctrl+H` recent bills · `↑ ↓` select a line. Browsers keep `Ctrl+T` and `Ctrl+W`, so each has an `Alt` twin; in an installed app or full-screen kiosk the Ctrl keys reach the page. F-keys and chords act while typing in a box; letters and arrows do not.
+Search: a barcode scanner types the code and `Enter`: an exact barcode or item code adds the item at once (before the search debounce); a name lists matches (`↑ ↓ Enter`); `3*rice` sets the quantity for the next item (Direct Quantity Change); the same item scanned again adds to its line. Lines whose quantity exceeds stock are tinted.
+Acceptance: the whole bill can be made, paid and saved without the mouse; the shortcut list and the code share one table (a test checks every listed action exists).
+
+## P12-S4 Payments: change, split, credit
+Payment Mode (modes from settings; cash always) and Amount Received (empty = the exact total). Cash buttons suggest the exact amount and the next round notes. `Ctrl+M` opens up to six rows (mode, amount), shows paid, credit and change, and "Pay nothing (all credit)". The Amount Received box and the dialog both use `settleTender`, so the screen and the server agree. A mode can be received into a chosen bank account (POS settings › Payment Modes), which the inline payment carries (`accountId`), so the bank statement and reconciliation see it.
+Acceptance: ₹486 bill, ₹500 cash: change ₹14, payment ₹486; UPI ₹600 + cash ₹500 on ₹1,000: change ₹100, payments UPI 600 and cash 400; credit with no customer is refused with a message, with a customer it is a due on them.
+
+## P12-S5 Loyalty, discounts, charges, free quantity
+Bill discount (`F9`, rupees or `10%`), additional charges (`F8`, each with its own GST rate, before tax), bill tax (one GST rate for all lines), free item quantity, loyalty points: earn `floor(total / 100 × earnPer100)` on bills at or above `minBill`; redeem up to the customer's balance and `maxRedeemPercent` of the bill; a point is worth `pointValue` rupees. Each is a setting; a feature that is off is refused by the API as well as hidden.
+Acceptance: points earned on one bill are redeemed on the next and reduce its taxable value; cancelling that bill returns the points; a 10% bill discount lowers GST.
+
+## P12-S6 POS settings drawer, receipt and recent bills
+Settings (⚙ drawer, `preferences.pos`): Bill Discount, Bill Tax, Free Item Quantity, Enable Loyalty Points (points per ₹100, ₹ per point, minimum bill, max % payable), Round off total (nearest / up / down / none), Direct Quantity Change, Primary action (Save & Print / Save & New), Pricing (price is with / without tax), Payment Modes with the account each is received into, Receipt paper (thermal 80 mm, 58 mm, A4), Receipt footer, and "Sell below zero stock without asking" (answers the warn prompt of the Transaction setting; a Block setting still blocks).
+Receipt: built from the saved invoice (`features/pos/receipt.js`), printed through a hidden frame; shows lines, GST split, payments, change, balance due and points. Recent bills (`Ctrl+H`): reprint or cancel a bill (cancel reverses stock and the ledger through the normal invoice cancel).
+Acceptance: settings persist per business and change the counter at once; reprint matches the first print.
+
+## Settings map (Vyapar Transaction settings page vs this app)
+| Vyapar setting | Here |
+|---|---|
+| Invoice / Bill No., prefixes per document | Number series (already built, Phase 2); a POS bill uses the tax-invoice series |
+| Cash Sale by default | A bill with no customer is a cash sale to the walk-in "Cash Sale" party |
+| Inclusive / Exclusive tax on rate | POS › Pricing |
+| Free Item Quantity | POS › Free Item Quantity |
+| Transaction-wise Discount / Tax | POS › Bill Discount / Bill Tax |
+| Round Off Total | POS › Round off total |
+| Show profit while making a sale, Passcode for edit/delete, E-way bill number, Quick entry, Repeat invoices, Due dates and payment terms, Terms and conditions, Customer P.O., Time on transactions, Show last 5 prices | Not part of the counter; they belong to Phase 8 (Settings) and the invoice screen |
+| Billing type Lite / Full sale | The POS screen is the lite sale; the invoice screen is the full one |
+
+## Phase 12 test plan
+Tax engine (22 tests): settings, cart, price conversion, discount spreading (300 random carts), totals with and without GST in the price, free quantity, bill tax, IGST, loyalty, tender. API (19 tests): settings, lookup by barcode / code / name, barcode uniqueness, cash, split, credit, interstate, discount + charge + round off, retry by `clientKey`, free quantity, negative stock confirm, role check, loyalty earn / redeem / cancel, and the trial balance after six mixed bills with the ledger on. Web (14 tests): the shortcut map, held-bill tabs, discount parsing, the receipt. Browser (`apps/web/scripts/pos-e2e.mjs`, 21 checks): scan, `3*rice`, F9, Ctrl+F, Alt+N, Ctrl+1, change, Ctrl+Enter, the saved invoice, stock, the settings drawer, F1, the trial balance.
+
+## Phase 12 acceptance
+A cashier can bill a walk-in customer from the keyboard in under ten seconds for three items; every bill is an invoice in the books; stock, payments, bank statements, GST returns and reports include it; the trial balance holds after any mix of cash, split, credit, discount and loyalty bills.
 
 ---
 

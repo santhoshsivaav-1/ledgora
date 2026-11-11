@@ -28,7 +28,10 @@ Run from the repository root.
 | `pnpm db:generate`                   | After editing `packages/db/src/schema`, write the next migration file       |
 
 Browser tests: `pnpm --filter @ledgora/web exec playwright install firefox` once, then see the header of
-`apps/web/scripts/auth-e2e.mjs` and `phase3-e2e.mjs`.
+`apps/web/scripts/auth-e2e.mjs` and `phase3-e2e.mjs`. Cash & Bank and the reports: `cashbank-e2e.mjs` (run the API with
+`IFSC_API_URL=off` and the built app, e.g. `WEB_DIST_DIR=… API_LISTEN_PORT=4100 node apps/api/src/server.ts`, then
+`E2E_APP_URL=http://localhost:4100 node apps/web/scripts/cashbank-e2e.mjs <screenshot folder>`). The POS counter: `pos-e2e.mjs`, run the same way
+(`REPORT_SCHEDULER=0`, `APP_URL` set to the same origin).
 
 ## Layout
 

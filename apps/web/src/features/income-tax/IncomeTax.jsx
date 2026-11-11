@@ -4,6 +4,7 @@ import { getAllBills, getAllExpenses, getAllPurchases, getProfile } from '../../
 import { formatCurrency } from '../../utils';
 import { getPrintSettings } from '../print/printSettingsStore';
 import HelpButton from '../../components/ui/HelpButton';
+import LoanDeductions from './LoanDeductions';
 import { BANK_STATEMENT_TEMPLATE, downloadCsv } from '../import-export/bulkCsv';
 
 // v1.10.31 — Parse the user's chosen PDF accent (hex like "#1e40af") into
@@ -660,6 +661,7 @@ function RegimeCalculatorTab({ inputs, setInputs, comparison, onReset }) {
           Under New Regime (default from FY 2023-24), only Section 80CCD(2) — employer NPS contribution — is allowed.
           These deductions ONLY reduce your Old-Regime tax.
         </p>
+        <LoanDeductions fy={CURRENT_FY} deductions={inputs.deductions} onApply={(patch) => setInputs(prev => ({ ...prev, deductions: { ...prev.deductions, ...patch } }))} />
         {Object.entries(DEDUCTION_CAPS).map(([section, cap]) => (
           <NumberInput key={section}
             label={`§${section}`}

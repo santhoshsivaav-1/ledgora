@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   foreignKey,
   index,
   jsonb,
@@ -8,7 +9,7 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { base } from './common.ts';
+import { base, money } from './common.ts';
 
 export const businesses = pgTable(
   'businesses',
@@ -65,11 +66,18 @@ export const paymentAccounts = pgTable(
     accountNumber: text('account_number').notNull().default(''),
     accountType: text('account_type').notNull().default(''),
     ifsc: text('ifsc').notNull().default(''),
+    /** The branch the IFSC belongs to (filled by the IFSC lookup, editable). */
+    branch: text('branch').notNull().default(''),
     swift: text('swift').notNull().default(''),
     upiId: text('upi_id').notNull().default(''),
     notes: text('notes').notNull().default(''),
     isDefault: boolean('is_default').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
+    // Vyapar parity P5-S1: a bank account's opening balance (signed: negative = overdraft) and whether its details print
+    // on invoices. Its ledger account is the `accounts` row with bank_account_id = this id.
+    openingBalance: money('opening_balance').notNull().default(0),
+    openingDate: date('opening_date'),
+    printOnInvoice: boolean('print_on_invoice').notNull().default(true),
   },
   (t) => [
     foreignKey({

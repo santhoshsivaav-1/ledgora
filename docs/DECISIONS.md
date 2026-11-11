@@ -215,7 +215,8 @@ Judgement calls inside the guide's rules, listed so a reviewer can overturn them
 7. **Backfill**: a dry run and a real run are the same code inside a savepoint (rolled back for a dry run or when party
    balances differ), so they cannot disagree. It posts party opening balances (the `parties.opening_balance` sign:
    positive = they owe us) dated the start of the first document's financial year. Changing an opening balance later is
-   flagged by Verify, fixed by posting history again. There is no CLI: the endpoint and the Accounting screen do the job.
+   flagged by Verify, fixed by posting history again. The CLI `pnpm --filter @ledgora/api backfill:ledger` runs the same code
+   and has no `--force`: with differences it prints the diff table, keeps nothing and exits 1.
 8. ⚠️ **D-13 (open): reverse-charge bills.** The ledger records a supplier as owed the value without the RCM tax (the tax is
    Cr RCM Payable). Phase 3's `total`, and the amount the Payment Out screen shows as due on such a bill, include the tax.
    Paying the full "due" therefore leaves the supplier with a ₹ advance equal to the RCM tax in the books. Verify does not
@@ -238,3 +239,171 @@ Judgement calls inside the guide's rules, listed so a reviewer can overturn them
 13. **Still not done:** posting from workspace documents (item 2); P4-S7's "click Ref opens the source document" goes to the
     document's list screen, not the document; per-party statement from the ledger; FIFO (D-11); a timed run on a
     10,000-document business (the backfill does a few queries per document and has not been profiled).
+
+## Notes recorded during Phase 5 (2026-11-11)
+
+Cash & Bank, all seven slices, behind the per-business flag `business_settings.preferences.cashbank.enabled`, which only
+counts while `accounting.ledger` is on (`GET/PUT /v1/cashbank/settings`; turning it on needs `accounting:manage`). The
+pure rules came first, with tests: `tax-engine/loan.ts`, `cheque.ts` (state machine + postings), `recon.ts`,
+`cashbank.ts`. Every slice's API tests end with the Verify My Data trial-balance check (no unbalanced voucher, Dr = Cr,
+party balances = documents); all passed, so no slice stopped on Dr ≠ Cr.
+
+1. **Nothing new writes the ledger directly.** Transfers, cash entries, cheques, loans, loan payments and bank opening
+   balances post through `repost()` (`cashbankRules.ts syncCashbank / syncBankOpening`): edit and delete are reverse +
+   repost, as in Phase 4. Migration `0012_cash_bank.sql` is additive (new tables with forced RLS, three defaulted columns on
+   `payment_accounts`). `ledger_entries` stays append-only.
+2. **A bank account is still a `payment_accounts` row.** Its ledger account (1101…) is the `accounts` row whose
+   `bank_account_id` points at it, so the guide's `payment_accounts.account_id` column was not added (it would duplicate
+   that link). `account_type` and `swift` already existed. Turning Cash & Bank on gives every existing bank its ledger
+   account and posts its opening balance (dated the day the bank was added when it had no date). Deleting a bank with
+   entries is refused (409) on both the new and the old payment-account endpoints.
+3. **Two system accounts added to the default chart:** 3010 Owner's Drawings and 5270 Cash Over / Short. `seedChart` adds
+   them to existing businesses when Cash & Bank is turned on.
+4. **Deposit / Withdraw (the guide flagged the naming as inferred), settled the Indian way:** on a bank, Deposit means
+   cash taken to the counter and Withdraw cash taken out, so both default to a contra entry with Cash in Hand (a transfer,
+   Dr Bank / Cr Cash or the reverse). The other choices: Deposit from Owner's Capital; Withdraw to Owner's Drawings, Bank
+   Charges or an account the user picks. Money from customers stays Payment In.
+   Adjust (bank or cash) is against Opening Balance Equity; "count as income" uses Other Income for more and Cash Over /
+   Short for less. The day-end count posts only a difference, to Cash Over / Short.
+5. **Cheques always come with a payment.** Add Cheque records a Payment In / Out (mode cheque) through the same code as the
+   payment screens, and a payment by cheque made elsewhere joins the register when Cash & Bank is on. The payment posts
+   Dr Cheques in Hand / Cr Receivable (issued: Dr Payable / Cr Cheques Issued); clearing posts Dr Bank / Cr Cheques in Hand.
+   **Bounce and cancel void the payment** (soft delete: allocations removed, invoices reopen, postings reversed, accrued
+   TDS dropped), so "the invoice balance reopens" holds by construction and Verify's party check still agrees. Bounce
+   charges: received → to the party (Dr Receivable / Cr Other Income) or to us (Bank Charges); issued → always ours. A
+   payment whose cheque has been deposited or cleared can not be edited or deleted (409); act on the cheque instead.
+6. **State machine:** received open → deposited → cleared / bounced, open → cancelled, and (the way most shops record it)
+   open → cleared or bounced directly; issued open → cleared / bounced / cancelled. Cheque numbers are unique per
+   direction and party among live cheques. Actions lock the cheque row (`SELECT … FOR UPDATE`), so two people can not
+   clear and bounce the same cheque at once.
+7. **Loans:** EMI and schedule per the guide (textbook ₹10,00,000 at 12% for 12 months = ₹88,848.79), paisa rounding with
+   the last row absorbing it. The stored schedule is rebuilt from the terms and every payment (`scheduleFor`), so deleting
+   a payment is exact. A part payment or prepayment keeps the EMI and shortens the tenure by default, or keeps the end
+   date and lowers the EMI. A processing fee is Bank Charges. The loan account's balance always equals the schedule's
+   outstanding (tested). Money terms can not be edited after a loan is added (delete and re-add while it has no payments).
+8. **Transfers:** cash can never go below zero; banks only with "allow overdraft" on, or when the bank is an OD / CC account.
+   A transfer fee is Bank Charges taken from the source account.
+9. **Reconciliation:** matching is pure (`matchStatement`: same amount on the right side, ±3 days, a payment / cheque /
+   transfer reference in the description first, each row and entry used once); statement rows are fingerprinted so a
+   re-uploaded statement shows what was already reconciled. Finishing with a difference needs a reason, written to the
+   audit log. Statements upload as CSV or Excel .xlsx (read by `apps/web/src/lib/xlsx.js`, no dependency: the browser's
+   DecompressionStream unzips it; Excel date cells are serial numbers, read by `normalizeStatementDate`). An old binary
+   .xls is refused with a hint to save it as .xlsx or CSV. An unmatched row can be recorded on the spot (bank charges,
+   owner drawing, cash withdrawn; interest / other income, owner's capital, cash deposited) and is matched again at once,
+   or ignored with a reason (`bank_recon.ignored`, migration 0013), and a re-uploaded statement shows it as done. Party
+   money still goes through Payment In / Out (the row links there).
+10. **Permissions:** `cashbank:read` (every role that reads the books, viewer included), `cashbank:write` (owner, admin,
+    accountant). The period lock applies to every Cash & Bank write.
+11. **Increase Loan** is a `topup` loan payment: Dr Bank (less any charges, which are Bank Charges) / Cr the loan; the
+    schedule is rebuilt keeping the end date (higher EMI, the default) or the EMI (longer). A top-up on a paid-off loan
+    reopens it. Deleting a top-up that later repayments depend on is refused. The loan **Statement** reads the loan's
+    ledger account: borrowed, repaid and the principal outstanding after each.
+12. **India-specific rules (Phase 5 follow-up, 2026-11-11):**
+    - **Cheque validity (RBI, CTS-2010):** three months from the cheque's date. A stale cheque can not be deposited or
+      cleared (409); the register shows "Stale since …". A cheque can not be presented before its date either.
+    - **NI Act §138 / §142:** a bounced received cheque carries its clock: demand notice within 30 days of the return
+      memo; once the owner records when the notice reached the drawer (`cheques.notice_served_on`), 15 days to pay, then
+      one month to file a complaint. Shown in the register as a reminder, with "not legal advice" on the screen.
+    - **§269SS / §269T:** taking a loan, or repaying one with its interest, of ₹20,000 or more in cash is refused
+      (`cash_limit`, 409) unless the owner types an acknowledgement, which is audited (`guard.cash_loan`), the same
+      pattern as the existing §269ST receipt guard. Checked after the amounts are valid, so a wrong amount is reported first.
+    - **§40A(3):** cash paid to one party in a day above ₹10,000 (Payment Out or an expense paid in cash) is listed on
+      the Cash in Hand screen and in the summary (`cashOutWatch`) next to the §269ST receipts watch. A warning only: the
+      ₹35,000 transporter limit is not distinguished.
+    - **Income Tax link:** `GET /v1/loans/tax-summary` totals interest and principal paid in a financial year on loans
+      marked housing or education; the Regime Calculator shows them and fills §24(b) (capped at ₹2,00,000, self-occupied)
+      and §80E, and can add home-loan principal to §80C (its ₹1,50,000 cap is shared, so it is added, not capped).
+      Counted from payments recorded (cash basis); the screen says to check the lender's interest certificate.
+13. **Production hardening:** every Save in the Cash & Bank screens runs once at a time (no double payments from a double
+    click); loan payments lock the loan row; the Home widgets and the Cash & Bank data load as separate chunks.
+14. **ITC 180 days and cheques (D-12 extended):** on the API, a Payment Out made by a cheque in the register counts for
+    the 180-day rule on the day the cheque **cleared**; while it is open or deposited it has paid nothing, and a bounced
+    or cancelled cheque never pays (`chequePaidOn`, `itcRules.ts`). A cheque handed over before the deadline but cleared
+    after it therefore leaves the credit due for reversal. Payments without a register entry keep their own date. The
+    web screens' own 180-day view (workspace documents, which have no cheque register) is unchanged.
+15. **§194A TDS on loan interest:** a loan records who lent it (`lender_type`: bank / co-op bank / LIC / insurer are
+    exempt under §194A(3)(iii); NBFC, company, individual, other are not), the lender's PAN and, optionally, the lender
+    as a party (interest is then added up across all their loans). Each repayment works out TDS with the existing engine
+    (`tdsCalc('194A')`): 10%, 20% without PAN (§206AA), once the year's interest to the lender passes ₹10,000, the
+    crossing payment covering the whole year (catch-up); rounded to the rupee. It posts Dr Loan Interest (full) /
+    Cr TDS Payable / Cr Bank (net), and a `tds_entries` row (section 194A) that the TDS Payable screen, challans and the
+    §201(1A) interest already handle. A loan can be marked exempt (Form 15G / 15H, or a deductor not required to deduct);
+    a payment may override the figure. TDS is recorded when interest is paid, not when it is credited without payment;
+    deleting a payment removes its accrued TDS but does not re-work later payments' catch-up.
+16. **Cash & Bank reports (Phase 6, P6-S6 subset):** Bank Statement (any bank or Cash in Hand: opening row, deposits,
+    withdrawals, running balance, reconciled ✔), Loan Statement (disbursal, each EMI / part payment / prepayment /
+    top-up with principal, interest, charges, TDS and the balance after) and Cheque Register (direction, status, days
+    past the cheque date), at `/reports/cash-bank/:id`, linked from Reports and the Cash & Bank screen. Built on
+    ReportShell, so they filter, total and export (Print / PDF, Excel, CSV, Share) like every report. Bank closing =
+    the account's balance and loan balance = the schedule's outstanding (tested). The rest of Phase 6 is not built.
+17. **IFSC branch lookup:** `GET /v1/ifsc/:code` asks the IFSC directory (`IFSC_API_URL`, Razorpay's open API by default)
+    from the API server, because the app's CSP lets the browser connect to nothing else. 4-second timeout, answers
+    cached a day; slow, failing or switched off (`IFSC_API_URL=off`) it falls back to the bundled bank name. The form's
+    "Find branch" fills bank and branch (stored on `payment_accounts.branch`, migration 0014) and shows address and MICR.
+18. **§194A at credit (interest credited before it is paid):** "Credit interest" on a loan (an EMI fallen due, the
+    31 March accrual) books Dr Loan Interest / Cr Interest Payable (new system account 2420) / Cr TDS Payable, keeping
+    the TDS on the day of credit (the Act takes the earlier of credit and payment) and writing its `tds_entries` row.
+    A later payment settles credited interest first in, first out (`accruedSettlement`): that part clears Interest
+    Payable at its net, with no second expense and no second TDS; only interest beyond it is new expense with its own
+    TDS. The year's threshold counts interest credited plus interest paid that was not credited. A credit a payment has
+    already paid can not be deleted (delete the payment first). Migration 0015.
+19. **Browser test:** `apps/web/scripts/cashbank-e2e.mjs` drives the Cash & Bank screens and the core reports in Firefox
+    (28 checks: bank account with IFSC, cash adjust, transfer, a cheque through deposit and clearing, a loan with its
+    EMI, statement reconciliation with a quick entry, the Home widget, the report hub, Trial Balance and Balance Sheet
+    balanced, Cash Flow = Cash & Bank, an Excel export, no page errors, Verify clean). Run against a throwaway database
+    with the API serving the built app; it passed. Found and fixed on the way: an empty `IFSC_API_URL` does not switch
+    the lookup off (the env loader drops empty values), so it is `IFSC_API_URL=off`; report and Cash & Bank pages lit
+    Dashboard in the sidebar and showed its footer (the router now maps /reports/* and /cash-bank/*); statement money
+    was not in Indian grouping.
+
+## Notes recorded during Phase 6, core first (2026-11-11)
+
+Scope agreed: the engine and hub, then the money reports that read the ledger, each with a server handler and a
+cross-check; the rest of Phase 6 is next.
+
+1. **Engine.** A report is a definition (`apps/api/src/reports/registry.ts`: id, title, group, zod params, `run`) served
+   at `GET /v1/reports/:id` and listed at `GET /v1/reports`; no route per report (tested by registering a toy report in
+   a test). The web draws each with ReportShell from a definition in `features/reports/definitions.js`; a server report
+   without one still opens, with columns taken from its rows. Totals and opening/closing figures come from the server
+   and reach the summary chips (ReportShell passes `totals` and `meta` to `summary`).
+2. **Reports built:** Day Book, Cash Flow (direct method, by what posted the money; a transfer nets to its fee), Party
+   Statement (the party's lines on Receivable and Payable, running Dr/Cr), Payable Ageing (0–30 / 31–60 / 61–90 / 90+ by
+   bill date), Profit & Loss (Indian layout: direct income, cost of sales with opening and closing stock, gross profit,
+   indirect, net), Trial Balance (with groups), Balance Sheet (assets with closing stock against capital, retained
+   earnings, current-year profit and liabilities; any difference shown as "Difference in opening balances", never
+   hidden). All of them hide reversed pairs, so they show what the books say now.
+3. **Stock in the statements.** Stock is not posted (D-06), so the P&L is periodic and the Balance Sheet adds closing
+   stock, both valued at moving weighted-average cost (`weightedAverageCost`): a purchase at its line's landed cost, the
+   opening quantity at the item's purchase price, everything else at the running average; a movement is dated by its
+   bill or invoice. The stock items were opened with stands as capital ("Opening stock (capital introduced)"), which is
+   what keeps the sheet balanced. Items belong to the organization, so with several businesses the stock is the
+   organization's (to revisit when stock moves per business).
+4. **Cross-checks** (`report-crosschecks.test.ts`, one business with stock, sales, purchases, payments, an expense, a
+   loan, a transfer and a cleared cheque): Day Book and Cash Flow close at the Cash & Bank total; Party Statement at
+   the party's ledger balance; Trial Balance balanced and equal to the ledger's; P&L net = income − expenses + closing −
+   opening stock, closing stock checked by hand (₹1,206.67); Balance Sheet balanced with the P&L's profit and stock;
+   Payable Ageing = the supplier's ledger; Bank Statement = the bank balance. A property test (200 random ledgers)
+   shows the Balance Sheet always balances.
+5. **Permissions.** `report:read` for every report; new `report:profit` (owner, admin, accountant) for Profit & Loss and
+   Balance Sheet, the "hide profit reports" switch: a viewer reads the Day Book but gets 403 on the P&L. Ledger reports
+   on a business without the ledger answer 409, not an empty report.
+6. **Hub.** `/reports` lists the groups with a search; reports a role or a business can not use are shown greyed with
+   why. The old analytics page is at `/reports/classic` (Sales analytics), linked from the hub; `/reports/cash-bank/:id`
+   redirects to `/reports/:id`.
+7. **Not built yet:** the document reports (Sale, Purchase, All Transactions, Bill Wise Profit), the rest of the party
+   reports, item and stock reports, GST rate / HSN / SAC / sale-purchase with GST / 27EQ / e-way register, expense,
+   discount and order reports, salesman; favourites, recent, saved views, scheduled e-mail; the server-side streaming
+   CSV for 100k rows (exports today run in the browser over the rows loaded); Payable Ageing counts payments made after
+   its date (it ages what is due today on bills dated up to it). Receivable ageing stays in Sales analytics.
+
+## Notes recorded during Phase 12, Point of Sale (2026-11-11)
+
+1. **A POS bill is an invoice.** `POST /v1/pos/sales` calls `createInvoice`, so numbering, guards, stock, inline payments and the ledger are the existing code, and every report, GST return and Cash & Bank statement includes the bill with no extra work. The POS adds only `loyalty_points`.
+2. **The counter sells typed items and customers**, not the workspace documents the older Products and Clients screens still keep (the same limit as decision 2 of Phase 4). So the screen has two bridges: "Add an item" (name, code, barcode, price, GST, opening stock) and "Import my products and customers", which copies the workspace products and clients into the typed tables once (items already there, same name and HSN, are skipped). The POS bills do not appear in the older Sales list; they are in Reports, the ledger and Recent bills on the counter. Moving the Sales screens onto the typed API removes this seam.
+3. **Barcode is `items.extra.barcode`**, not a column (the guide's P1-S5 column was not built), with a partial unique index per organization among live items. Item code is the existing `sku`. `extra.salePriceInclTax` says a stored price already has GST in it; the counter converts to the `pricing` setting.
+4. **Bill discount is taken before GST**, spread over lines by value in paise, last line taking the remainder, so each line's GST falls with it. Loyalty points redeemed are the same kind of discount. Free quantity is quantity on the line (it leaves stock) plus its value in the line's discount.
+5. **Cash is the only mode that can exceed the bill.** The excess is change and is not recorded. Credit needs a customer. "Cash Sale by default" is how a bill with no customer behaves (the walk-in party), not a separate setting.
+6. **Idempotent save.** The bill's `clientKey` is stored in `invoices.data.pos`; a repeat returns the first bill. The retry is by lookup, not a unique index, so two truly simultaneous requests with one key could both pass; the counter sends one at a time (the Save button is disabled while saving).
+7. **Settings live in `business_settings.preferences.pos`.** `PUT /v1/businesses/:id/settings` replaces `preferences` as a whole (existing behaviour), so a client that writes it without first reading it back would drop `pos` (and `cashbank`, `accounting.ledger`). The settings screen reads then writes, so nothing is lost today; the POS settings PUT merges. Not changed here.
+8. **Shortcuts.** Browsers keep Ctrl+T and Ctrl+W, so there are Alt+N and Alt+W twins; Ctrl+P is taken over on the POS page for Save & Print. One table (`posKeys.js`) drives the handler and the help list.
+9. **Not built:** barcode printing and label sheets (Phase 7), serial / batch / expiry on a counter line (Phase 1 tracking is not built), multiple secondary units with price per unit (Change Unit changes the label only), a customer display or cash drawer kick, offline selling (a bill needs the server), sale of a quotation or order from the counter, a POS return (use a credit note), per-cashier shift close and day-end report (Cash in Hand day-end count and the Day Book cover the cash side), the receipt on a connected thermal printer without the browser print dialog (needs the Web USB / native path), and a browser click-through of the printed receipt (the HTML is unit-tested; the print dialog is not driven by the script).

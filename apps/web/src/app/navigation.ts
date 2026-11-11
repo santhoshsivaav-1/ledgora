@@ -15,6 +15,7 @@ import {
   PackageCheck,
   Receipt,
   RefreshCw,
+  ScanBarcode,
   Settings,
   ShoppingBag,
   ShoppingCart,
@@ -115,6 +116,8 @@ export const NAV: NavEntry[] = [
         view: p.id,
         icon: SALES_ICONS[p.id],
       })),
+      // Phase 12: the counter. Needs the typed API (items, customers), so it is under invoice permissions.
+      { id: 'pos', label: 'POS', view: 'pos', icon: ScanBarcode, module: 'invoicing', perm: 'invoice:write' },
       { id: 'payment-in', label: 'Payment In', view: 'receipts', icon: Receipt, module: 'receipts', perm: 'payment:read' },
       { id: 'recurring', label: 'Recurring', view: 'recurring', icon: RefreshCw, module: 'recurring', perm: 'recurring:read' },
     ],
@@ -149,17 +152,22 @@ export const NAV: NavEntry[] = [
     ],
   },
   {
+    // Vyapar parity Phase 5: one screen with a tab per entry (/cash-bank/:tab), behind the per-business `cashbank` flag.
     id: 'cashbank',
     label: 'Cash & Bank',
     icon: Landmark,
+    match: '/cash-bank',
     children: [
-      { id: 'bank-accounts', label: 'Bank Accounts', path: '/cash-bank/accounts', planned: 'P5' },
-      { id: 'cash-in-hand', label: 'Cash in Hand', path: '/cash-bank/cash', planned: 'P5' },
-      { id: 'cheques', label: 'Cheques', path: '/cash-bank/cheques', planned: 'P5' },
-      { id: 'loans', label: 'Loan Accounts', path: '/cash-bank/loans', planned: 'P5' },
+      { id: 'bank-accounts', label: 'Bank Accounts', path: '/cash-bank/accounts', perm: 'cashbank:read' },
+      { id: 'cash-in-hand', label: 'Cash in Hand', path: '/cash-bank/cash', perm: 'cashbank:read' },
+      { id: 'transfers', label: 'Transfers', path: '/cash-bank/transfers', perm: 'cashbank:read' },
+      { id: 'cheques', label: 'Cheques', path: '/cash-bank/cheques', perm: 'cashbank:read' },
+      { id: 'loans', label: 'Loan Accounts', path: '/cash-bank/loans', perm: 'cashbank:read' },
+      { id: 'reconcile', label: 'Reconcile', path: '/cash-bank/reconcile', perm: 'cashbank:read' },
     ],
   },
-  { id: 'reports', label: 'Reports', icon: BarChart3, view: 'reports', module: 'reports', perm: 'report:read' },
+  // Phase 6: the hub at /reports and every report under it (/reports/:id) light this entry.
+  { id: 'reports', label: 'Reports', icon: BarChart3, view: 'reports', module: 'reports', perm: 'report:read', match: '/reports' },
   {
     // Vyapar parity Phase 4: the books. Each entry is a tab of one screen (/accounting/:tab).
     id: 'accounting',

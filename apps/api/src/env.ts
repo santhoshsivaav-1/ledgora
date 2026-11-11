@@ -28,6 +28,14 @@ const schema = z.object({
   MSG91_TEMPLATE_ID: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /**
+   * IFSC directory for the bank-branch lookup (Razorpay's open IFSC API). The API server calls it, never the browser
+   * (the app's CSP allows no third-party connections). Set it to `off` to work offline: only the bundled bank names are
+   * used. (An empty value means "not set" here, like every variable, so it would fall back to the default.)
+   */
+  IFSC_API_URL: z.string().default('https://ifsc.razorpay.com'),
+  /** Sends scheduled report e-mails (weekly / monthly) from this process. Off in tests and on a replica that should not send. */
+  REPORT_SCHEDULER: bool.default(true),
   RATE_LIMIT_ENABLED: bool.default(true),
   RATE_LIMIT_API_PER_MIN: z.coerce.number().int().min(1).default(1500),
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().min(1).default(10),

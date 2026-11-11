@@ -33,9 +33,11 @@ export const ACC = {
   OUT_CESS: '2130',
   RCM_PAYABLE: '2140',
   TDS_PAYABLE: '2200',
+  INTEREST_PAYABLE: '2420',
   TCS_PAYABLE: '2210',
   CHEQUES_ISSUED: '2400',
   CAPITAL: '3000',
+  DRAWINGS: '3010',
   OPENING_EQUITY: '3100',
   SALES: '4000',
   SALES_RETURN: '4010',
@@ -53,6 +55,7 @@ export const ACC = {
   COMMISSION: '5240',
   INELIGIBLE_GST: '5250',
   FOREX: '5260',
+  CASH_OVER_SHORT: '5270',
 } as const;
 
 export interface ChartAccount {
@@ -97,7 +100,9 @@ export const DEFAULT_CHART: readonly ChartAccount[] = [
   a('2200', 'TDS Payable', 'Duties & taxes', 'liability'),
   a('2210', 'TCS Payable', 'Duties & taxes', 'liability'),
   a('2400', 'Cheques Issued (uncleared)', 'Current liabilities', 'liability'),
+  a('2420', 'Interest Payable', 'Current liabilities', 'liability'),
   a('3000', "Owner's Capital", 'Equity', 'equity'),
+  a('3010', "Owner's Drawings", 'Equity', 'equity'),
   a('3100', 'Retained Earnings / Opening Balance Equity', 'Equity', 'equity'),
   a('4000', 'Sales', 'Direct income', 'income'),
   a('4010', 'Sales Return', 'Direct income', 'income'),
@@ -115,6 +120,7 @@ export const DEFAULT_CHART: readonly ChartAccount[] = [
   a('5240', 'Salesman Commission', 'Indirect expense', 'expense'),
   a('5250', 'Ineligible GST expensed', 'Indirect expense', 'expense'),
   a('5260', 'Forex Gain/Loss', 'Indirect expense', 'expense'),
+  a('5270', 'Cash Over / Short', 'Indirect expense', 'expense'),
 ];
 
 /**
@@ -538,31 +544,53 @@ export const postIncome = (i: Rec, ctx?: PostCtx) => postExpense({ ...i, kind: '
 
 // ---- cash and bank, loans, cheques, adjustments, openings (Phase 5 documents; the rules are fixed here) ---------------------
 
+/** Money moved between cash and banks (P5-S3): Dr destination, Cr source; a fee is Dr Bank Charges, Cr source too. */
 export const postTransfer = (t: {
   id: string;
   date: string;
   from: string;
   to: string;
   amount: Numeric;
+  fee?: Numeric;
   narration?: string;
+  refType?: string;
 }): Posting[] =>
   keep(
-    voucher(t.date, 'transfer', t.id, [
+    voucher(t.date, t.refType ?? 'transfer', t.id, [
       { account: t.to, dr: r2(n(t.amount)), narration: t.narration },
-      { account: t.from, cr: r2(n(t.amount)) },
+      {
+        account: ACC.BANK_CHARGES,
+        dr: r2(n(t.fee)),
+        narration: t.fee ? 'Transfer charges' : undefined,
+      },
+      { account: t.from, cr: r2(n(t.amount) + n(t.fee)) },
     ]),
   );
 
+/** Loan received: Dr Bank, Cr the loan account; a processing fee the lender keeps is Dr Bank Charges instead of Bank. */
 export const postLoanDisbursal = (l: {
   id: string;
   date: string;
   loanAccount: string;
   bankAccount: string;
   amount: Numeric;
+  fee?: Numeric;
+  /** 'loan' for the loan itself; 'loan_payment' for a top-up recorded with the loan's payments. */
+  refType?: string;
+  narration?: string;
 }): Posting[] =>
   keep(
-    voucher(l.date, 'loan', l.id, [
-      { account: l.bankAccount, dr: r2(n(l.amount)), narration: 'Loan received' },
+    voucher(l.date, l.refType ?? 'loan', l.id, [
+      {
+        account: l.bankAccount,
+        dr: r2(n(l.amount) - n(l.fee)),
+        narration: l.narration ?? 'Loan received',
+      },
+      {
+        account: ACC.BANK_CHARGES,
+        dr: r2(n(l.fee)),
+        narration: n(l.fee) ? 'Loan processing fee' : undefined,
+      },
       { account: l.loanAccount, cr: r2(n(l.amount)) },
     ]),
   );
@@ -576,13 +604,67 @@ export const postLoanPayment = (l: {
   principal: Numeric;
   interest: Numeric;
   fees?: Numeric;
+  /** TDS kept from the interest (§194A): Cr TDS Payable, and the bank pays that much less. */
+  tds?: Numeric;
+  /**
+   * The part of `interest` (gross) that was credited to the lender earlier (postLoanInterestCredit) and is now paid:
+   * it clears Interest Payable instead of being an expense again, and the TDS kept on it at credit (`accruedTds`) is
+   * not paid to the lender.
+   */
+  accrued?: Numeric;
+  accruedTds?: Numeric;
+  refType?: string;
+}): Posting[] => {
+  const accrued = r2(Math.min(n(l.interest), n(l.accrued)));
+  const accruedTds = r2(n(l.accruedTds));
+  return keep(
+    voucher(l.date, l.refType ?? 'loan', l.id, [
+      { account: l.loanAccount, dr: r2(n(l.principal)), narration: 'EMI principal' },
+      {
+        account: ACC.INTEREST_PAYABLE,
+        dr: r2(accrued - accruedTds),
+        narration: accrued ? 'Interest credited earlier, now paid' : undefined,
+      },
+      { account: ACC.LOAN_INTEREST, dr: r2(n(l.interest) - accrued) },
+      { account: ACC.BANK_CHARGES, dr: r2(n(l.fees)) },
+      {
+        account: ACC.TDS_PAYABLE,
+        cr: r2(n(l.tds)),
+        narration: n(l.tds) ? 'TDS u/s 194A' : undefined,
+      },
+      {
+        account: l.bankAccount,
+        cr: r2(n(l.principal) + n(l.interest) + n(l.fees) - n(l.tds) - accruedTds),
+      },
+    ]),
+  );
+};
+
+/**
+ * Interest credited to a lender's account but not paid yet (an EMI fallen due, or the year-end accrual): §194A makes TDS
+ * due at credit or payment, whichever is first. Dr Loan Interest (the gross) / Cr Interest Payable (what the lender will
+ * get) / Cr TDS Payable (kept now). The payment that later pays it clears Interest Payable (postLoanPayment `accrued`).
+ */
+export const postLoanInterestCredit = (c: {
+  id: string;
+  date: string;
+  amount: Numeric;
+  tds?: Numeric;
+  narration?: string;
 }): Posting[] =>
   keep(
-    voucher(l.date, 'loan', l.id, [
-      { account: l.loanAccount, dr: r2(n(l.principal)), narration: 'EMI principal' },
-      { account: ACC.LOAN_INTEREST, dr: r2(n(l.interest)) },
-      { account: ACC.BANK_CHARGES, dr: r2(n(l.fees)) },
-      { account: l.bankAccount, cr: r2(n(l.principal) + n(l.interest) + n(l.fees)) },
+    voucher(c.date, 'loan_interest', c.id, [
+      {
+        account: ACC.LOAN_INTEREST,
+        dr: r2(n(c.amount)),
+        narration: c.narration ?? 'Interest credited',
+      },
+      { account: ACC.INTEREST_PAYABLE, cr: r2(n(c.amount) - n(c.tds)) },
+      {
+        account: ACC.TDS_PAYABLE,
+        cr: r2(n(c.tds)),
+        narration: n(c.tds) ? 'TDS u/s 194A' : undefined,
+      },
     ]),
   );
 
@@ -657,7 +739,11 @@ export function postChequeEvent(c: {
   return v([...bounce, ...charges]);
 }
 
-/** Adjust bank/cash: an increase is Dr the account / Cr Opening Balance Equity, a reduction the reverse. */
+/**
+ * Adjust bank/cash: an increase is Dr the account / Cr Opening Balance Equity, a reduction the reverse. `counter` names
+ * another account for the other side (Owner's Capital for a deposit, Drawings or Bank Charges for a withdrawal, Other
+ * Income or Cash Over / Short for an adjustment counted as income or loss).
+ */
 export const postAdjustment = (x: {
   id: string;
   date: string;
@@ -665,6 +751,7 @@ export const postAdjustment = (x: {
   amount: Numeric;
   direction: 'increase' | 'reduce';
   narration?: string;
+  counter?: string;
 }): Posting[] =>
   keep(
     voucher(x.date, 'adjustment', x.id, [
@@ -673,7 +760,10 @@ export const postAdjustment = (x: {
         [x.direction === 'increase' ? 'dr' : 'cr']: r2(n(x.amount)),
         narration: x.narration,
       },
-      { account: ACC.OPENING_EQUITY, [x.direction === 'increase' ? 'cr' : 'dr']: r2(n(x.amount)) },
+      {
+        account: x.counter ?? ACC.OPENING_EQUITY,
+        [x.direction === 'increase' ? 'cr' : 'dr']: r2(n(x.amount)),
+      },
     ]),
   );
 

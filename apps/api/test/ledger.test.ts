@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { DEFAULT_CHART } from '@ledgora/tax-engine';
 import { line, makeHarness, type Tenant } from './helpers.ts';
 import { repost } from '../src/modules/ledgerRules.ts';
+import { clean, report } from '../src/backfillLedger.ts';
 
 // Vyapar parity Phase 4 (ledger foundation) and P10-S4 / P10-S5, API layer
 // (docs/VYAPAR_IMPLEMENTATION_PHASES.md, P4-S1…S7 acceptance and the Phase 4 acceptance list).
@@ -523,6 +524,30 @@ describe('P4-S4 backfill', () => {
     // From here the documents post by themselves.
     await sale(b, c1);
     expect(await count(b)).toBeGreaterThan(entries);
+  });
+
+  it('the CLI stops on differences and prints the diff table (it has no --force)', () => {
+    const base = {
+      dryRun: false,
+      documents: 3,
+      vouchers: 4,
+      problems: [],
+      diffs: [],
+      trialBalance: { debit: 100, credit: 100, balanced: true },
+      enabled: true,
+    };
+    expect(clean(base)).toBe(true);
+    expect(report(base)).toContain('every party matches');
+    const bad = {
+      ...base,
+      enabled: false,
+      diffs: [{ partyId: 'p-1', name: 'Asha Traders (receivable)', ledger: 236, documents: 200 }],
+    };
+    expect(clean(bad)).toBe(false);
+    const text = report(bad);
+    expect(text).toContain('Party balances that differ');
+    expect(text).toMatch(/Asha Traders \(receivable\) │ p-1 *│ *236\.00 │ *200\.00 │ *36\.00/);
+    expect(clean({ ...base, trialBalance: { debit: 1, credit: 2, balanced: false } })).toBe(false);
   });
 });
 

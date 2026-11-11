@@ -1,11 +1,18 @@
 import nodemailer from 'nodemailer';
 import type { AppEnv } from '../env.ts';
 
+export interface Attachment {
+  filename: string;
+  /** The file's text (a CSV report); sent as is by SMTP and base64 through Resend. */
+  content: string;
+  contentType?: string;
+}
 export interface Message {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: Attachment[];
 }
 export interface Sms {
   to: string;
@@ -32,7 +39,17 @@ export const isRealEmail = (email: string) => !email.endsWith('.invalid');
  */
 export async function sendMail(env: AppEnv, msg: Message) {
   if (!isRealEmail(msg.to)) return;
-  keep({ kind: 'mail', at: new Date().toISOString(), ...msg }, env);
+  // The dev outbox keeps the attachment's name and size, not its bytes.
+  const shown = msg.attachments?.length
+    ? {
+        ...msg,
+        attachments: msg.attachments.map((a) => ({
+          filename: a.filename,
+          content: `(${a.content.length} characters)`,
+        })),
+      }
+    : msg;
+  keep({ kind: 'mail', at: new Date().toISOString(), ...shown }, env);
   try {
     if (env.RESEND_API_KEY) {
       const res = await fetch('https://api.resend.com/emails', {
@@ -47,6 +64,14 @@ export async function sendMail(env: AppEnv, msg: Message) {
           subject: msg.subject,
           text: msg.text,
           html: msg.html,
+          ...(msg.attachments?.length
+            ? {
+                attachments: msg.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: Buffer.from(a.content, 'utf8').toString('base64'),
+                })),
+              }
+            : {}),
         }),
       });
       if (!res.ok) console.error('[mail] Resend refused the message', res.status, await res.text());

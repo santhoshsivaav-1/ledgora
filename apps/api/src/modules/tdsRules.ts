@@ -1,11 +1,12 @@
 // Vyapar parity P10-S5: the TDS ledger. One tds_entries row per TDS we deducted, kept in step with its source (a Payment
-// Out, or a purchase with §194Q TDS) in the same transaction. A row stays "accrued" until a challan is entered; a
+// Out, a purchase with §194Q TDS, or a loan payment with §194A TDS on its interest) in the same transaction. A row stays "accrued" until a challan is entered; a
 // deposited row is never changed or removed by a later edit of its source.
 import { and, eq } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
 import { tdsDueDate, tdsInterest } from '@ledgora/tax-engine';
 
-const { tdsEntries, payments, purchases, parties } = schema;
+const { tdsEntries, payments, purchases, parties, loans, loanPayments, loanInterestCredits } =
+  schema;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** PAN is characters 3–12 of a GSTIN; '' when the party has none on file. */
@@ -24,7 +25,12 @@ async function partyInfo(tx: Tx, partyId: string | null, fallbackName: string) {
 }
 
 /** Rebuilds the TDS row of one source document. With nothing to record, or after the source is gone, removes it. */
-export async function syncTds(tx: Tx, orgId: string, kind: 'payment' | 'purchase', id: string) {
+export async function syncTds(
+  tx: Tx,
+  orgId: string,
+  kind: 'payment' | 'purchase' | 'loan_payment' | 'loan_interest',
+  id: string,
+) {
   const existing = await tx
     .select()
     .from(tdsEntries)
@@ -58,6 +64,30 @@ export async function syncTds(tx: Tx, orgId: string, kind: 'payment' | 'purchase
       date: p.paymentDate,
       refType: 'payment',
       refId: p.id,
+    });
+    return;
+  }
+  if (kind === 'loan_payment' || kind === 'loan_interest') {
+    const [lp] =
+      kind === 'loan_payment'
+        ? await tx.select().from(loanPayments).where(eq(loanPayments.id, id))
+        : await tx.select().from(loanInterestCredits).where(eq(loanInterestCredits.id, id));
+    if (!lp || lp.deletedAt || !(lp.tdsAmount > 0)) return;
+    const [l] = await tx.select().from(loans).where(eq(loans.id, lp.loanId));
+    const who = await partyInfo(tx, l.lenderPartyId, l.lender || l.name);
+    await tx.insert(tdsEntries).values({
+      orgId,
+      businessId: lp.businessId,
+      partyId: l.lenderPartyId,
+      partyName: who.name,
+      pan: l.lenderPan || who.pan,
+      section: '194A',
+      baseAmount: lp.tdsBase,
+      rate: lp.tdsRate,
+      tdsAmount: lp.tdsAmount,
+      date: lp.date,
+      refType: kind,
+      refId: lp.id,
     });
     return;
   }

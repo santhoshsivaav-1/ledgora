@@ -85,6 +85,48 @@
       "when": 1794304389128,
       "tag": "0011_ledger_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794379917681,
+      "tag": "0012_cash_bank",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794381383470,
+      "tag": "0013_cash_bank_india",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794382212397,
+      "tag": "0014_cash_bank_tds_ifsc",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794382816594,
+      "tag": "0015_loan_interest_credit",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794385714283,
+      "tag": "0016_reports_prefs_schedules_eway",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794387125598,
+      "tag": "0017_pos_loyalty_barcode",
+      "breakpoints": true
     }
   ]
 }

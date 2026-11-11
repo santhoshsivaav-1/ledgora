@@ -28,12 +28,17 @@ export const PERMISSIONS = [
   'file:read',
   'file:write',
   'report:read',
+  // Vyapar parity Phase 6: reports that show profit (P&L, Balance Sheet); the "hide profit reports" role switch.
+  'report:profit',
   // Vyapar parity Phase 4: the books. Reading them, posting a manual journal, switching the ledger on / closing a year
   // / locking a period, and running Verify My Data.
   'ledger:read',
   'journal:write',
   'accounting:manage',
   'verify:run',
+  // Vyapar parity Phase 5: Cash & Bank (bank accounts, cash, transfers, cheques, loans, reconciliation).
+  'cashbank:read',
+  'cashbank:write',
   'business:read',
   'business:write',
   'settings:write',
@@ -89,6 +94,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'team:read',
     'journal:write',
     'verify:run',
+    'cashbank:write',
+    'report:profit',
   ],
   salesman: [
     'invoice:read',
@@ -184,9 +191,18 @@ export function permissionFor(method: string, path: string): Permission | null {
   if (/^\/v1\/journals/.test(path)) return read ? 'ledger:read' : 'journal:write';
   if (/^\/v1\/accounting/.test(path)) return read ? 'ledger:read' : 'accounting:manage';
   if (/^\/v1\/verify/.test(path)) return 'verify:run';
+  // Phase 6: exporting a report is exporting data; running, starring and saving views is reading.
+  if (/^\/v1\/reports\/[a-z0-9-]+\/export/.test(path)) return 'data:export';
+  if (/^\/v1\/reports(\/|$)/.test(path)) return 'report:read';
+  // Phase 5: switching Cash & Bank on is an accounting decision; using it is its own permission.
+  if (/^\/v1\/cashbank\/settings/.test(path)) return read ? 'cashbank:read' : 'accounting:manage';
+  if (/^\/v1\/(cashbank|bank-accounts|cash|transfers|cheques|loans)(\/|$)/.test(path))
+    return read ? 'cashbank:read' : 'cashbank:write';
+  // Phase 12 (POS): its settings are a setting; the counter's lookups and bills are invoices.
+  if (/^\/v1\/pos\/settings/.test(path)) return read ? 'invoice:read' : 'settings:write';
   if (/^\/v1\/tds/.test(path)) return read ? 'payment:read' : 'payment:write';
   const table: [RegExp, string][] = [
-    [/^\/v1\/invoices/, 'invoice'],
+    [/^\/v1\/(invoices|pos)/, 'invoice'],
     [/^\/v1\/(parties|party-groups)/, 'party'],
     [/^\/v1\/(items|units)/, 'item'],
     [/^\/v1\/payments/, 'payment'],
@@ -196,6 +212,7 @@ export function permissionFor(method: string, path: string): Permission | null {
     [/^\/v1\/recurring/, 'recurring'],
     [/^\/v1\/templates/, 'template'],
     [/^\/v1\/files/, 'file'],
+    [/^\/v1\/eway-bills/, 'invoice'],
   ];
   for (const [re, r] of table) if (re.test(path)) return resource(r);
   return null;

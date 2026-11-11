@@ -41,6 +41,10 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'receipts', path: '/receipts', title: 'Receipts', vyaparPath: '/sales/payment-in' },
   { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },
   { id: 'reports', path: '/reports', title: 'Reports' },
+  // Vyapar parity Phase 5: Cash & Bank is one screen with tabs (/cash-bank/:tab), like the books.
+  { id: 'cashbank', path: '/cash-bank', title: 'Cash & Bank' },
+  // Vyapar parity Phase 12: the Point of Sale counter.
+  { id: 'pos', path: '/pos', title: 'POS' },
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },
   { id: 'settings', path: '/settings', title: 'Settings' },
@@ -66,6 +70,8 @@ export function viewFromPath(pathname: string) {
   const clean = pathname.replace(/\/+$/, '') || '/';
   if (clean.startsWith('/gst-returns')) return 'filing'; // GST returns has one address per page
   if (clean.startsWith('/accounting')) return 'accounting'; // the books have one address per tab
+  if (clean === '/cash-bank' || clean.startsWith('/cash-bank/')) return 'cashbank'; // one address per tab
+  if (clean === '/reports' || clean.startsWith('/reports/')) return 'reports'; // the hub and every /reports/:id
   for (const r of VIEW_ROUTES) {
     if (matches(r.path, clean) || (r.vyaparPath && matches(r.vyaparPath, clean))) return r.id;
   }

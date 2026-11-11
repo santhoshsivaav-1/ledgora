@@ -1,12 +1,23 @@
 // Vyapar parity P10-S4: where each purchase bill stands on the 180-day rule, from the typed tables.
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
-import { itcAging, itcSplit, type ItcBill, type ItcPayment } from '@ledgora/tax-engine';
+import {
+  chequePaidOn,
+  itcAging,
+  itcSplit,
+  type ChequeStatus,
+  type ItcBill,
+  type ItcPayment,
+} from '@ledgora/tax-engine';
 
-const { purchases, purchaseLines, paymentAllocations, payments } = schema;
+const { purchases, purchaseLines, paymentAllocations, payments, cheques } = schema;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Bills with their payable amount, the credit claimed on them and the payments applied (a cheque counts on its date). */
+/**
+ * Bills with their payable amount, the credit claimed on them and the payments applied. A payment counts on its own
+ * date, except a cheque in the register (Phase 5): it counts on the day it cleared, not at all while it is open or
+ * deposited, and never once it bounced or was cancelled (`chequePaidOn`).
+ */
 export async function itcInputs(tx: Tx, businessId: string) {
   const bills = await tx
     .select()
@@ -29,10 +40,19 @@ export async function itcInputs(tx: Tx, businessId: string) {
       billId: paymentAllocations.purchaseId,
       amount: paymentAllocations.amount,
       date: payments.paymentDate,
+      chequeStatus: cheques.status,
+      chequeStatusDate: cheques.statusDate,
     })
     .from(paymentAllocations)
     .innerJoin(payments, eq(payments.id, paymentAllocations.paymentId))
-    .where(and(inArray(paymentAllocations.purchaseId, ids), isNull(paymentAllocations.deletedAt)));
+    .leftJoin(cheques, and(eq(cheques.paymentId, payments.id), isNull(cheques.deletedAt)))
+    .where(
+      and(
+        inArray(paymentAllocations.purchaseId, ids),
+        isNull(paymentAllocations.deletedAt),
+        isNull(payments.deletedAt),
+      ),
+    );
   const items: ItcBill[] = bills.map((b) => {
     const eligible = itcSplit(
       lines.filter((l) => l.purchaseId === b.id),
@@ -49,9 +69,15 @@ export async function itcInputs(tx: Tx, businessId: string) {
   });
   return {
     bills: items,
-    payments: allocs
-      .filter((a) => a.billId)
-      .map((a) => ({ billId: a.billId as string, amount: a.amount, date: a.date })),
+    payments: allocs.flatMap((a) => {
+      const date = chequePaidOn(
+        a.date,
+        a.chequeStatus
+          ? { status: a.chequeStatus as ChequeStatus, statusDate: a.chequeStatusDate }
+          : null,
+      );
+      return a.billId && date ? [{ billId: a.billId, amount: a.amount, date }] : [];
+    }),
   };
 }
 

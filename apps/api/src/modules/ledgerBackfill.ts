@@ -12,7 +12,8 @@ import {
 } from '@ledgora/tax-engine';
 import { postingsFor, repost, seedChart, setLedgerFlag, type LedgerKind } from './ledgerRules.ts';
 
-const { invoices, purchases, payments, expenses, parties, ledgerEntries, accounts } = schema;
+const { invoices, purchases, payments, expenses, parties, ledgerEntries, accounts, cheques } =
+  schema;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const SALE_TYPES = ['tax-invoice', 'bill-of-supply', 'composition'];
 
@@ -106,6 +107,21 @@ export async function documentBalances(tx: Tx, businessId: string) {
     else if (p.dir === 'out') add(payable, p.party, -settled);
     else add(recv, p.party, -settled);
   }
+  // Phase 5: a received cheque that bounced with its charges put on the party: they owe the charges too. (The bounced
+  // cheque's payment is voided, so it is not in `pay` above.)
+  for (const c of await tx
+    .select({ party: cheques.partyId, charges: cheques.bounceCharges })
+    .from(cheques)
+    .where(
+      and(
+        eq(cheques.businessId, businessId),
+        isNull(cheques.deletedAt),
+        eq(cheques.direction, 'received'),
+        eq(cheques.status, 'bounced'),
+        eq(cheques.chargeTo, 'party'),
+      ),
+    ))
+    if (c.charges > 0) add(recv, c.party, c.charges);
   return { recv, payable };
 }
 

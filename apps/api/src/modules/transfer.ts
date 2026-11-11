@@ -527,6 +527,14 @@ const EXPORT_TABLES = [
   'ledgerEntries',
   'financialYears',
   'tdsEntries',
+  'transfers',
+  'cashEntries',
+  'cheques',
+  'loans',
+  'loanSchedule',
+  'loanPayments',
+  'loanInterestCredits',
+  'bankRecon',
 ] as const;
 
 async function exportAll(tx: Tx, orgId: string, deps: Deps) {

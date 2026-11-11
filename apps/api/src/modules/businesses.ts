@@ -16,7 +16,8 @@ import { audit } from '../audit.ts';
 import { AppError, notFound } from '../errors.ts';
 import { stamps, type Registrar } from '../http.ts';
 
-const { businesses, businessSettings, paymentAccounts } = schema;
+import { assertBankRemovable, bankChartOf, cashbankEnabled } from './cashbankRules.ts';
+const { businesses, businessSettings, paymentAccounts, accounts } = schema;
 
 const toBusiness = (r: typeof businesses.$inferSelect): Business => ({
   id: r.id,
@@ -252,6 +253,8 @@ export function businessesModule({ route }: Registrar) {
         .insert(paymentAccounts)
         .values({ ...body, orgId, businessId: params.id })
         .returning();
+      // Phase 5: with Cash & Bank on, a bank added here gets its ledger account straight away.
+      if (await cashbankEnabled(tx, params.id)) await bankChartOf(tx, orgId, params.id, row.id);
       await audit(tx, orgId, 'payment_account.create', 'payment_account', row.id, {
         after: { label: row.label },
       });
@@ -267,6 +270,9 @@ export function businessesModule({ route }: Registrar) {
     params: idParam,
     response: okBody,
     handler: async ({ tx, orgId, params }) => {
+      // Phase 5: a bank with entries in the books is switched off, never deleted (P5-S1 acceptance 3).
+      const a = await assertBankRemovable(tx, params.id);
+      if (a) await tx.update(accounts).set({ deletedAt: new Date() }).where(eq(accounts.id, a.id));
       const [row] = await tx
         .update(paymentAccounts)
         .set({ deletedAt: new Date() })

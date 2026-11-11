@@ -66,6 +66,11 @@ function fromPostgres(err: unknown): AppError | null {
     if (pg.constraint_name === 'party_groups_org_name') {
       return new AppError('conflict', 'Group already exists', { constraint: pg.constraint_name });
     }
+    if (pg.constraint_name === 'items_live_barcode') {
+      return new AppError('conflict', 'Another item already has this barcode', {
+        constraint: pg.constraint_name,
+      });
+    }
     return new AppError('conflict', 'This record already exists', {
       constraint: pg.constraint_name,
     });

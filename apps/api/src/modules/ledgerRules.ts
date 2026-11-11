@@ -106,10 +106,10 @@ export async function nextCode(tx: Tx, businessId: string, from: number, to: num
 }
 
 /**
- * A bank account's chart account (1101…), created the first time a payment names it. The payment account's label
- * names it. Phase 5 (Cash & Bank) will own these; until then they appear on demand.
+ * A bank account's chart account (1101…), created the first time a payment names it or when Cash & Bank adds the bank
+ * (Phase 5, which also posts its opening balance). The payment account's label names it.
  */
-async function ensureBankAccount(tx: Tx, orgId: string, businessId: string, bankId: string) {
+export async function ensureBankAccount(tx: Tx, orgId: string, businessId: string, bankId: string) {
   const [found] = await tx
     .select()
     .from(accounts)
@@ -391,6 +391,8 @@ export async function purchasePostings(
 }
 
 export async function paymentPostings(tx: Tx, orgId: string, row: PaymentRow): Promise<Posting[]> {
+  // A voided payment (its cheque bounced or was cancelled, Phase 5) posts nothing: reposting it reverses its entries.
+  if (row.deletedAt) return [];
   const ctx = await buildCtx(tx, orgId, row.businessId, { bankIds: [row.accountId] });
   return postPayment(row, ctx);
 }

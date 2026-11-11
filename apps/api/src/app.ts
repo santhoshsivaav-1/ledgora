@@ -26,6 +26,12 @@ import { purchasesModule } from './modules/purchases.ts';
 import { purchaseOrdersModule } from './modules/purchaseOrders.ts';
 import { ledgerModule } from './modules/ledger.ts';
 import { verifyModule } from './modules/verify.ts';
+import { cashbankModule } from './modules/cashbank.ts';
+import { chequesModule } from './modules/cheques.ts';
+import { loansModule } from './modules/loans.ts';
+import { ifscModule } from './modules/ifsc.ts';
+import { posModule } from './modules/pos.ts';
+import { reportsModule } from './modules/reports.ts';
 import { recurringModule } from './modules/recurring.ts';
 import { templatesModule } from './modules/templates.ts';
 import { trashModule } from './modules/trash.ts';
@@ -87,6 +93,12 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     purchaseOrdersModule,
     ledgerModule,
     verifyModule,
+    cashbankModule,
+    chequesModule,
+    loansModule,
+    ifscModule,
+    reportsModule,
+    posModule,
     recurringModule,
     templatesModule,
     filesModule,
