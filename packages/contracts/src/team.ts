@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uuid } from './common.ts';
-import { role } from './permissions.ts';
+import { assignableRole, role } from './permissions.ts';
 
 export const me = z.object({
   user: z.object({
@@ -13,6 +13,10 @@ export const me = z.object({
   organization: z.object({ id: uuid, name: z.string() }),
   role,
   permissions: z.array(z.string()),
+  /** Account Access rules of the role beyond permissions. */
+  restrictions: z.object({ ownOnly: z.boolean(), hideCost: z.boolean() }).optional(),
+  /** The role's name on screen (custom roles have their own). */
+  roleLabel: z.string().optional(),
   businessIds: z.array(uuid).nullable(), // null = every business
   organizations: z.array(z.object({ id: uuid, name: z.string(), role })),
   subscription: z
@@ -64,7 +68,7 @@ export const invitationInput = z
       .string()
       .regex(/^\+\d{8,15}$/, 'Use international format, e.g. +919876543210')
       .optional(),
-    role: role.exclude(['owner']),
+    role: assignableRole,
     businessIds: z.array(uuid).default([]),
     /** P7-S6 (Share with CA): how many days the link works (default 7, up to 30) and the dates the member may see. */
     expiresInDays: z.number().int().min(1).max(30).optional(),

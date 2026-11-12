@@ -120,8 +120,14 @@ export async function salesmanScope(tx: Tx, auth: OrgContext): Promise<string[] 
 }
 
 /** 404 rather than 403, so a salesman can not probe which invoice ids exist. */
-export function assertInScope(scope: string[] | null, row: Pick<InvoiceRow, 'salesmanId'>) {
+export function assertInScope(
+  scope: string[] | null,
+  row: Pick<InvoiceRow, 'salesmanId'> & { createdBy?: string | null },
+  auth?: Pick<OrgContext, 'ownOnly' | 'user'>,
+) {
   if (scope && !(row.salesmanId && scope.includes(row.salesmanId))) throw notFound('Invoice');
+  // Account Access "own transactions only": an invoice someone else made does not exist for this member.
+  if (auth?.ownOnly && row.createdBy !== auth.user.id) throw notFound('Invoice');
 }
 
 /** The salesman an invoice may name: a live staff row, and for a Salesman member only themselves (filled in if left out). */

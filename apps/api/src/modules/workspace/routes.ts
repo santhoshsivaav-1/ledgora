@@ -39,6 +39,26 @@ const ok = z.object({ success: z.literal(true) }).passthrough();
 const flag = z.enum(['1', 'true', '0', 'false']).optional();
 const isOn = (v: string | undefined) => v === '1' || v === 'true';
 
+// Account Access rules on the screens' documents. "Own transactions only": these collections are transactions, and a
+// member with the rule sees and changes only the ones they made (stamped `_createdBy` on first save; older documents
+// have no stamp and count as someone else's). "Hide purchase prices": products come back without a cost, and a save
+// keeps the cost already stored.
+const TRANSACTIONS = new Set(['bills', 'receipts', 'purchases', 'expenses']);
+const COST_FIELDS = ['purchasePrice'];
+const mine = (doc: Doc, userId: string) => doc._createdBy === userId;
+type Rules = { ownOnly?: boolean; hideCost?: boolean; user: { id: string } };
+function visible(collection: string, docs: Doc[], auth: Rules) {
+  let out = docs;
+  if (auth.ownOnly && TRANSACTIONS.has(collection)) out = out.filter((d) => mine(d, auth.user.id));
+  if (auth.hideCost && collection === 'products')
+    out = out.map((d) => {
+      const copy = { ...d };
+      for (const f of COST_FIELDS) delete copy[f];
+      return copy;
+    });
+  return out;
+}
+
 /**
  * The document API the billing screens use (change 3.23). It keeps the shapes of the old single-user server's /api
  * routes, so the screens did not have to change, but every call now runs inside the signed-in organization:
@@ -53,13 +73,13 @@ export function workspaceModule({ route }: Registrar) {
     summary: 'All documents of one collection, in the order the screen lists them',
     params: z.object({ collection }),
     response: z.array(anyDoc),
-    handler: async ({ tx, orgId, params }) => {
+    handler: async ({ tx, orgId, params, auth }) => {
       let docs = await listDocs(tx, params.collection);
       if (params.collection === 'templates' && docs.length === 0) {
         await putDoc(tx, orgId, 'templates', DEFAULT_TEMPLATE.id, DEFAULT_TEMPLATE);
         docs = [DEFAULT_TEMPLATE];
       }
-      return docs.sort(SORT[params.collection]);
+      return visible(params.collection, docs, auth).sort(SORT[params.collection]);
     },
   });
 
@@ -72,7 +92,7 @@ export function workspaceModule({ route }: Registrar) {
     query: z.object({ overwrite: flag }),
     body: anyDoc,
     response: ok.extend({ id: z.string() }),
-    handler: async ({ tx, orgId, params, query, body }) => {
+    handler: async ({ tx, orgId, params, query, body, auth }) => {
       const doc: Doc = { ...body };
       if (!doc.id) {
         if (params.collection === 'bills')
@@ -89,6 +109,19 @@ export function workspaceModule({ route }: Registrar) {
         throw new AppError('duplicate_number', 'A bill with this invoice number already exists', {
           invoiceNumber: key,
         });
+      }
+      const prior = (await getDoc(tx, params.collection, key))?.data as Doc | undefined;
+      if (TRANSACTIONS.has(params.collection)) {
+        if (prior && auth.ownOnly && !mine(prior, auth.user.id))
+          throw new AppError('forbidden', 'You can only change the documents you made');
+        // Who made it is kept from the first save; the client can not set or change it.
+        doc._createdBy = prior ? (prior._createdBy ?? null) : auth.user.id;
+      }
+      if (params.collection === 'products' && auth.hideCost) {
+        for (const f of COST_FIELDS) {
+          if (prior && f in prior) doc[f] = prior[f];
+          else delete doc[f];
+        }
       }
       const created = await putDoc(tx, orgId, params.collection, key, doc);
       await audit(
@@ -112,9 +145,15 @@ export function workspaceModule({ route }: Registrar) {
     params: z.object({ collection, id: z.string() }),
     query: z.object({ force: flag, permanent: flag }),
     response: ok.passthrough(),
-    handler: async ({ tx, orgId, params, query }) => {
+    handler: async ({ tx, orgId, params, query, auth }) => {
       const doc = await getDoc(tx, params.collection, params.id);
       if (!doc) return { success: true as const };
+      if (
+        auth.ownOnly &&
+        TRANSACTIONS.has(params.collection) &&
+        !mine(doc.data as Doc, auth.user.id)
+      )
+        throw new AppError('forbidden', 'You can only delete the documents you made');
       if (params.collection === 'bills') {
         if (!isOn(query.force)) {
           // A bill that was the credit source of another live bill can not vanish: that bill would stay "paid" by nothing.

@@ -33,6 +33,8 @@ export function useEntitlements() {
       return !ADD_ONS.has(feature) || ADD_ON_STATUSES.has(me?.subscription?.status ?? 'trialing');
     },
     entitlements: (me as { entitlements?: unknown } | null)?.entitlements ?? null,
+    /** Account Access rules of this member's role: only their own documents; never shown purchase prices. */
+    restrictions: (me as { restrictions?: { ownOnly: boolean; hideCost: boolean } } | null)?.restrictions ?? { ownOnly: false, hideCost: false },
     /** null = every business of the organization. */
     businessIds: (me?.businessIds as string[] | null | undefined) ?? null,
   };

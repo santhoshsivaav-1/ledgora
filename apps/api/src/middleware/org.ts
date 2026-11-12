@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
 import { schema, withTenant, type Database } from '@ledgora/db';
-import { ROLES, type Role } from '@ledgora/contracts';
+import { isCustomRole, ROLES, type Role } from '@ledgora/contracts';
 import { AppError } from '../errors.ts';
 import type { AuthContext, OrgContext } from './context.ts';
 
@@ -39,7 +39,8 @@ export async function requireOrg(c: Context, db: Database, auth: AuthContext): P
     .from(schema.member)
     .where(and(eq(schema.member.userId, auth.user.id), eq(schema.member.organizationId, orgId)));
   // Same answer for "no such organization" and "not yours": do not confirm that an id exists.
-  if (!m || !(ROLES as readonly string[]).includes(m.role))
+  // A preset role, or one the organization made itself (Account Access); its permissions are checked next.
+  if (!m || !((ROLES as readonly string[]).includes(m.role) || isCustomRole(m.role)))
     throw new AppError('forbidden', 'You are not a member of this organization');
   const role = m.role as Role;
   let businessIds: string[] | null = null;

@@ -206,7 +206,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const clientSuggestionsRef = useRef(null);
   const [products, setProducts] = useState([]);
   const appSettings = useAppSettings();
-  const entRole = useEntitlements().role;
+  const { role: entRole, restrictions } = useEntitlements();
   const [productSearch, setProductSearch] = useState({ itemId: null, query: '' });
   const [invoiceOptions, setInvoiceOptions] = useState(() => {
     try {
@@ -3013,7 +3013,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const filledLines = items.filter((item) => (item.name || '').trim()).length;
   const isExisting = !!editingBill && !editingBill._isDuplicate;
   // The rail's breakdown: only the lines that have something in them, so a plain bill shows two rows, not ten.
-  const profitNow = appSettings['txn.showProfit'] && entRole === 'owner' ? estimatedProfit(items, products) : null;
+  const profitNow = appSettings['txn.showProfit'] && entRole === 'owner' && !restrictions.hideCost ? estimatedProfit(items, products) : null;
   const breakdown = [
     ['Subtotal', printedSubtotal(totals), true],
     ['Discount', -discountTotal, discountTotal > 0],

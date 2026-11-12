@@ -66,7 +66,22 @@ export const ROLES = [
   'viewer',
 ] as const;
 export type Role = (typeof ROLES)[number];
-export const role = z.enum(ROLES);
+/** A role an organization made on Account Access: 'custom_' and a short slug. */
+export const CUSTOM_ROLE_RE = /^custom_[a-z0-9_]{2,30}$/;
+export const isCustomRole = (r: string) => CUSTOM_ROLE_RE.test(r);
+const customRole = z.string().regex(CUSTOM_ROLE_RE, 'Not a role');
+export const role = z.union([z.enum(ROLES), customRole]);
+/** Any role but the owner (what an invitation or a role change may give). */
+export const assignableRole = z.union([z.enum(ROLES).exclude(['owner']), customRole]);
+/** The slug for a new custom role's name: "Counter staff" -> "custom_counter_staff". */
+export const customRoleKey = (label: string) =>
+  `custom_${
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 30) || 'role'
+  }`;
 
 export const ROLE_LABELS: Record<Role, string> = {
   owner: 'Owner',
@@ -382,4 +397,14 @@ export function normalizePermissions(list: readonly string[]): Permission[] {
 
 export const rolePermissionsBody = z.object({
   permissions: z.array(z.string()).max(PERMISSIONS.length),
+  /** Sees and changes only the documents they created. */
+  ownOnly: z.boolean().optional(),
+  /** Never sees purchase prices. */
+  hideCost: z.boolean().optional(),
+  label: z.string().trim().min(2).max(40).optional(),
+});
+export const createRoleBody = z.object({
+  label: z.string().trim().min(2, 'Give the role a name').max(40),
+  /** A preset or custom role to start from. */
+  copyFrom: z.string().default('viewer'),
 });

@@ -526,6 +526,7 @@ export async function createInvoice(
       number,
       status: 'unpaid',
       salesmanId,
+      createdBy: extra.auth?.user.id ?? null,
       generatedFromId: extra.generatedFromId ?? null,
     })
     .returning();
@@ -601,6 +602,7 @@ export function invoicesModule({ route }: Registrar) {
         query.to ? lte(invoices.invoiceDate, query.to) : undefined,
         query.salesmanId ? eq(invoices.salesmanId, query.salesmanId) : undefined,
         scope ? inArray(invoices.salesmanId, scope) : undefined,
+        auth.ownOnly ? eq(invoices.createdBy, auth.user.id) : undefined,
       );
       const res = await listPage(tx, invoices, {
         ...query,
@@ -627,7 +629,7 @@ export function invoicesModule({ route }: Registrar) {
     response: invoice,
     handler: async ({ tx, params, auth }) => {
       const { row, lines } = await loadInvoice(tx, params.id);
-      assertInScope(await salesmanScope(tx, auth), row);
+      assertInScope(await salesmanScope(tx, auth), row, auth);
       return toInvoice(tx, row, lines);
     },
   });
@@ -658,7 +660,7 @@ export function invoicesModule({ route }: Registrar) {
     handler: async ({ tx, orgId, params, body: raw, auth }) => {
       const scope = await salesmanScope(tx, auth);
       const { row: before } = await loadInvoice(tx, params.id);
-      assertInScope(scope, before);
+      assertInScope(scope, before, auth);
       if (before.status === 'cancelled')
         throw new AppError('unprocessable', 'A cancelled invoice can not be edited');
       if (raw.businessId !== before.businessId)
@@ -761,7 +763,7 @@ export function invoicesModule({ route }: Registrar) {
     response: invoice,
     handler: async ({ tx, orgId, params, body, auth }) => {
       const { row: before, lines } = await loadInvoice(tx, params.id);
-      assertInScope(await salesmanScope(tx, auth), before);
+      assertInScope(await salesmanScope(tx, auth), before, auth);
       if (before.status === 'cancelled')
         throw new AppError('already_cancelled', 'This invoice is already cancelled');
       // Separate receipts need the user's go-ahead (their money becomes party credit); the invoice's own inline
@@ -831,7 +833,7 @@ export function invoicesModule({ route }: Registrar) {
     response: returnableResponse,
     handler: async ({ tx, params, auth }) => {
       const { row, lines } = await loadInvoice(tx, params.id);
-      assertInScope(await salesmanScope(tx, auth), row);
+      assertInScope(await salesmanScope(tx, auth), row, auth);
       const left = returnableQty(asLineInputs(lines), await priorCreditNotes(tx, row.id));
       const sold: Record<string, { name: string; qty: number }> = {};
       for (const l of lines) {
@@ -861,7 +863,7 @@ export function invoicesModule({ route }: Registrar) {
     response: orderProgress,
     handler: async ({ tx, params, auth }) => {
       const { row, lines } = await loadInvoice(tx, params.id);
-      assertInScope(await salesmanScope(tx, auth), row);
+      assertInScope(await salesmanScope(tx, auth), row, auth);
       if (row.invoiceType !== 'sales-order')
         throw new AppError('unprocessable', 'Only a sale order has progress');
       return progressOf(tx, row, lines);
@@ -879,7 +881,7 @@ export function invoicesModule({ route }: Registrar) {
     status: 201,
     handler: async ({ tx, orgId, params, body, auth }) => {
       const { row: order, lines } = await loadInvoice(tx, params.id);
-      assertInScope(await salesmanScope(tx, auth), order);
+      assertInScope(await salesmanScope(tx, auth), order, auth);
       if (order.invoiceType !== 'sales-order')
         throw new AppError('unprocessable', 'Only a sale order can be converted this way');
       if (order.status === 'cancelled')

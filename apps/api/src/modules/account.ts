@@ -14,7 +14,7 @@ import {
 import { AppError, notFound } from '../errors.ts';
 import { deviceLabel } from '../auth/device.ts';
 import { listPage, type Registrar } from '../http.ts';
-import { permissionsOfRole } from '../middleware/permission.ts';
+import { rulesOfRole } from '../middleware/permission.ts';
 
 const { member, organizations, session, memberBusinesses, subscriptions, auditLog } = schema;
 
@@ -59,7 +59,14 @@ export function accountModule({ route }: Registrar) {
         },
         organization: { id: current.id, name: current.name },
         role,
-        permissions: [...(await permissionsOfRole(deps.db, current.id, role))],
+        ...(await (async () => {
+          const rules = await rulesOfRole(deps.db, current.id, role);
+          return {
+            permissions: [...rules.permissions],
+            restrictions: { ownOnly: rules.ownOnly, hideCost: rules.hideCost },
+            ...(rules.label ? { roleLabel: rules.label } : {}),
+          };
+        })()),
         businessIds: role !== 'owner' && limits.length ? limits.map((l) => l.b) : null,
         organizations: rows.map((r) => ({ id: r.id, name: r.name, role: r.role as Role })),
         // SaaS plans: what the screens may offer (reads are never gated; writes to a missing feature answer 402).

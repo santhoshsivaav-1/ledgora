@@ -4,29 +4,56 @@ import { AppError } from '../errors.ts';
 import type { OrgContext } from './context.ts';
 
 // Third link: the member's role must allow what this route does. The role's permissions are the organization's own list
-// (Account Access matrix) when it has changed one, else the built-in preset. The lookup is cached for 30 seconds per
-// organization and dropped at once when a role is changed on this server, so a change applies on the next request.
+// (Account Access) when it has one, else the built-in preset; a custom role has only its own list. Two rules ride along
+// on the context for the handlers that apply them: ownOnly (only the documents the member made) and hideCost (no
+// purchase prices). Cached for 30 seconds per organization and dropped at once when a role changes on this server.
 
 const TTL = 30_000;
-const cache = new Map<string, { at: number; roles: Map<string, readonly Permission[]> }>();
+export interface RoleRules {
+  permissions: readonly Permission[];
+  ownOnly: boolean;
+  hideCost: boolean;
+  label: string | null;
+}
+const cache = new Map<string, { at: number; roles: Map<string, RoleRules> }>();
 export const forgetRoles = (orgId: string) => cache.delete(orgId);
 
 async function rolesOf(db: Database, orgId: string) {
   const hit = cache.get(orgId);
   if (hit && Date.now() - hit.at < TTL) return hit.roles;
   const rows = await withTenant(db, orgId, (tx) => tx.select().from(schema.rolePermissions));
-  const roles = new Map(rows.map((r) => [r.role, r.permissions as Permission[]]));
+  const roles = new Map(
+    rows.map((r) => [
+      r.role,
+      {
+        permissions: r.permissions as Permission[],
+        ownOnly: r.ownOnly,
+        hideCost: r.hideCost,
+        label: r.label ?? null,
+      },
+    ]),
+  );
   cache.set(orgId, { at: Date.now(), roles });
   return roles;
 }
 
-/** What a role may do in an organization right now. */
-export async function permissionsOfRole(db: Database, orgId: string, role: string) {
-  if (role === 'owner') return ROLE_PERMISSIONS.owner;
-  return (await rolesOf(db, orgId)).get(role) ?? ROLE_PERMISSIONS[role as Role] ?? [];
+/** What a role may do in an organization right now, and its two rules. */
+export async function rulesOfRole(db: Database, orgId: string, role: string): Promise<RoleRules> {
+  if (role === 'owner')
+    return { permissions: ROLE_PERMISSIONS.owner, ownOnly: false, hideCost: false, label: null };
+  const own = (await rolesOf(db, orgId)).get(role);
+  if (own) return own;
+  return {
+    permissions: ROLE_PERMISSIONS[role as Role] ?? [],
+    ownOnly: false,
+    hideCost: false,
+    label: null,
+  };
 }
+export const permissionsOfRole = async (db: Database, orgId: string, role: string) =>
+  (await rulesOfRole(db, orgId, role)).permissions;
 
-/** A route may name its permission or let the path decide. */
+/** A route may name its permission or let the path decide. Also puts the role's rules on the context. */
 export async function requirePermission(
   db: Database,
   ctx: OrgContext,
@@ -34,8 +61,10 @@ export async function requirePermission(
   path: string,
   explicit?: Permission | null,
 ) {
+  const rules = await rulesOfRole(db, ctx.orgId, ctx.role);
+  ctx.ownOnly = rules.ownOnly;
+  ctx.hideCost = rules.hideCost;
   const needed = explicit === undefined ? permissionFor(method, path) : explicit;
-  if (!needed) return;
-  if (!(await permissionsOfRole(db, ctx.orgId, ctx.role)).includes(needed))
-    throw new AppError('forbidden', `Your role (${ctx.role}) can not do this`, { needs: needed });
+  if (needed && !rules.permissions.includes(needed))
+    throw new AppError('forbidden', `Your role can not do this`, { needs: needed });
 }

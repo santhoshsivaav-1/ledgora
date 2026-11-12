@@ -11,7 +11,7 @@ import { ROLE_LABELS } from '../../../lib/permissions';
 import { useEntitlements } from '../../billing/useEntitlements';
 import { LoadingState, ErrorState, EmptyState } from '../../../components/ui/States';
 
-const ROLES = Object.keys(ROLE_LABELS);
+const PRESET_ROLES = Object.keys(ROLE_LABELS);
 
 // Members, roles, business limits and invitations (changes 2.9, 2.10 and 3.19).
 export default function TeamPage() {
@@ -21,6 +21,10 @@ export default function TeamPage() {
   const members = useQuery({ queryKey: keys.members, queryFn: () => apiClient.get('/v1/members') });
   const invitations = useQuery({ queryKey: keys.invitations, queryFn: () => apiClient.get('/v1/invitations'), enabled: manage });
   const businesses = useQuery({ queryKey: ['businesses'], queryFn: () => apiClient.get('/v1/businesses') });
+  // Preset roles and the ones this business made on Account Access, with their names.
+  const rolesQ = useQuery({ queryKey: ['roles'], queryFn: () => apiClient.get('/v1/roles') });
+  const ROLES = rolesQ.data?.roles.map((r) => r.role) ?? PRESET_ROLES;
+  const labelOf = (r) => rolesQ.data?.roles.find((x) => x.role === r)?.label ?? ROLE_LABELS[r] ?? r;
   const bizList = businesses.data?.data ?? [];
 
   const refresh = () => { qc.invalidateQueries({ queryKey: keys.members }); qc.invalidateQueries({ queryKey: keys.invitations }); };
@@ -67,7 +71,7 @@ export default function TeamPage() {
                     <td>{m.email || m.phoneNumber || '-'}</td>
                     <td>
                       <select className="form-input" value={m.role} disabled={!manage} aria-label={`Role of ${m.name}`} onChange={(e) => patch.mutate({ id: m.id, body: { role: e.target.value } })}>
-                        {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                        {ROLES.map((r) => <option key={r} value={r}>{labelOf(r)}</option>)}
                       </select>
                     </td>
                     <td>
@@ -108,7 +112,7 @@ export default function TeamPage() {
               <input id="inv-to" className="form-input" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} placeholder="name@example.com or +919876543210" required /></div>
             <div className="form-group"><label className="form-label" htmlFor="inv-role">Role</label>
               <select id="inv-role" className="form-input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                {ROLES.filter((r) => r !== 'owner').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {ROLES.filter((r) => r !== 'owner').map((r) => <option key={r} value={r}>{labelOf(r)}</option>)}
               </select></div>
           </div>
           {form.role === 'ca' && (
@@ -135,7 +139,7 @@ export default function TeamPage() {
             <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Waiting to accept</h2>
             {invitations.data.data.map((i) => (
               <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ flex: 1 }}>{i.email || i.phone} <span className="text-muted">· {ROLE_LABELS[i.role]} · expires {i.expiresAt.slice(0, 10)}</span></span>
+                <span style={{ flex: 1 }}>{i.email || i.phone} <span className="text-muted">· {labelOf(i.role)} · expires {i.expiresAt.slice(0, 10)}</span></span>
                 <button type="button" className="btn btn-secondary" title="Copy the invitation link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/accept-invite/${i.id}`); toast('Link copied', 'success'); }}><Copy size={14} /></button>
                 <button type="button" className="btn btn-secondary" title="Withdraw" onClick={() => revoke.mutate(i.id)}><X size={14} /></button>
               </div>

@@ -120,6 +120,12 @@ export const rolePermissions = pgTable(
     ...base(),
     role: text('role').notNull(),
     permissions: jsonb('permissions').notNull().$type<string[]>(),
+    /** A role the organization made itself ('custom_...'): its name on screen. Null for a changed preset. */
+    label: text('label'),
+    /** Sees and changes only the documents they created (invoices, payments, purchases, expenses). */
+    ownOnly: boolean('own_only').notNull().default(false),
+    /** Never sees purchase prices (cost) of items, so margins stay private. */
+    hideCost: boolean('hide_cost').notNull().default(false),
   },
   (t) => [unique('role_permissions_org_role').on(t.orgId, t.role)],
 );

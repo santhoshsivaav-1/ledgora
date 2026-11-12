@@ -58,6 +58,8 @@ export const invoices = pgTable(
     generatedFromId: uuid('generated_from_id'),
     /** P2-S1: the salesman the sale is credited to. */
     salesmanId: uuid('salesman_id'),
+    /** The member who made it (Account Access: "own transactions only"). Null on invoices made before it was kept. */
+    createdBy: text('created_by'),
     cancelledAt: date('cancelled_at'),
     /** Everything the print layout needs that has no column of its own: totals breakdown, terms, notes, options. */
     data: jsonb('data').notNull().default({}),

@@ -3,16 +3,17 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema } from '@ledgora/db';
 import {
+  role as roleSchema,
   idParam,
   invitation as invitationOut,
   invitationInput,
   member as memberOut,
   memberPatch,
   okBody,
-  ROLES,
   type Role,
 } from '@ledgora/contracts';
 import { audit } from '../audit.ts';
+import { roleExists } from './roles.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { Registrar } from '../http.ts';
 import { sendMail, sendSms } from '../mail/index.ts';
@@ -78,6 +79,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
         .from(member)
         .where(and(eq(member.id, params.id), eq(member.organizationId, orgId)));
       if (!target) throw notFound('Member');
+      if (body.role && !(await roleExists(tx, body.role)))
+        throw new AppError('bad_request', 'There is no such role in this organization');
       if (target.userId === auth.user.id && body.role && body.role !== target.role)
         throw new AppError('forbidden', 'You can not change your own role');
       assertMayAssign(auth.role, target.role, body.role);
@@ -196,6 +199,8 @@ export function membersModule({ route, documented: _d }: Registrar) {
     status: 201,
     handler: async ({ tx, orgId, auth, body, deps }) => {
       assertMayAssign(auth.role, 'viewer', body.role);
+      if (!(await roleExists(tx, body.role)))
+        throw new AppError('bad_request', 'There is no such role in this organization');
       const ids = [...new Set(body.businessIds)];
       if (ids.length) {
         const found = await tx
@@ -357,7 +362,7 @@ export function membersModule({ route, documented: _d }: Registrar) {
     summary: 'Accept an invitation: you become a member and it becomes your active organization',
     params: z.object({ id: z.string() }),
     access: 'session',
-    response: z.object({ organizationId: z.string(), role: z.enum(ROLES) }),
+    response: z.object({ organizationId: z.string(), role: roleSchema }),
     handler: async ({ auth, params, deps }) => {
       const [row] = await deps.db.select().from(invitation).where(eq(invitation.id, params.id));
       if (

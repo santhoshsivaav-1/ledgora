@@ -27,4 +27,8 @@ export interface OrgContext extends AuthContext {
   /** P7-S6: a member (a CA) limited to reports for these dates. null = no limit. */
   dataFrom: string | null;
   dataTo: string | null;
+  /** Account Access: only the documents this member made (set by the permission check). */
+  ownOnly?: boolean;
+  /** Account Access: never shown purchase prices. */
+  hideCost?: boolean;
 }

@@ -40,14 +40,15 @@ async function stockFor(tx: Tx, ids: string[]) {
   return out;
 }
 
-const toItem = (r: typeof items.$inferSelect, stock: number): Item => ({
+// Account Access "hide purchase prices": the cost reads as 0 for that member.
+const toItem = (r: typeof items.$inferSelect, stock: number, hideCost = false): Item => ({
   id: r.id,
   name: r.name,
   sku: r.sku,
   hsn: r.hsn,
   unit: r.unit,
   salePrice: r.salePrice,
-  purchasePrice: r.purchasePrice,
+  purchasePrice: hideCost ? 0 : r.purchasePrice,
   taxPercent: r.taxPercent,
   cessPercent: r.cessPercent,
   trackStock: r.trackStock,
@@ -64,7 +65,7 @@ export function itemsModule({ route }: Registrar) {
     summary: 'List or search items, with current stock',
     query: pageQuery,
     response: page(item),
-    handler: async ({ tx, query }) => {
+    handler: async ({ tx, query, auth }) => {
       const res = await listPage(tx, items, {
         ...query,
         searchColumns: [items.name, items.sku, items.hsn],
@@ -74,7 +75,7 @@ export function itemsModule({ route }: Registrar) {
         res.data.map((r) => r.id),
       );
       return {
-        data: res.data.map((r) => toItem(r, stock.get(r.id) ?? 0)),
+        data: res.data.map((r) => toItem(r, stock.get(r.id) ?? 0, auth.hideCost)),
         nextCursor: res.nextCursor,
       };
     },
@@ -87,13 +88,13 @@ export function itemsModule({ route }: Registrar) {
     summary: 'One item',
     params: idParam,
     response: item,
-    handler: async ({ tx, params }) => {
+    handler: async ({ tx, params, auth }) => {
       const [row] = await tx
         .select()
         .from(items)
         .where(and(eq(items.id, params.id), isNull(items.deletedAt)));
       if (!row) throw notFound('Item');
-      return toItem(row, (await stockFor(tx, [row.id])).get(row.id) ?? 0);
+      return toItem(row, (await stockFor(tx, [row.id])).get(row.id) ?? 0, auth.hideCost);
     },
   });
 
@@ -129,7 +130,9 @@ export function itemsModule({ route }: Registrar) {
     params: idParam,
     body: itemPatch,
     response: item,
-    handler: async ({ tx, orgId, params, body }) => {
+    handler: async ({ tx, orgId, params, body: raw, auth }) => {
+      // A member who may not see costs can not change one either.
+      const body = auth.hideCost ? { ...raw, purchasePrice: undefined } : raw;
       const [before] = await tx
         .select()
         .from(items)

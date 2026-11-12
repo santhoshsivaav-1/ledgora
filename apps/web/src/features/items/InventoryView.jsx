@@ -1,5 +1,6 @@
 import { useAppSettings } from '../../lib/appSettings';
 import { itemFieldVisibility, newItemDefaults, lowStockLimit } from './itemFields';
+import { useEntitlements } from '../billing/useEntitlements';
 import { itemExtraVisibility, barcodeTaken, parseSerials, hsnDigitsProblem } from './itemExtras';
 import { useState, useEffect, useRef } from 'react';
 import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function InventoryView() {
   const appSettings = useAppSettings();
   const show = itemFieldVisibility(appSettings); // Settings > Item
   const extra = itemExtraVisibility(appSettings); // MRP, wholesale, secondary unit, image, barcode, batch, serial
+  const hideCost = useEntitlements().restrictions.hideCost; // Account Access: this role never sees purchase prices
   const startForm = () => ({ ...emptyForm, ...newItemDefaults(appSettings) });
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
@@ -275,7 +277,7 @@ export default function InventoryView() {
           <button className="btn btn-secondary" onClick={() => csvInputRef.current?.click()}>
             <Upload size={16} /> Import CSV
           </button>
-          <button className="btn btn-secondary" onClick={() => setBulkEdit(true)} disabled={!products.length || bulkEdit}
+          <button className="btn btn-secondary" onClick={() => setBulkEdit(true)} disabled={!products.length || bulkEdit || hideCost}
             title="Edit name, HSN, prices, GST %, unit and stock of many products at once">
             <Table2 size={16} /> Bulk edit
           </button>
@@ -334,13 +336,13 @@ export default function InventoryView() {
                   Selling price seeds the invoice rate; purchase price seeds
                   the purchase-bill rate. Legacy `rate` field kept invisible
                   for backward compat — writes through to sellingPrice. */}
-              <div className="form-group">
+              {!hideCost && <div className="form-group">
                 <label className="form-label">Purchase Price</label>
                 <input type="number" className="form-input" value={form.purchasePrice}
                   onChange={e => updateField('purchasePrice', e.target.value)}
                   placeholder="0.00" min="0" step="any"
                   title="What you pay the supplier. Auto-fills on new Purchase Bills." />
-              </div>
+              </div>}
               <div className="form-group">
                 <label className="form-label">Selling Price</label>
                 <input type="number" className="form-input" value={form.sellingPrice}
@@ -516,8 +518,8 @@ export default function InventoryView() {
           <h3>Products & Services</h3>
           {!bulkEdit && (
             <TableExport title="Products" filename="Products"
-              headers={['Name', 'HSN/SAC', 'Purchase price', 'Selling price', 'GST %', 'Unit', 'Stock']}
-              rows={filtered.map((p) => [p.name, p.hsn || '', Number(p.purchasePrice) || 0, Number(p.sellingPrice ?? p.rate) || 0, Number(p.taxPercent) || 0, p.unit || 'Nos', Number(p.stock) || 0])} />
+              headers={['Name', 'HSN/SAC', ...(hideCost ? [] : ['Purchase price']), 'Selling price', 'GST %', 'Unit', 'Stock']}
+              rows={filtered.map((p) => [p.name, p.hsn || '', ...(hideCost ? [] : [Number(p.purchasePrice) || 0]), Number(p.sellingPrice ?? p.rate) || 0, Number(p.taxPercent) || 0, p.unit || 'Nos', Number(p.stock) || 0])} />
           )}
         </div>
         {bulkEdit && filtered.length > 0 ? (

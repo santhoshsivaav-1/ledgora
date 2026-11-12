@@ -183,6 +183,13 @@
       "when": 1794494967292,
       "tag": "0025_role_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794499994422,
+      "tag": "0026_role_rules_created_by",
+      "breakpoints": true
     }
   ]
 }
