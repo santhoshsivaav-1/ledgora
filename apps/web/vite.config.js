@@ -213,15 +213,22 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // v1.10.2 — React was in the main bundle; every app-code
-          // change invalidated the React runtime for cached clients.
-          // Now: cache hit on React across releases as long as versions
-          // don't move.
-          'react-vendor': ['react', 'react-dom'],
-          'pdf': ['jspdf', 'html2canvas'],
-          'icons': ['lucide-react'],
-          'qr': ['qrcode'],
+        // v1.10.2 — React was in the main bundle; every app-code
+        // change invalidated the React runtime for cached clients.
+        // Now: cache hit on React across releases as long as versions
+        // don't move.
+        // P11-S2 — function form: the object form also pulled the packages'
+        // shared helpers into these chunks, so main imported the 170 KB pdf
+        // chunk on first load. Only modules inside each package go to it.
+        manualChunks(id) {
+          // Vite's preload helper and Rollup's CommonJS helpers are virtual modules that every lazy route needs;
+          // left to Rollup they landed in the pdf chunk and dragged it into the first load.
+          if (id === '\0vite/preload-helper.js' || id === '\0commonjsHelpers.js') return 'runtime';
+          const pkg = /node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+)\//.exec(id)?.[1];
+          if (pkg === 'react' || pkg === 'react-dom' || pkg === 'scheduler') return 'react-vendor';
+          if (pkg === 'jspdf' || pkg === 'html2canvas') return 'pdf';
+          if (pkg === 'lucide-react') return 'icons';
+          if (pkg === 'qrcode') return 'qr';
         },
       },
     },

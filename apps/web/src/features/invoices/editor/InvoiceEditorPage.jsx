@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, X } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { saveBill, deleteBill, applyStockChanges, getNextInvoiceNumber, getTermsTemplates, getAllClients, saveClient, getAllProducts, getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getAllProfiles, saveRecurring, getAllRecurring, getAllBills } from '../../../lib/data';
 import { INVOICE_TYPES, businessKeyOf, GST_DOC_NUMBER, COUNTRIES, printedSubtotal, deliveryChargeLine, stockEffect, appliedStock, stockDelta, generateEWayBillJSON, formatCurrency, getCountryConfig, getAllUnits, addCustomUnit, removeCustomUnit, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, TERMS_PRESETS, getActiveAccounts, getDefaultAccount, getAccountById, getDefaultUnitForMode, PAPER_SIZES, getPaperSize, ORDER_DETAIL_FIELDS, invoiceOptionOn, DEFAULT_DECLARATION, decodeGstin, safePageBoundaries, localToday, parseLocalDate, paymentStatusFor } from '../../../utils';
 import { getPrintSettings, savePrintSettings } from '../../print/printSettingsStore';
@@ -1685,6 +1683,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
 
   // archive: the copy kept in Saved Invoices, which carries no REPRINT stamp.
   const __buildPDFInner = async (printSettings, archive = false, spacerFit = {}, forPrint = false) => {
+    // P11-S2: jsPDF and html2canvas (~170 KB gzip) load on the first PDF, not with the app.
+    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas')]);
 
     // v1.10.46 — Hoisted from line ~2133 to fix the v1.10.45 regression
     // where `isHeaderOn` / `isFooterOn` (introduced in v1.10.45 for the

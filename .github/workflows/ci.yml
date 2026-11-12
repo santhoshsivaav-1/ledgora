@@ -50,6 +50,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm --filter @ledgora/web size
 
   # Drives the real app in Firefox (slow, so not on every pull request). Runs on pushes to main
   # and on demand: Actions > CI > Run workflow. Needs the API, Postgres and the built web app, all one process.

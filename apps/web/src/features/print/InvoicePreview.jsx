@@ -1,12 +1,14 @@
 import { getAppSetting } from '../../lib/appSettings';
 import React, { useState, useEffect } from 'react';
-import QRCode from 'qrcode';
 import DOMPurify from 'dompurify';
 import { numberToWords, printedSubtotal, formatCurrency, INVOICE_TYPES, getCountryConfig, CURRENCY_NAMES, formatExchangeRateLine, getAccountById, getPaperSize, resolveLineDiscount, htmlHasText, splitNumberedTerms, invoiceOptionOn, DEFAULT_DECLARATION, filledOrderDetails, formatShortDate } from '../../utils';
 import { getPrintSettings, getLabel, formatCurrencyEx, formatDate } from './printSettingsStore';
 import InvoiceGridLayout, { HsnSummaryTable } from '../invoices/editor/InvoiceGridLayout';
 import TaxSummary from './TaxSummary';
 import TotalsPanel from './TotalsPanel';
+
+// P11-S2: the QR encoder loads when a QR is first drawn, not with the app.
+const toQrDataUrl = (text, opts) => import('qrcode').then((m) => m.default.toDataURL(text, opts));
 
 // v1.10.36 — Optional `previewOnly` prop suppresses the internal
 // `id="invoice-preview"`. The parent's on-screen preview keeps the id
@@ -171,7 +173,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   const [einvQr, setEinvQr] = useState('');
   useEffect(() => {
     if (!einv) { setEinvQr(''); return; }
-    QRCode.toDataURL(einv.signedQr, { width: 150, margin: 1, errorCorrectionLevel: 'L' })
+    toQrDataUrl(einv.signedQr, { width: 150, margin: 1, errorCorrectionLevel: 'L' })
       .then(setEinvQr)
       .catch(() => setEinvQr(''));
   }, [einv?.signedQr]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -189,7 +191,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       return;
     }
     const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(profile?.businessName || '')}&am=${upiAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Payment for ${details?.invoiceNumber || 'Invoice'}`)}`;
-    QRCode.toDataURL(upiUrl, { width: 120, margin: 1, errorCorrectionLevel: 'M' })
+    toQrDataUrl(upiUrl, { width: 120, margin: 1, errorCorrectionLevel: 'M' })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(''));
   }, [showUPI, upiId, profile?.businessName, upiAmount, details?.invoiceNumber, currencySymbol]);
