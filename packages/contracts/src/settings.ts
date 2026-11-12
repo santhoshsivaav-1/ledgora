@@ -60,6 +60,11 @@ export interface SettingDef<T extends z.ZodType = z.ZodType> {
   confirm?: string;
   /** The phase that makes it live, shown on the Coming soon badge's tooltip. */
   phase?: string;
+  /**
+   * The value is shown here but changed on another screen, where the change can be checked first (the ledger switch
+   * posts every document, so it goes through the Accounting screen). The API refuses a change made from Settings.
+   */
+  managedAt?: { href: string; note: string };
 }
 
 type Opt = readonly { value: string | number; label: string }[];
@@ -68,7 +73,7 @@ const opts = (...pairs: (string | [string | number, string])[]): Opt =>
 
 type Meta = Pick<
   SettingDef,
-  'tab' | 'section' | 'ownerOnly' | 'live' | 'legacy' | 'phase' | 'confirm'
+  'tab' | 'section' | 'ownerOnly' | 'live' | 'legacy' | 'phase' | 'confirm' | 'managedAt'
 >;
 const at =
   (tab: SettingsTabId, section: string, extra: Partial<Meta> = {}) =>
@@ -207,14 +212,6 @@ export const SETTINGS = {
         ['never', 'Never'],
       ),
     },
-  ),
-  'backup.remindDays': security(
-    days,
-    7,
-    'Backup reminder every (days)',
-    'Reminds you to take a backup',
-    'number',
-    { phase: 'P7' },
   ),
 
   // ---- Transaction (P8-S3) ----
@@ -455,9 +452,10 @@ export const SETTINGS = {
     'Your bank account',
     'switch',
   ),
+  // On: a line description has always printed. Off hides it.
   'print.show.description': print('Show on print')(
     toggle,
-    false,
+    true,
     'Item description',
     'Description under the item name',
     'switch',
@@ -587,6 +585,7 @@ export const SETTINGS = {
     'E-way bill',
     'Prompt for an e-way bill above the threshold',
     'switch',
+    { live: true },
   ),
   // On by default: the reverse-charge boxes have always been on the purchase and sale screens.
   'gst.rcm': gst('Invoice')(
@@ -881,7 +880,7 @@ export const SETTINGS = {
   ),
   'item.barcodeFormat': item('Defaults')(
     z.enum(['code128', 'ean13', 'qr']),
-    'code128',
+    'ean13',
     'Barcode format',
     'Format of generated barcodes',
     'select',
@@ -893,32 +892,32 @@ export const SETTINGS = {
     toggle,
     false,
     'Enable accounting ledger',
-    'Turn the books on; use the Accounting screen, it opens the chart of accounts',
+    'Turn the books on from the Accounting screen: it posts every existing document and checks the balances first',
     'switch',
-    { phase: 'P4' },
-  ),
-  'acct.cashOpening': accounting('Ledger')(
-    money,
-    0,
-    'Cash in hand opening',
-    'Opening cash balance',
-    'money',
-    { phase: 'P5' },
+    {
+      live: true,
+      legacy: ['accounting', 'ledger'],
+      managedAt: {
+        href: '/accounting',
+        note: 'Switched on from Accounting, which checks your party balances before it starts',
+      },
+    },
   ),
   'acct.valuation': accounting('Stock')(
     z.enum(['average']),
     'average',
     'Stock valuation method',
-    'Weighted average only; FIFO needs batch layers',
+    "Weighted average only (D-11); stock is valued at each item's average landed cost",
     'select',
-    { options: opts(['average', 'Weighted average']) },
+    { options: opts(['average', 'Weighted average']), live: true },
   ),
   'acct.autoPostExpense': accounting('Ledger')(
     toggle,
     true,
     'Auto-post expenses',
-    'Expenses post to the books on save',
+    'Off leaves new and edited expenses out of the ledger until you run "Post history again" on the Accounting screen',
     'switch',
+    { live: true },
   ),
 
   // ---- Messaging (Phase 9) ----
@@ -944,18 +943,19 @@ export const SETTINGS = {
   ),
 
   // ---- Multi Currency (P8-S12) ----
+  // On: the currency and exchange-rate boxes have always been on the bill. Off hides them for new bills (a foreign bill keeps its own).
   'mc.enabled': at('currency', 'Currencies', { ownerOnly: true })(
     toggle,
-    false,
+    true,
     'Enable multi currency',
-    'Invoices in a foreign currency',
+    "Shows the currency and exchange-rate boxes on a bill. The rate is typed per bill; India's books stay in INR",
     'switch',
   ),
   'mc.showBoth': at('currency', 'Currencies')(
     toggle,
     false,
     'Show both amounts',
-    'Invoices print foreign and INR',
+    "A foreign-currency bill also prints its INR value at the bill's exchange rate",
     'switch',
   ),
 } satisfies Record<string, SettingDef>;
@@ -964,6 +964,40 @@ export const SETTINGS = {
 // (lib/appSettings.js); keys whose behaviour lives in the API carry `live: true` where they are declared. The test in
 // settings.test.ts keeps every name here a real key.
 export const LIVE_IN_APP = [
+  'fy.startMonth',
+  'fmt.qtyDecimals',
+  'fmt.wordsLang',
+  'txn.billingName',
+  'txn.quickEntry',
+  'txn.showPurchasePrice',
+  'txn.barcodeScan',
+  'print.show.description',
+  'print.show.mrp',
+  'print.show.batch',
+  'print.regional',
+  'gst.regType',
+  'gst.compRate',
+  'gst.frequency',
+  'gst.hsnDigits',
+  'gst.itcDefault',
+  'party.itemRates',
+  'party.tdsTcs',
+  'party.openingRequired',
+  'item.altUnit',
+  'item.image',
+  'item.wholesale',
+  'item.mrp',
+  'item.batch',
+  'item.serial',
+  'item.barcode',
+  'item.discount',
+  'mc.enabled',
+  'mc.showBoth',
+  'party.shipping',
+  'item.barcodeFormat',
+  'print.show.paymentMode',
+  'print.show.partyBalance',
+  'print.show.paidStamp',
   'fmt.date',
   'fmt.currency',
   'fmt.decimals',
@@ -1062,14 +1096,26 @@ export const PLANNED_TABLES: readonly {
     href: '/grow/reminders?tab=service',
   },
   {
+    tab: 'general',
+    title: 'Backup reminder',
+    note: 'How often to remind you to back up is set with the backup schedule, in Utilities › Backup & Restore.',
+    href: '/utilities/backup',
+  },
+  {
+    tab: 'accounting',
+    title: 'Cash in hand opening balance',
+    note: 'Set in Cash & Bank › Cash in Hand, where it also posts to the books.',
+    href: '/cash-bank/cash',
+  },
+  {
     tab: 'accounting',
     title: 'Default accounts and opening balances',
     note: 'Sales, purchase, round-off, discount and the other defaults the books post to.',
   },
   {
     tab: 'currency',
-    title: 'Currencies and exchange rates',
-    note: 'Base currency stays INR in v1.',
+    title: 'Exchange-rate table',
+    note: 'A saved list of daily rates. Today the rate is typed on each bill; the base currency stays INR.',
   },
 ];
 
@@ -1097,7 +1143,11 @@ export const settingView = z.object({
 export type SettingView = z.infer<typeof settingView>;
 
 export const settingsQuery = z.object({ businessId: uuid });
-export const settingsResponse = z.object({ settings: z.record(z.string(), z.unknown()) });
+export const settingsResponse = z.object({
+  settings: z.record(z.string(), z.unknown()),
+  /** Setting key -> the plan feature it needs, for the keys this business's plan does not include (they read as their default). */
+  locked: z.record(z.string(), z.string()).optional(),
+});
 export const settingsPatch = z.object({
   businessId: uuid,
   values: z.record(z.string(), z.unknown()),
@@ -1118,6 +1168,10 @@ export function parseSettingsPatch(values: Record<string, unknown>) {
     const def = SETTINGS[k];
     if (!def.live) {
       errors.push({ key: k, message: 'This setting is coming soon and can not be changed yet' });
+      continue;
+    }
+    if (def.managedAt) {
+      errors.push({ key: k, message: def.managedAt.note });
       continue;
     }
     const r = def.type.safeParse(v);

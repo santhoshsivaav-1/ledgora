@@ -49,7 +49,13 @@ export const billCurrency = (b: Rec) => b.currency || b.data?.invoiceOptions?.cu
 
 // One row per party (same name, ignoring case and spaces), sorted by name:
 // { name, earlier, months: { 'YYYY-MM': amount }, total }.
-export function partyOutstanding(bills: Rec[], months: Rec[], currency = 'INR') {
+export function partyOutstanding(
+  bills: Rec[],
+  months: Rec[],
+  currency = 'INR',
+  /** Parties' opening balances (positive = they owe us): `{ name, openingBalance }`. Counted as "earlier" money, in INR only. */
+  openings: Rec[] = [],
+) {
   const first = months[0].key;
   const last = months[months.length - 1].key;
   const rows = new Map();
@@ -66,6 +72,18 @@ export function partyOutstanding(bills: Rec[], months: Rec[], currency = 'INR') 
     else row.months[ym] = (row.months[ym] || 0) + due;
     row.total += due;
     rows.set(id, row);
+  }
+  if (currency === 'INR') {
+    for (const o of openings) {
+      const amt = Math.round((Number(o?.openingBalance) || 0) * 100) / 100;
+      const name = String(o?.name || '').trim();
+      if (amt <= 0 || !name) continue;
+      const id = name.toLowerCase();
+      const row = rows.get(id) || { name, earlier: 0, months: {}, total: 0 };
+      row.earlier += amt;
+      row.total += amt;
+      rows.set(id, row);
+    }
   }
   return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

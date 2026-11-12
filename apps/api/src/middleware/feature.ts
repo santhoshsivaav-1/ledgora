@@ -1,5 +1,5 @@
 import { and, count, desc, eq, gt, gte, isNull } from 'drizzle-orm';
-import { schema, withTenant, type Database } from '@ledgora/db';
+import { schema, withTenant, type Database, type Tx } from '@ledgora/db';
 import {
   effectivePlan,
   featureForRoute,
@@ -18,6 +18,16 @@ import type { OrgContext } from './context.ts';
 const TTL = 30_000;
 const cache = new Map<string, { at: number; eff: Effective }>();
 export const forgetPlan = (orgId: string) => cache.delete(orgId);
+
+/** The plan in force, read inside a request's own tenant transaction (a route handler has `tx`, not the database). */
+export async function planOfTx(tx: Tx, now = new Date()) {
+  const [sub] = await tx
+    .select()
+    .from(schema.subscriptions)
+    .orderBy(desc(schema.subscriptions.createdAt))
+    .limit(1);
+  return effectivePlan(sub ?? null, now);
+}
 
 export async function planOf(db: Database, orgId: string, now = new Date()) {
   const hit = cache.get(orgId);

@@ -9,7 +9,8 @@ export default function InvoiceDetailsPanel({
   details, invoiceOptions, invoiceType, profile, setDetails,
 }) {
   const copy = copyFor(invoiceType);
-  const orderFields = visibleOrderFields(ORDER_DETAIL_FIELDS, useAppSettings(), details); // Settings > Transaction
+  const appSettings = useAppSettings();
+  const orderFields = visibleOrderFields(ORDER_DETAIL_FIELDS, appSettings, details); // Settings > Transaction
   return (
           <div className="glass-panel p-6 mb-6">
             <h3 className="section-title">{INVOICE_TYPES[invoiceType]?.label || 'Invoice'} Details</h3>
@@ -25,6 +26,14 @@ export default function InvoiceDetailsPanel({
                 <input type="date" className="form-input" value={details.invoiceDate}
                   onChange={(e) => setDetails({ ...details, invoiceDate: e.target.value })} />
               </div>
+              {appSettings['txn.billingName'] && (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Billing name</label>
+                  <input type="text" className="form-input" value={details.billingName || ''} maxLength={120}
+                    placeholder="Name to print on the bill, if different from the party"
+                    onChange={(e) => setDetails({ ...details, billingName: e.target.value })} />
+                </div>
+              )}
               {copy.due && (
                 <div className="form-group">
                   <label className="form-label">{copy.due}</label>
@@ -61,6 +70,7 @@ export default function InvoiceDetailsPanel({
               {/* v1.10.11 — Ship-to = Bill-to checkbox. When unchecked,
                    4 shipping fields appear. Rendered next to the billing
                    block in the PDF preview. */}
+              {(appSettings['party.shipping'] || details.shipToSameAsBilling === false) && (
               <div className="form-group full-width" style={{ marginTop: '0.5rem', padding: '0.6rem 0.85rem', background: 'var(--bg-secondary)', borderRadius: 6 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none', fontSize: '0.88rem' }}>
                   <input type="checkbox" checked={details.shipToSameAsBilling !== false}
@@ -107,6 +117,7 @@ export default function InvoiceDetailsPanel({
                   </div>
                 )}
               </div>
+              )}
 
               {/* v1.10.73 - order, dispatch and reference details: the boxes on a
                   Tally-style invoice. Optional; closed unless one is filled. */}

@@ -17,6 +17,10 @@ export const FEATURES = [
   { id: 'einvoice', label: 'E-invoice (IRN)' },
   { id: 'income-tax', label: 'Income tax and ITR helpers' },
   { id: 'multi_business', label: 'More than one business' },
+  {
+    id: 'inventory_pro',
+    label: 'Batch and serial tracking, secondary units, wholesale and party-wise rates',
+  },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['id'];
 export type PlanId = 'free' | 'silver' | 'gold';
@@ -43,6 +47,7 @@ const SILVER: Feature[] = [
   'staff',
   'cloud_backup',
   'report_schedules',
+  'inventory_pro',
 ];
 export const PLANS: readonly Plan[] = [
   {
@@ -75,6 +80,23 @@ export const PLANS: readonly Plan[] = [
       'Everything: accounting, bank and loans, Tally, e-invoice, income tax and up to 5 businesses.',
   },
 ];
+/**
+ * Settings that belong to a paid feature. On a plan without the feature the setting reads as its default (so a screen
+ * behaves as if it were off, whatever was saved before a downgrade) and can not be switched on; what was saved is kept
+ * and returns on upgrade. Switching it back to its default is always allowed.
+ */
+export const SETTING_FEATURE: Readonly<Record<string, Feature>> = {
+  'item.batch': 'inventory_pro',
+  'item.serial': 'inventory_pro',
+  'item.altUnit': 'inventory_pro',
+  'item.wholesale': 'inventory_pro',
+  'party.itemRates': 'inventory_pro',
+  'item.barcode': 'barcode',
+  'txn.barcodeScan': 'barcode',
+  'msg.enabled': 'messaging',
+  'gst.einvoice.enabled': 'einvoice',
+  'acct.autoPostExpense': 'accounting',
+};
 export const TRIAL_DAYS = 14;
 export const GRACE_DAYS = 7;
 

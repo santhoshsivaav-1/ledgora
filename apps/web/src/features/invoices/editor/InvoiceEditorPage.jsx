@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, X } from 'lucide-react';
 import { saveBill, deleteBill, applyStockChanges, getNextInvoiceNumber, getTermsTemplates, getAllClients, saveClient, getAllProducts, getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getAllProfiles, saveRecurring, getAllRecurring, getAllBills } from '../../../lib/data';
-import { INVOICE_TYPES, businessKeyOf, GST_DOC_NUMBER, COUNTRIES, printedSubtotal, deliveryChargeLine, stockEffect, appliedStock, stockDelta, generateEWayBillJSON, formatCurrency, getCountryConfig, getAllUnits, addCustomUnit, removeCustomUnit, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, TERMS_PRESETS, getActiveAccounts, getDefaultAccount, getAccountById, getDefaultUnitForMode, PAPER_SIZES, getPaperSize, ORDER_DETAIL_FIELDS, invoiceOptionOn, DEFAULT_DECLARATION, decodeGstin, safePageBoundaries, localToday, parseLocalDate, paymentStatusFor } from '../../../utils';
+import { INVOICE_TYPES, businessKeyOf, GST_DOC_NUMBER, COUNTRIES, printedSubtotal, deliveryChargeLine, stockEffect, appliedStock, stockDelta, generateEWayBillJSON, countsAsSales, amountDue, formatCurrency, getCountryConfig, getAllUnits, addCustomUnit, removeCustomUnit, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, TERMS_PRESETS, getActiveAccounts, getDefaultAccount, getAccountById, getDefaultUnitForMode, PAPER_SIZES, getPaperSize, ORDER_DETAIL_FIELDS, invoiceOptionOn, DEFAULT_DECLARATION, decodeGstin, safePageBoundaries, localToday, parseLocalDate, paymentStatusFor } from '../../../utils';
 import { getPrintSettings, savePrintSettings } from '../../print/printSettingsStore';
 import { openWhatsAppShare } from '../../import-export/share';
 import { confirmAction, promptAction } from '../../../components/ui/ConfirmModal';
@@ -25,6 +25,8 @@ import { optionDefaultsFrom, termsHtmlFrom, estimatedProfit } from './settingsDe
 import { useEntitlements } from '../../billing/useEntitlements';
 import { einvoiceLocked } from '../einvoice';
 import { getAllAppSettings, getAppSetting, useAppSettings } from '../../../lib/appSettings';
+import { paymentInfo, itemExtraVisibility, lineRateFor, unitFactorFor, itemDiscountFor, findByBarcode, batchStock, suggestBatch, serialsInStock, serialProblems, hsnDigitsProblem } from '../../items/itemExtras';
+import { getAllPurchaseDocs } from '../../../lib/data/purchases';
 import { useInvoiceTotals } from './hooks/useInvoiceTotals';
 import { useInvoiceDraft, loadDraft, clearDraft } from './hooks/useInvoiceDraft';
 import { copyFor } from '../../sales/salesFlow';
@@ -60,12 +62,19 @@ const DOC_STEPS = [
   { key: 'terms', label: 'Terms & notes' },
 ];
 
+// Settings > GST > Registration type: a composition dealer issues a Bill of Supply for composition, an unregistered one a
+// Bill of Supply; only a regular dealer starts on a Tax Invoice.
+const defaultSaleType = () => {
+  const reg = getAppSetting('gst.regType');
+  return reg === 'composition' ? 'composition' : reg === 'unregistered' ? 'bill-of-supply' : 'tax-invoice';
+};
+
 export default function InvoiceEditorPage({ onBack, profile: profileProp, editingBill, initialType = null }) {
   const draft = loadDraft();
   const [allProfiles, setAllProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(profileProp);
   const profile = activeProfile || profileProp;
-  const [invoiceType, setInvoiceType] = useState(draft?.invoiceType || (INVOICE_TYPES[initialType] && !editingBill ? initialType : 'tax-invoice'));
+  const [invoiceType, setInvoiceType] = useState(draft?.invoiceType || (INVOICE_TYPES[initialType] && !editingBill ? initialType : defaultSaleType()));
   // email/phone/isSEZ must be part of initial state — otherwise the SEZ flag
   // set inside ClientModal is silently discarded on save, and reopening the
   // bill can never restore contact fields even if the saved client has them.
@@ -154,6 +163,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // apply on THIS bill; it becomes a `credit-applied` payment at save time,
   // paired with a `credit-transferred-out` entry on each source bill.
   const [allBillsForCredit, setAllBillsForCredit] = useState([]);
+  const allBillsRef = useRef([]);
+  allBillsRef.current = allBillsForCredit;
+  const editingBillIdRef = useRef(editingBill && !editingBill._isDuplicate ? editingBill.id : null);
   const [creditToApply, setCreditToApply] = useState(0);
   const [units, setUnits] = useState(getAllUnits());
   const [taxInclusive, setTaxInclusive] = useState(draft?.taxInclusive ?? getAppSetting('tax.priceInclusive'));
@@ -621,6 +633,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     // save (inside saveInvoiceToDB's success path) so the balance stays
     // current when the same session creates multiple invoices for one client.
     getAllBills().then(setAllBillsForCredit).catch(() => {});
+    // Batch and serial stock count what was bought, so the purchases are read once when either is tracked.
+    if (getAppSetting('item.batch') || getAppSetting('item.serial')) getAllPurchaseDocs().then((p) => { purchasesRef.current = p || []; }).catch(() => {});
   }, []);
 
   // Initialize from editing bill or generate new number (skip if restoring from draft)
@@ -935,25 +949,68 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // that actually changed. Prior code created new function identities
   // every render → every keystroke re-rendered EVERY line item.
   const handleItemChange = useCallback((id, field, value) => {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const next = { ...item, [field]: value };
+      const product = next.productId ? productsRef.current.find((p) => p.id === next.productId) : null;
+      if (product && (field === 'unit' || field === 'quantity')) {
+        // A line in the secondary unit moves stock by its factor and takes its own rate; wholesale follows the quantity.
+        const unit = field === 'unit' ? value : next.unit;
+        const qty = field === 'quantity' ? Number(value) || 0 : Number(next.quantity) || 0;
+        next.unitFactor = unitFactorFor(product, unit);
+        const s = getAllAppSettings();
+        if (field === 'unit' || (s['item.wholesale'] && !next._rateEdited)) {
+          next.rate = lineRateFor(product, { qty, unit, partyRates: partyRatesRef.current, s }).rate;
+        }
+      }
+      if (field === 'rate') next._rateEdited = true;
+      return next;
+    }));
     if (field === 'name') {
       setProductSearch({ itemId: id, query: value });
     }
   }, []);
 
+  // The party's own item rates (Settings > Party > Party-wise item rate), kept on the saved party.
+  const partyRatesRef = useRef(null);
+  partyRatesRef.current = savedClients.find((c) => c.id === selectedClientId)?.itemRates || null;
+  const productsRef = useRef([]);
+  productsRef.current = products;
+  const purchasesRef = useRef([]);
+  const extras = itemExtraVisibility(appSettings);
+  // Settings > Print: payment mode, party balance and the PAID stamp are worked out here and handed to the printed bill.
+  const printOptions = (() => {
+    if (!appSettings['print.show.paymentMode'] && !appSettings['print.show.partyBalance'] && !appSettings['print.show.paidStamp']) return invoiceOptions;
+    const others = allBillsForCredit
+      .filter((b) => b.id !== editingBill?.id && b.clientName === client.name && countsAsSales(b) && b.status !== 'cancelled')
+      .map((b) => ({ due: amountDue(b) - (Number(b.paidAmount) || 0) }));
+    const own = PHASE2 && takesPayment(invoiceType) ? paymentRows : (editingBill?.payments || []);
+    return { ...invoiceOptions, payInfo: paymentInfo({ total: totals.total, payments: own, others }) };
+  })();
+
   const selectProduct = useCallback((itemId, product) => {
     // v1.10.29 — Prefer sellingPrice for sales invoices (falls back to
     // legacy `rate` for pre-v1.10.29 products).
-    const salePrice = product.sellingPrice ?? product.rate ?? 0;
+    // Settings > Item / Party: the party's own rate, then wholesale from its minimum quantity, then the selling price.
+    const s = getAllAppSettings();
+    const { rate: salePrice } = lineRateFor(product, { qty: 1, partyRates: partyRatesRef.current, s });
+    const discountPercent = itemDiscountFor(product, s);
+    const batch = s['item.batch'] ? suggestBatch(batchStock(product, { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current }), localToday()) : null;
     setItems(prev => prev.map(item => item.id === itemId ? {
       ...item,
       name: product.name,
       hsn: product.hsn || '',
       rate: salePrice,
       unit: product.unit || item.unit || 'Nos',
+      unitFactor: undefined,
       taxPercent: product.taxPercent ?? defaultTaxRate,
       productId: product.id,
       isCharge: false, // a product picked on the delivery line makes it a product line
+      ...(s['item.mrp'] && product.mrp ? { mrp: product.mrp } : { mrp: undefined }),
+      ...(discountPercent ? { discount: discountPercent, discountType: 'percent' } : {}),
+      ...(batch ? { batchNo: batch.batchNo, mfgDate: batch.mfgDate, expDate: batch.expDate } : { batchNo: undefined, mfgDate: undefined, expDate: undefined }),
+      serials: undefined,
+      ...(s['print.regional'] && product.regionalName ? { regionalName: product.regionalName } : {}),
     } : item));
     setProductSearch({ itemId: null, query: '' });
   }, [countryTaxRates]);
@@ -971,6 +1028,23 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const addDeliveryCharge = () => {
     if (hasDeliveryCharge) return;
     setItems((prev) => [...prev, deliveryChargeLine(prev)]);
+  };
+
+  // Settings > Transaction > Barcode scan on billing: a scanner types the code and presses Enter; a known code adds the
+  // item (or one more of it), an unknown one says so.
+  const scanBarcode = (code) => {
+    const product = findByBarcode(productsRef.current, code);
+    if (!product) { toast(`No item has the barcode ${code}`, 'warning'); return false; }
+    const existing = items.find((i) => i.productId === product.id && !product.serials?.length && !product.batches?.length);
+    if (existing) {
+      handleItemChange(existing.id, 'quantity', (Number(existing.quantity) || 0) + 1);
+    } else {
+      const blank = items.find((i) => !i.name?.trim() && !i.productId);
+      const id = blank ? blank.id : `scan-${Date.now()}`;
+      if (!blank) setItems((prev) => [...prev, { id, name: '', hsn: '', quantity: 1, unit: product.unit || 'Nos', rate: 0, discount: 0, taxPercent: showGST ? defaultTaxRate : 0, cessPercent: 0 }]);
+      setTimeout(() => selectProduct(id, product), 0);
+    }
+    return true;
   };
 
   const addItem = () => {
@@ -1063,6 +1137,10 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     });
     setSelectedClientId(cli.id);
     setShowClientSuggestions(false);
+    // Settings > Party > TDS / TCS on party: a party flagged for either starts a new bill with that line on.
+    if (!editingBill && getAppSetting('party.tdsTcs')) {
+      setInvoiceOptions((prev) => ({ ...prev, ...(cli.tcsApplicable ? { showTCS: true } : {}), ...(cli.tdsApplicable ? { showTDS: true } : {}) }));
+    }
     // v1.9.1 — auto-apply per-client print preferences (if set on the client
     // record). Overrides invoice-level defaults for this session. Only fires
     // for NEW bills (not when editing) since editing bills keep saved options.
@@ -1173,6 +1251,34 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Settings > Item (batch, serial) and Settings > GST (HSN digits): what must be right before a bill that sells stock saves.
+  const salesLineProblems = () => {
+    const s = getAllAppSettings();
+    const sells = ['tax-invoice', 'bill-of-supply', 'composition', 'delivery-challan'].includes(invoiceType);
+    for (const it of items) {
+      if (!it.name?.trim()) continue;
+      if (showGST && s['gst.hsnDigits'] > 4 && it.hsn) {
+        const bad = hsnDigitsProblem(it.hsn, s['gst.hsnDigits']);
+        if (bad) return `${it.name}: ${bad}`;
+      }
+      const product = it.productId ? productsRef.current.find((p) => p.id === it.productId) : null;
+      if (!product || !sells) continue;
+      const ctx = { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current };
+      if (s['item.batch'] && (product.batches?.length || it.batchNo)) {
+        if (!it.batchNo) return `${it.name}: pick a batch`;
+        const row = batchStock(product, ctx).find((b) => b.batchNo.toLowerCase() === String(it.batchNo).toLowerCase());
+        const need = (Number(it.quantity) || 0) * (Number(it.unitFactor) > 0 ? Number(it.unitFactor) : 1);
+        if (row && row.expDate && row.expDate < details.invoiceDate) return `${it.name}: batch ${row.batchNo} expired on ${row.expDate}`;
+        if (row && need > row.qty + 0.0005 && s['txn.negativeStock'] === 'block') return `${it.name}: batch ${row.batchNo} has only ${row.qty} left`;
+      }
+      if (s['item.serial'] && (product.serials?.length || it.serials?.length)) {
+        const bad = serialProblems(it, serialsInStock(product, ctx))[0];
+        if (bad) return `${it.name}: ${bad}`;
+      }
+    }
+    return null;
+  };
+
   const saveInvoiceToDBNow = async (skipStockDeduction = false, extraPatch = {}) => {
     if (readOnlyDoc) {
       toast(editingBill.convertedTo
@@ -1182,6 +1288,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
           : 'A cancelled invoice is not changed. Undo the cancel on the Dashboard, or use Duplicate.', 'warning');
       return null;
     }
+    const lineProblem = salesLineProblems();
+    if (lineProblem) { toast(lineProblem, 'warning'); return null; }
     // Lazy counter reservation: if this is a NEW bill (no editingBill) and
     // the invoice number is still the peeked value, do the atomic increment
     // now. This means a mounted-but-cancelled form doesn't burn a counter
@@ -3079,6 +3187,10 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             <section id="doc-step-items" className="sheet-sec sheet-items">
               <LineItemsGrid
                 addDeliveryCharge={addDeliveryCharge}
+                scanBarcode={extras.barcode && appSettings['txn.barcodeScan'] ? scanBarcode : null}
+                batchOptionsFor={(item) => { const p = productsRef.current.find((x) => x.id === item.productId); return p ? batchStock(p, { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current }) : []; }}
+                serialStockFor={(item) => { const p = productsRef.current.find((x) => x.id === item.productId); return p ? serialsInStock(p, { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current }) : []; }}
+                productOf={(item) => productsRef.current.find((x) => x.id === item.productId) || null}
                 addItem={addItem}
                 clampNonNeg={clampNonNeg}
                 countryTaxRates={countryTaxRates}
@@ -3271,7 +3383,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
           }}>
             <InvoicePreview ref={printRef} profile={profile} client={client} details={details}
               items={items} totals={totals} invoiceType={invoiceType} customTerms={customTerms}
-              customNotes={customNotes} extraSections={extraSections} options={invoiceOptions}
+              customNotes={customNotes} extraSections={extraSections} options={printOptions}
               cancelled={editingBill?.status === 'cancelled'} />
           </div>
         </div>
@@ -3299,7 +3411,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
         customTerms={customTerms}
         customNotes={customNotes}
         extraSections={extraSections}
-        invoiceOptions={invoiceOptions}
+        invoiceOptions={printOptions}
       />
 
       {/* P2 #32 — 3-option leave modal. Replaces the previous confusing

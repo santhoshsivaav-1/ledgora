@@ -1,12 +1,16 @@
-import { Plus, Truck } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Truck, ScanBarcode } from 'lucide-react';
 import { filterUnitsByMode } from '../../../utils';
 import { LineItem } from './LineItemRow';
 import DiscountControls from './DiscountControls';
+import { useAppSettings } from '../../../lib/appSettings';
 
 // The line-items table with add, delete, discount and unit controls (change 3.9).
 export default function LineItemsGrid({
-  addDeliveryCharge, addItem, clampNonNeg, countryTaxRates, getProductSuggestions, handleAddCustomUnit, handleItemChange, handleRemoveCustomUnit, hasDeliveryCharge, invoiceOptions, items, profile, removeItem, selectProduct, setInvoiceOptions, setProductSearch, setTaxInclusive, showGST, taxInclusive, taxLabel, units,
+  addDeliveryCharge, scanBarcode, batchOptionsFor, serialStockFor, productOf, addItem, clampNonNeg, countryTaxRates, getProductSuggestions, handleAddCustomUnit, handleItemChange, handleRemoveCustomUnit, hasDeliveryCharge, invoiceOptions, items, profile, removeItem, selectProduct, setInvoiceOptions, setProductSearch, setTaxInclusive, showGST, taxInclusive, taxLabel, units,
 }) {
+  const appSettings = useAppSettings();
+  const [scan, setScan] = useState('');
   return (
           <div className="glass-panel p-6 mb-6">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
@@ -19,6 +23,14 @@ export default function LineItemsGrid({
                 </label>
               )}
             </div>
+            {scanBarcode && (
+              <div className="form-group" style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: '0.5rem' }}>
+                <ScanBarcode size={18} aria-hidden="true" />
+                <input className="form-input" style={{ maxWidth: 320 }} placeholder="Scan a barcode" aria-label="Scan a barcode" value={scan} autoComplete="off"
+                  onChange={(e) => setScan(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (scan.trim() && scanBarcode(scan.trim())) setScan(''); } }} />
+              </div>
+            )}
             {items.map((item, idx) => (
               <LineItem
                 key={item.id}
@@ -43,6 +55,10 @@ export default function LineItemsGrid({
                 clampNonNeg={clampNonNeg}
                 isLastRow={idx === items.length - 1}
                 isOnlyRow={items.length === 1}
+                batches={appSettings['item.batch'] ? batchOptionsFor(item) : null}
+                serialStock={appSettings['item.serial'] ? serialStockFor(item) : null}
+                product={productOf(item)}
+                settings={appSettings}
                 onAddRow={addItem}
               />
             ))}

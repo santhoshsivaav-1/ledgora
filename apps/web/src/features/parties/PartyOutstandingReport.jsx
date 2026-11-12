@@ -1,11 +1,12 @@
 // v1.10.75 - Party outstanding in Tally's layout: parties down the side,
 // months across, totals on the right and at the bottom. Calculation lives in
 // the tax engine's outstanding.ts (unit-tested); this file only shows and exports it.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { getFinancialYearStart } from '../../utils';
 import { periodMonths, partyOutstanding, billCurrency } from '@ledgora/tax-engine';
 import TableExport from '../import-export/TableExport';
+import { getAllClients } from '../../lib/data';
 
 const amt = (n) => (n ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '');
 
@@ -13,12 +14,15 @@ export default function PartyOutstandingReport({ bills, businessName }) {
   const thisYear = new Date().getFullYear();
   const [mode, setMode] = useState('fy');
   const [year, setYear] = useState(getFinancialYearStart());
+  // Opening balances typed on the party (Settings > Party > Opening balance) count as money owed from before.
+  const [openings, setOpenings] = useState([]);
+  useEffect(() => { getAllClients().then((c) => setOpenings((c || []).filter((x) => Number(x.openingBalance) > 0))).catch(() => {}); }, []);
   const currencies = [...new Set(bills.map(billCurrency))].sort((a, b) => (a === 'INR' ? -1 : b === 'INR' ? 1 : a.localeCompare(b)));
   const [currency, setCurrency] = useState('INR');
   const cur = currencies.includes(currency) ? currency : (currencies[0] || 'INR');
 
   const months = periodMonths(mode, year);
-  const rows = partyOutstanding(bills, months, cur);
+  const rows = partyOutstanding(bills, months, cur, openings);
   const hasEarlier = rows.some((r) => r.earlier > 0);
   const colTotal = (key) => rows.reduce((s, r) => s + (r.months[key] || 0), 0);
   const earlierTotal = rows.reduce((s, r) => s + r.earlier, 0);

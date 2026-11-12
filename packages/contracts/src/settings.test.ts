@@ -104,8 +104,8 @@ describe('parseSettingsPatch', () => {
     expect(r.values).toEqual({});
   });
   it('refuses keys that are not live yet instead of storing something nothing reads', () => {
-    const r = parseSettingsPatch({ 'txn.quickEntry': true });
-    expect(r.errors[0]?.key).toBe('txn.quickEntry');
+    const r = parseSettingsPatch({ 'biz.category': 'Retail' });
+    expect(r.errors[0]?.key).toBe('biz.category');
     expect(r.errors[0]?.message).toMatch(/coming soon/i);
     expect(r.values).toEqual({});
   });

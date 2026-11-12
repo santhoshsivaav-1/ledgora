@@ -6,6 +6,8 @@ import { promptAction } from '../../../components/ui/ConfirmModal';
 import { suggestGstRate } from '@ledgora/tax-engine';
 import { toast } from '../../../components/ui/Toast';
 import { currencySymbolFor } from './editorConstants';
+import { localToday } from '../../../utils';
+import { altUnitLabel, expiryState } from '../../items/itemExtras';
 
 // v1.10.37 — Sub-component: the Description input + product-suggestion
 // dropdown, with keyboard navigation. Extracted so LineItem stays lean
@@ -77,7 +79,10 @@ export const LineItem = memo(function LineItem({
   onFieldChange, onSelectProduct, onSetProductSearch,
   onAddCustomUnit, onRemoveCustomUnit, onRemove, clampNonNeg,
   isLastRow, onAddRow, isOnlyRow,
+  batches = null, serialStock = null, product = null, settings = {},
 }) {
+  const quick = !!settings['txn.quickEntry']; // Settings > Transaction > Quick entry: only item, qty, unit, rate and tax
+  const expired = item.expDate && item.expDate < localToday();
   // v1.10.37 — Keyboard shortcut: Enter on any input inside the LAST
   // row adds a new row. Muscle-memory for POS users — reported: "if
   // user hits Enter on last item field the natural expectation is a
@@ -114,7 +119,7 @@ export const LineItem = memo(function LineItem({
           currency={currency}
         />
       </div>
-      {invoiceOptions.showHSN && (
+      {invoiceOptions.showHSN && !quick && (
         <div className="line-item-field" style={{ flex: 1, position: 'relative' }}>
           <label className="form-label">HSN/SAC</label>
           <input type="text" className="form-input" value={item.hsn}
@@ -185,7 +190,7 @@ export const LineItem = memo(function LineItem({
           onFocus={(e) => e.target.select()}
           onChange={(e) => onFieldChange(item.id, 'rate', clampNonNeg(e.target.value))} />
       </div>
-      {invoiceOptions.showDiscount && (
+      {invoiceOptions.showDiscount && !quick && (
         <div className="line-item-field" style={{ flex: 1.8, minWidth: 200 }}>
           <label className="form-label">Discount</label>
           {/* v1.10.22 — two-mode discount: fixed rupees OR percent-of-line.
@@ -255,12 +260,21 @@ export const LineItem = memo(function LineItem({
           </select>
         </div>
       )}
-      {showGST && invoiceOptions.showCess && (profileCountry || 'India') === 'India' && (
+      {showGST && !quick && invoiceOptions.showCess && (profileCountry || 'India') === 'India' && (
         <div className="line-item-field" style={{ flex: 0.8 }}>
           <label className="form-label" title="GST Compensation Cess (tobacco / auto / coal etc.)">Cess %</label>
           <input type="number" min="0" max="500" step="any" className="form-input"
             value={item.cessPercent || 0}
             onChange={(e) => onFieldChange(item.id, 'cessPercent', clampNonNeg(e.target.value))} />
+        </div>
+      )}
+      {settings['item.mrp'] && !quick && (
+        <div className="line-item-field" style={{ flex: 1 }}>
+          <label className="form-label">MRP</label>
+          <input type="number" min="0" step="any" className="form-input" value={item.mrp ?? ''}
+            onChange={(e) => onFieldChange(item.id, 'mrp', e.target.value === '' ? undefined : clampNonNeg(e.target.value))}
+            style={Number(item.mrp) > 0 && Number(item.rate) > Number(item.mrp) ? { borderColor: '#d97706' } : undefined}
+            title={Number(item.mrp) > 0 && Number(item.rate) > Number(item.mrp) ? 'The rate is above the MRP' : 'Maximum retail price'} />
         </div>
       )}
       <div className="line-item-field line-item-delete">
@@ -272,7 +286,42 @@ export const LineItem = memo(function LineItem({
           option so user can directly enter product description into
           invoice directly". Hidden by default; expands on click. Persists
           with the item and renders under the item name in the PDF/preview. */}
-      <div className="line-item-description-row" style={{ flexBasis: '100%', marginTop: 4 }}>
+      {(product && (altUnitLabel(product) || (settings['txn.showPurchasePrice'] && Number(product.purchasePrice) > 0) || Number(product.stock) <= 0 || batches || serialStock)) && (
+        <div style={{ flexBasis: '100%', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          {altUnitLabel(product) && <span>{altUnitLabel(product)}</span>}
+          {settings['txn.showPurchasePrice'] && Number(product.purchasePrice) > 0 && (
+            <span title="What you paid; not printed">Bought at {formatCurrency(product.purchasePrice, currency || 'INR')}</span>
+          )}
+          {batches && batches.length > 0 && (
+            <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Batch
+              <select className="form-input" style={{ width: 'auto', padding: '0.2rem 0.4rem' }} value={item.batchNo || ''}
+                onChange={(e) => {
+                  const b = batches.find((x) => x.batchNo === e.target.value);
+                  onFieldChange(item.id, 'batchNo', e.target.value);
+                  onFieldChange(item.id, 'mfgDate', b?.mfgDate || '');
+                  onFieldChange(item.id, 'expDate', b?.expDate || '');
+                }}>
+                <option value="">Pick a batch</option>
+                {batches.map((b) => <option key={b.batchNo} value={b.batchNo}>{b.batchNo} · {b.qty} left{b.expDate ? ` · exp ${b.expDate}` : ''}</option>)}
+              </select>
+            </label>
+          )}
+          {item.expDate && (
+            <span style={{ color: expired ? '#dc2626' : expiryState(item.expDate, localToday()) === 'soon' ? '#d97706' : undefined, fontWeight: expired ? 600 : undefined }}>
+              {expired ? 'Expired ' : 'Expires '}{item.expDate}
+            </span>
+          )}
+        </div>
+      )}
+      {serialStock && (product?.serials?.length > 0 || serialStock.length > 0 || item.serials?.length > 0) && (
+        <div style={{ flexBasis: '100%' }}>
+          <textarea className="form-input" rows={1} aria-label="Serial numbers" style={{ fontSize: '0.82rem' }}
+            placeholder={`Serial numbers (${Number(item.quantity) || 0} needed). In stock: ${serialStock.slice(0, 4).join(', ')}${serialStock.length > 4 ? '…' : ''}`}
+            value={(item.serials || []).join(', ')}
+            onChange={(e) => onFieldChange(item.id, 'serials', e.target.value.split(/[\s,;]+/).filter(Boolean))} />
+        </div>
+      )}
+      <div className="line-item-description-row" style={{ flexBasis: '100%', marginTop: 4, display: quick ? 'none' : undefined }}>
         {item.description || item._descOpen ? (
           <textarea
             className="form-input"

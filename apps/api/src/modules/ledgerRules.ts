@@ -1,6 +1,7 @@
 // Vyapar parity Phase 4: the server side of the ledger. The decisions are the pure functions in @ledgora/tax-engine
 // (posting.ts); this file reads the documents they need and writes what they return, in the caller's transaction, so a
 // document and its postings are saved or refused together. Nothing outside `repost()` writes to ledger_entries.
+import { settingValue } from './settingsStore.ts';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
@@ -438,6 +439,9 @@ export async function syncLedger(tx: Tx, orgId: string, kind: LedgerKind, id: st
   const [row] = await tx.select().from(table).where(eq(table.id, id));
   if (!row) return;
   if (!(await ledgerEnabled(tx, row.businessId))) return;
+  // Settings > Accounting > Auto-post expenses: off, an expense is left out until "Post history again" picks it up.
+  if (kind === 'expense' && !(await settingValue(tx, row.businessId, 'acct.autoPostExpense')))
+    return;
   await repost(tx, orgId, {
     businessId: row.businessId,
     refType: kind,

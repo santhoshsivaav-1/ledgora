@@ -38,6 +38,8 @@ const PAYMENT_STATUS_COLORS = {
 // we couldn't reclaim ITC on the cess in GSTR-3B Table 4(A).
 // itcStatus (Vyapar parity P3-S1): how much of the line's GST is credit; eligible unless the user says otherwise.
 const emptyItem = { name: '', hsn: '', quantity: 1, rate: 0, taxPercent: 18, cessPercent: 0, itcStatus: 'eligible' };
+// Settings > GST > ITC default: a new line starts as eligible or ineligible for input credit.
+const newLine = (extra = {}) => ({ ...emptyItem, itcStatus: getAppSetting('gst.itcDefault') === 'ineligible' ? 'ineligible' : 'eligible', ...extra });
 
 
 const emptyForm = {
@@ -48,7 +50,7 @@ const emptyForm = {
   supplierAddress: '',
   supplierGstin: '',
   invoiceNumber: '',
-  items: [{ ...emptyItem }],
+  items: [newLine()],
   paymentStatus: 'Unpaid',
   interstate: false, // true ⇒ supplier charged IGST; false ⇒ CGST + SGST. Routes ITC correctly in GSTR-3B.
   applyRoundOff: false, // off by default — purchase bill totals are usually pre-rounded by the supplier. Users with suppliers that don't pre-round can opt in here.
@@ -93,7 +95,7 @@ export default function PurchaseBills() {
   const [fyFilter, setFyFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ ...emptyForm, items: [{ ...emptyItem }] });
+  const [form, setForm] = useState({ ...emptyForm, items: [newLine()] });
   // v1.10.22 — OCR modal state.
   const [showOCR, setShowOCR] = useState(false);
   // v1.10.30 — reported: "add a view only option modal type so can user
@@ -147,7 +149,7 @@ export default function PurchaseBills() {
     toast(msg, 'info');
   };
 
-  const fyOptions = getFYOptions();
+  const fyOptions = getFYOptions(5, new Date(), 4);
 
 
   // v1.10.65 (#58 item 3) — assign records saved before businesses were kept
@@ -248,7 +250,7 @@ export default function PurchaseBills() {
   }, []);
 
   const openAdd = () => {
-    setForm({ ...emptyForm, date: localToday(), items: [{ ...emptyItem }] });
+    setForm({ ...emptyForm, date: localToday(), items: [newLine()] });
     setEditingId(null);
     setShowForm(true);
   };
@@ -287,7 +289,7 @@ export default function PurchaseBills() {
   const closeForm = () => {
     setShowForm(false);
     setEditingId(null);
-    setForm({ ...emptyForm, items: [{ ...emptyItem }] });
+    setForm({ ...emptyForm, items: [newLine()] });
   };
 
   // v1.10.29 — reported: "option to view as pdf give it that will be
@@ -773,7 +775,7 @@ export default function PurchaseBills() {
     // Tab → Enter on the Add Item button now keeps the user in keyboard
     // flow instead of forcing a mouse click on the empty row.
     const focusKey = 'new-' + Date.now();
-    setForm(prev => ({ ...prev, items: [...prev.items, { ...emptyItem, _focusKey: focusKey }] }));
+    setForm(prev => ({ ...prev, items: [...prev.items, newLine({ _focusKey: focusKey })] }));
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-focus-key="${focusKey}"] input.form-input`);
       if (el) el.focus();

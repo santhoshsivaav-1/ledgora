@@ -3,7 +3,8 @@ import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, Che
 import { itc180ForPeriod } from '../purchases/purchaseExtras';
 import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getAllReceipts, getProfile, savePurchase } from '../../lib/data';
 import { promptAction } from '../../components/ui/ConfirmModal';
-import { exemptInward, interStateUnregistered, moveSezToZeroRated, rcmItcForPeriod, table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
+import { useAppSettings } from '../../lib/appSettings';
+import { compositionTax, exemptInward, interStateUnregistered, moveSezToZeroRated, rcmItcForPeriod, table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
@@ -73,7 +74,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
 
   const [advanceReceipts, setAdvanceReceipts] = useState([]);
   const [receipts, setReceipts] = useState([]); // P10-S5: TDS customers kept from receipts
-  const fyOptions = getFYOptions();
+  const fyOptions = getFYOptions(5, new Date(), 4);
   const currentYear = new Date().getFullYear();
   const yearOptions = [];
   for (let y = currentYear; y >= currentYear - 5; y--) yearOptions.push(y);
@@ -546,6 +547,10 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
     toast(`${returnType.toUpperCase()} marked as filed for this period`, 'success');
   };
 
+  const settings = useAppSettings();
+  const compositionOn = settings['gst.regType'] === 'composition';
+  const compRate = settings['gst.compRate'];
+  const composition = compositionTax(grandTotals.taxable, compRate);
   const isNilReturn = filteredBills.length === 0 && filteredExpenses.length === 0;
 
   // ========== CSV Exports ==========
@@ -1187,6 +1192,13 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
           </div>
         );
       })()}
+
+      {/* Settings > GST: a composition dealer pays tax at the composition rate on turnover (CMP-08), not on each invoice */}
+      {compositionOn && (
+        <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem', borderRadius: '8px', background: 'var(--info-bg, #eff6ff)', fontSize: '0.8rem' }}>
+          Composition scheme at {compRate}%: tax payable for this period is {formatCurrency(composition.total)} ({formatCurrency(composition.central)} central + {formatCurrency(composition.state)} state), paid with CMP-08. File GSTR-4 once a year.
+        </div>
+      )}
 
       {/* NIL Return notice */}
       {isNilReturn && (

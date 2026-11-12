@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Settings that were "Coming soon" now work (38 keys), and follow the plan.** Batch, serial and expiry tracking, MRP,
+  wholesale price, a secondary unit, item picture and barcode (with a scan box on the bill), party-wise item rates, TDS /
+  TCS flags and a mandatory opening balance on parties, billing name, quick entry, financial-year start month, quantity
+  decimals, amount in words in Hindi and Tamil, registration type, composition tax, quarterly (QRMP) due dates, HSN
+  digits, ITC default, payment mode / party balance / PAID stamp on prints, and "show both amounts" on a foreign-currency
+  bill. Batch, serial, secondary-unit, wholesale and party-rate settings belong to the Silver plan (a trial has them);
+  on Free they read as off and ask for an upgrade. See `docs/DECISIONS.md` (D-16 to D-20).
+
 - **The ledger (Vyapar parity Phase 4), plus the 180-day ITC rule and the TDS ledger (Phase 10).** Off until a business
   turns it on (*Accounting › Ledger setup*); with it off nothing is written and the app behaves as before. See
   `docs/ACCOUNTING.md`.

@@ -101,11 +101,12 @@ function Control({ id, settingKey, def, value, disabled, onChange }) {
   return <input className="ui-input" {...common} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
 }
 
-function Row({ k, value, canEdit, isOwner, onChange, highlight }) {
+function Row({ k, value, canEdit, isOwner, onChange, highlight, needsPlan }) {
   const def = SETTINGS[k];
   const id = `setting-${k}`;
   const locked = def.ownerOnly && !isOwner;
-  const disabled = !def.live || !canEdit || locked;
+  // A setting that belongs to a paid feature the plan lacks can be switched off but not on (the API says so too).
+  const disabled = !def.live || !canEdit || locked || !!def.managedAt || (!!needsPlan && !!value === false && def.control === 'switch');
   return (
     <div id={id} style={highlight ? { outline: '2px solid var(--link)', borderRadius: 8, transition: 'outline-color .3s' } : undefined}>
       <SettingRow
@@ -115,9 +116,11 @@ function Row({ k, value, canEdit, isOwner, onChange, highlight }) {
             {def.label}
             {def.ownerOnly && <span title="Owner only" aria-label="Owner only" style={{ marginLeft: 6 }}><Lock size={12} /></span>}
             {!def.live && <span style={soon} title="The screens do not use this yet">{comingSoonLabel(k)}</span>}
+            {needsPlan && <span style={soon} title="Not in your plan"><Link to="/settings/billing">Upgrade to use</Link></span>}
+            {def.managedAt && <span style={soon}><Link to={def.managedAt.href}>Change in its own screen</Link></span>}
           </span>
         }
-        help={locked && def.live ? `${def.help}. Only the owner can change this.` : def.help}
+        help={locked && def.live ? `${def.help}. Only the owner can change this.` : def.managedAt ? def.managedAt.note : def.help}
       >
         <Control id={`${id}-control`} settingKey={k} def={def} value={value} disabled={disabled} onChange={(v) => onChange(k, v)} />
       </SettingRow>
@@ -135,7 +138,7 @@ export default function SettingsTabPage({ tab }) {
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
   const [litDone, setLitDone] = useState(null);
-  const { settings, loading, error: loadError, set, refetch } = useSettings(businessId);
+  const { settings, locked: planLocked, loading, error: loadError, set, refetch } = useSettings(businessId);
   const info = SETTINGS_TABS.find((t) => t.id === tab);
   const sections = useMemo(() => sectionsOf(tab), [tab]);
   const hits = useMemo(() => searchSettings(q), [q]);
@@ -204,7 +207,7 @@ export default function SettingsTabPage({ tab }) {
       {sections.map((s) => (
         <SettingsSection key={s.title} title={s.title}>
           {s.keys.map((k) => (
-            <Row key={k} k={k} value={settings[k]} canEdit={can('settings:write')} isOwner={role === 'owner'} onChange={change} highlight={focus === k && litDone !== focus} />
+            <Row key={k} k={k} value={settings[k]} canEdit={can('settings:write')} isOwner={role === 'owner'} needsPlan={planLocked[k]} onChange={change} highlight={focus === k && litDone !== focus} />
           ))}
         </SettingsSection>
       ))}

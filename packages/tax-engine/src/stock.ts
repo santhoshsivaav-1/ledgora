@@ -30,7 +30,10 @@ export const stockEffect = (
   const out: Record<string, number> = {};
   if (!sign) return out;
   for (const it of items || []) {
-    const q = Number(it?.quantity) || 0;
+    // A line sold in the item's secondary unit (Settings > Item > Secondary unit) carries unitFactor: how many primary
+    // units one line unit is (a PCS line of a BOX = 12 PCS item has 1/12). Lines without it count as before.
+    const factor = Number(it?.unitFactor) > 0 ? Number(it.unitFactor) : 1;
+    const q = (Number(it?.quantity) || 0) * factor;
     if (!it?.productId || !q) continue;
     out[it.productId] = Math.round(((out[it.productId] || 0) + sign * q) * 1000) / 1000;
   }

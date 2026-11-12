@@ -1,6 +1,8 @@
 // Public API of @ledgora/tax-engine. Pure functions only: no I/O, no React, no browser APIs.
 export type { Rec, Numeric } from './types.ts';
 export * from './words.ts';
+export * from './wordsIndic.ts';
+export * from './gstDue.ts';
 export * from './money.ts';
 export * from './lineTax.ts';
 export * from './totals.ts';

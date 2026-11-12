@@ -1,10 +1,12 @@
 import { getAppSetting } from '../../lib/appSettings';
 import React, { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
-import { numberToWords, printedSubtotal, formatCurrency, INVOICE_TYPES, getCountryConfig, CURRENCY_NAMES, formatExchangeRateLine, getAccountById, getPaperSize, resolveLineDiscount, htmlHasText, splitNumberedTerms, invoiceOptionOn, DEFAULT_DECLARATION, filledOrderDetails, formatShortDate } from '../../utils';
+import { amountInWordsLang } from '@ledgora/tax-engine';
+import { formatQty, numberToWords, printedSubtotal, formatCurrency, INVOICE_TYPES, getCountryConfig, CURRENCY_NAMES, formatExchangeRateLine, getAccountById, getPaperSize, resolveLineDiscount, htmlHasText, splitNumberedTerms, invoiceOptionOn, DEFAULT_DECLARATION, filledOrderDetails, formatShortDate } from '../../utils';
 import { getPrintSettings, getLabel, formatCurrencyEx, formatDate } from './printSettingsStore';
 import InvoiceGridLayout, { HsnSummaryTable } from '../invoices/editor/InvoiceGridLayout';
 import TaxSummary from './TaxSummary';
+import ItemSubLines from './ItemSubLines';
 import TotalsPanel from './TotalsPanel';
 
 // P11-S2: the QR encoder loads when a QR is first drawn, not with the app.
@@ -144,7 +146,8 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   };
 
   const amountInWords = (num) => {
-    if (currencySymbol === 'INR') return numberToWords(num);
+    // Settings > General > Amount in words language (rupees only; other currencies stay in English).
+    if (currencySymbol === 'INR') return amountInWordsLang(num, getAppSetting('fmt.wordsLang'));
     const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
     const convert = (n) => {
@@ -399,7 +402,8 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       <div className="inv-parties" style={padStyle}>
         <div className="inv-party">
           <h4 className="inv-section-label">{getLabel(_ps_labels, 'billTo')}</h4>
-          <p className="inv-party-name">{client?.name || 'Client Name'}</p>
+          <p className="inv-party-name">{details?.billingName?.trim() || client?.name || 'Client Name'}</p>
+          {details?.billingName?.trim() && client?.name && details.billingName.trim() !== client.name && <p className="inv-party-details" style={{ margin: 0 }}>c/o {client.name}</p>}
           <div className="inv-party-details">
             {showClientAddress && client?.address && <p>{client.address}</p>}
             {showClientAddress && (client?.city || client?.pin) && <p>{[client.city, client.pin].filter(Boolean).join(' - ')}</p>}
@@ -1023,6 +1027,10 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       {options.exchangeRate && currencySymbol !== 'INR' && (
         <div data-pdf-page-boundary="" style={{ margin: '2px 0 6px', fontSize: '0.92em' }}>
           {formatExchangeRateLine(currencySymbol, options.exchangeRate, profile?.country === 'India' || !profile?.country ? 'INR' : sellerCC.currency)}
+          {/* Settings > Multi Currency > Show both amounts: the bill's total in rupees at its own rate */}
+          {getAppSetting('mc.showBoth') && Number(options.exchangeRate) > 0 && isIndia && (
+            <strong> · Total in INR: {formatCurrency((Number(totals?.total) || 0) * Number(options.exchangeRate))}</strong>
+          )}
         </div>
       )}
     </>
@@ -1208,14 +1216,10 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
                       name in a smaller, muted font. Renders only when set so
                       pre-existing invoices without a description look
                       identical. */}
-                  {item.description && (
-                    <div style={{ fontSize: '0.78em', color: '#475569', marginTop: 2, whiteSpace: 'pre-wrap' }}>
-                      {item.description}
-                    </div>
-                  )}
+                  <ItemSubLines item={item} fmt={fmt} style={{ fontSize: '0.78em', color: '#475569', marginTop: 2 }} />
                 </td>
                 {showHSN && <td className="inv-td inv-td-center inv-td-muted">{item.hsn || '-'}</td>}
-                {showItemQty && <td className="inv-td inv-td-center">{item.quantity}{showItemUnit && item.unit ? ` ${item.unit}` : ''}</td>}
+                {showItemQty && <td className="inv-td inv-td-center">{formatQty(item.quantity)}{showItemUnit && item.unit ? ` ${item.unit}` : ''}</td>}
                 {showRateColumn && <td className="inv-td inv-td-right">{fmt(item.rate)}</td>}
                 {hasAnyDiscount && <td className="inv-td inv-td-right">{discount > 0 ? fmt(discount) : '-'}</td>}
                 {showGST && (
@@ -1495,6 +1499,21 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
           </div>
         ));
       })()}
+
+      {/* Settings > Print: payment mode, party balance and the PAID stamp, for every layout */}
+      {options.payInfo && (getAppSetting('print.show.paymentMode') || getAppSetting('print.show.partyBalance') || (getAppSetting('print.show.paidStamp') && options.payInfo.fullyPaid)) && (
+        <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap', padding: '0.4rem 2rem', fontSize: '0.85em' }}>
+          {getAppSetting('print.show.paymentMode') && options.payInfo.modes.length > 0 && (
+            <span>Paid by: <strong style={{ textTransform: 'capitalize' }}>{options.payInfo.modes.join(', ')}</strong></span>
+          )}
+          {getAppSetting('print.show.partyBalance') && (
+            <span>Previous balance: <strong>{fmt(options.payInfo.balanceBefore)}</strong> · Current balance: <strong>{fmt(options.payInfo.balanceAfter)}</strong></span>
+          )}
+          {getAppSetting('print.show.paidStamp') && options.payInfo.fullyPaid && (
+            <span style={{ border: '2px solid #15803d', color: '#15803d', fontWeight: 800, letterSpacing: 2, padding: '0 10px', borderRadius: 4, transform: 'rotate(-6deg)' }}>PAID</span>
+          )}
+        </div>
+      )}
 
       {/* Watermark for proforma */}
       {invoiceType === 'proforma' && (

@@ -80,6 +80,8 @@ export default function InvoiceTypePanel({
                     onChange={(e) => setInvoiceOptions(prev => ({ ...prev, customTitle: e.target.value }))}
                     placeholder={typeConfig?.title || 'TAX INVOICE'} />
                 </div>
+                {/* Settings > Multi Currency > Enable: off hides the boxes for a rupee bill (a foreign bill keeps them) */}
+                {(getAppSetting('mc.enabled') || invoiceOptions.currency !== 'INR') && (
                 <div className="form-group" style={{ marginBottom: '0.75rem' }}>
                   <label className="form-label">Currency</label>
                   <select className="form-input" value={invoiceOptions.currency}
@@ -90,6 +92,7 @@ export default function InvoiceTypePanel({
                     ))}
                   </select>
                 </div>
+                )}
                 {invoiceOptions.currency !== 'INR' && (
                   <div className="form-group" style={{ marginBottom: '0.75rem' }}>
                     <label className="form-label">Exchange Rate (optional, snapshot)</label>

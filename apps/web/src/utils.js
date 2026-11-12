@@ -1,6 +1,6 @@
 // Tax and invoice maths now lives in @ledgora/tax-engine (Phase 0). This file re-exports it so
 // every existing import of './utils' keeps working while features move to the new package.
-import { BUILTIN_UNITS, INDIAN_STATES, INVOICE_TYPES, amountDue, getFinancialYearStart, localToday, paymentStatusFor, toLocalIsoDate } from '@ledgora/tax-engine';
+import { gstDuesForPeriod, bookYearStart, bookYearBounds, BUILTIN_UNITS, INDIAN_STATES, INVOICE_TYPES, amountDue, localToday, paymentStatusFor, toLocalIsoDate } from '@ledgora/tax-engine';
 export { BUILTIN_UNITS, DEFAULT_NUMBER_SETTINGS, DOC_TYPE_PREFIXES, GST_DOC_NUMBER, GST_PORTAL_RATES, INDIAN_STATES, INVOICE_TYPES, MAX_START_NUMBER, REMOVED_TCS_SECTIONS, SALES_INVOICE_TYPES, TCS_SECTIONS, TDS_SECTIONS, TDS_TCS_THRESHOLD, amountDue, appliedStock, b2clThreshold, businessKeyOf, calculateLineItemTax, calculateRoundOff, clientYearToDate, computeInvoiceTotals, counterKeyFor, countsAsSales, decodeGstin, formatDocNumber, getFilingPeriod, getFinancialYearLabel, getFinancialYearStart, getStateCode, gstinChecksumOk, isCancelledBill, isCreditNote, isInterstateSupply, isUnionTerritoryWithoutLegislature, localToday, nextCounterValue, numberFormatProblem, numberSeriesFor, numberToWords, ownPrefixProblem, parseLocalDate, paymentStatusFor, placeOfSupplyLabel, printedSubtotal, resolveLineDiscount, roundQty, salesSign, setOffITC, splitLineTax, startFor, stateNameForCode, stockDelta, stockEffect, templateTotals, toLocalIsoDate } from '@ledgora/tax-engine';
 import { formatDateGST as engineFormatDate } from '@ledgora/tax-engine';
 import { getAppSetting } from './lib/appSettings';
@@ -262,7 +262,11 @@ export const getCountriesForRegion = (regionMode = 'both') => {
 //   GSTR-3B  — 20th of the following month
 //   Form 26Q — 31st of the month following quarter end (Jul / Oct / Jan / Apr)
 //   Form 27EQ — 15th of the month following quarter end
-export const getUpcomingFilings = (today = new Date()) => {
+export const getUpcomingFilings = (today = new Date(), gstOpts = {
+  frequency: getAppSetting('gst.frequency'), regType: getAppSetting('gst.regType'), stateCode: null,
+}) => {
+  // Settings > GST: a quarterly (QRMP), composition or unregistered business has other GST due dates than the monthly ones.
+  const monthlyRegular = (gstOpts.frequency ?? 'monthly') === 'monthly' && (gstOpts.regType ?? 'regular') === 'regular';
   const out = [];
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const push = (label, dueDate) => {
@@ -278,8 +282,15 @@ export const getUpcomingFilings = (today = new Date()) => {
     const nextMonth = new Date(t.getFullYear(), t.getMonth() + i, 1);
     const m = nextMonth.getMonth();
     const y = nextMonth.getFullYear();
-    push(`GSTR-1 (${nextMonth.toLocaleString('en-IN', { month: 'short', year: 'numeric' })})`, new Date(y, m + 1, 11));
-    push(`GSTR-3B (${nextMonth.toLocaleString('en-IN', { month: 'short', year: 'numeric' })})`, new Date(y, m + 1, 20));
+    if (monthlyRegular) {
+      push(`GSTR-1 (${nextMonth.toLocaleString('en-IN', { month: 'short', year: 'numeric' })})`, new Date(y, m + 1, 11));
+      push(`GSTR-3B (${nextMonth.toLocaleString('en-IN', { month: 'short', year: 'numeric' })})`, new Date(y, m + 1, 20));
+    } else {
+      for (const d of gstDuesForPeriod(`${y}-${String(m + 1).padStart(2, '0')}`, gstOpts)) {
+        const [dy, dm, dd] = d.due.split('-').map(Number);
+        push(d.label, new Date(dy, dm - 1, dd));
+      }
+    }
     // Quarterly TDS / TCS — applies to the quarter the month falls into.
     const quarterEnd = m % 3 === 2; // Mar / Jun / Sep / Dec
     if (quarterEnd) {
@@ -661,17 +672,13 @@ export const belongsToProfile = (record, profile) => {
 // duplicated in 5 files (Dashboard / PurchaseBills / ExpenseTracker /
 // GSTReturns / ReportsView) — extracted here so a bugfix only has to
 // touch one place. Each entry: { value, label, from, to }.
-export const getFYOptions = (n = 5, today = new Date()) => {
-  const currentYear = getFinancialYearStart(today);
+export const getFYOptions = (n = 5, today = new Date(), startMonth = getAppSetting('fy.startMonth')) => {
+  // Settings > General > Financial year starts in. GST returns and income tax pass 4: those years are April to March by law.
+  const currentYear = bookYearStart(today, startMonth);
   const options = [];
   for (let i = 0; i < n; i++) {
-    const y = currentYear - i;
-    options.push({
-      value: `${y}-${y + 1}`,
-      label: `FY ${y}-${String(y + 1).slice(-2)}`,
-      from: `${y}-04-01`,
-      to: `${y + 1}-03-31`,
-    });
+    const { from, to, label } = bookYearBounds(currentYear - i, startMonth);
+    options.push({ value: label, label: `FY ${label}`, from, to });
   }
   return options;
 };
@@ -1205,3 +1212,13 @@ export const savedPdfNameFor = (bill) => ({
 });
 
 
+
+// Settings > General > Quantity decimals: the decimals a quantity prints with. The default (2) keeps whole quantities bare
+// ("12", as they have always printed) and shows fractions to two places; any other choice fixes the number of decimals.
+export const formatQty = (q, decimals = getAppSetting('fmt.qtyDecimals')) => {
+  const n = Number(q);
+  if (!Number.isFinite(n)) return '';
+  const d = Number.isInteger(decimals) && decimals >= 0 && decimals <= 4 ? decimals : 2;
+  if (d === 2 && Number.isInteger(n)) return String(n);
+  return n.toFixed(d);
+};

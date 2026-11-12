@@ -1,5 +1,6 @@
 import { useAppSettings } from '../../lib/appSettings';
 import { itemFieldVisibility, newItemDefaults, lowStockLimit } from './itemFields';
+import { itemExtraVisibility, barcodeTaken, parseSerials, hsnDigitsProblem } from './itemExtras';
 import { useState, useEffect, useRef } from 'react';
 import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download } from 'lucide-react';
 import { getAllProducts, saveProduct, deleteProduct, getProfile, getStockAlertSettings } from '../../lib/data';
@@ -20,11 +21,33 @@ import { PRODUCT_TEMPLATE, downloadCsv, productCsvToRecords } from '../import-ex
 const emptyForm = {
   name: '', hsn: '', purchasePrice: '', sellingPrice: '', taxPercent: '', unit: 'Pcs', stock: '', description: '',
   itemType: '', category: '', minStock: '', customFields: {},
+  mrp: '', wholesalePrice: '', wholesaleMinQty: '', altUnit: '', altFactor: '', barcode: '', image: '', regionalName: '',
+  discountPercent: '', batches: [], serialsText: '',
 };
+
+// A picture is kept on the product as a small data URL (longest side 160px), so it needs no file storage.
+function readItemImage(file, done) {
+  if (!file) return;
+  if (file.size > 4 * 1024 * 1024) { toast('Pick a picture under 4 MB', 'warning'); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 160 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * k));
+    c.height = Math.max(1, Math.round(img.height * k));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    done(c.toDataURL('image/jpeg', 0.8));
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('That file is not a picture', 'warning'); };
+  img.src = url;
+}
 
 export default function InventoryView() {
   const appSettings = useAppSettings();
   const show = itemFieldVisibility(appSettings); // Settings > Item
+  const extra = itemExtraVisibility(appSettings); // MRP, wholesale, secondary unit, image, barcode, batch, serial
   const startForm = () => ({ ...emptyForm, ...newItemDefaults(appSettings) });
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
@@ -89,6 +112,10 @@ export default function InventoryView() {
       category: product.category || '',
       minStock: product.minStock ?? '',
       customFields: product.customFields || {},
+      mrp: product.mrp ?? '', wholesalePrice: product.wholesalePrice ?? '', wholesaleMinQty: product.wholesaleMinQty ?? '',
+      altUnit: product.altUnit || '', altFactor: product.altFactor ?? '', barcode: product.barcode || '', image: product.image || '',
+      regionalName: product.regionalName || '', discountPercent: product.discountPercent ?? '',
+      batches: product.batches || [], serialsText: (product.serials || []).join('\n'),
     });
     setEditingId(product.id);
     setShowForm(true);
@@ -110,6 +137,23 @@ export default function InventoryView() {
     if (!Number.isFinite(gst) || gst < 0 || gst > 100) {
       toast('GST % must be between 0 and 100', 'warning');
       return;
+    }
+    const hsnProblem = show.hsn && form.hsn.trim() ? hsnDigitsProblem(form.hsn, appSettings['gst.hsnDigits']) : null;
+    if (hsnProblem) { toast(hsnProblem, 'warning'); return; }
+    if (extra.barcode && form.barcode.trim()) {
+      const twin = barcodeTaken(products, form.barcode, editingId);
+      if (twin) { toast(`The barcode ${form.barcode.trim()} is already used by ${twin.name}`, 'warning'); return; }
+    }
+    if (extra.altUnit && form.altUnit.trim() && !(Number(form.altFactor) > 0)) {
+      toast('Enter how many secondary units make one primary unit', 'warning'); return;
+    }
+    const serials = extra.serial ? parseSerials(form.serialsText) : [];
+    if (extra.serial && serials.length && form.stock !== '' && serials.length !== Number(form.stock)) {
+      toast(`Stock is ${form.stock} but ${serials.length} serial number${serials.length === 1 ? '' : 's'} entered`, 'warning'); return;
+    }
+    const batches = extra.batch ? (form.batches || []).filter(b => String(b.batchNo || '').trim()) : [];
+    if (extra.batch && batches.length && form.stock !== '' && Math.abs(batches.reduce((n, b) => n + (Number(b.qty) || 0), 0) - Number(form.stock)) > 0.0005) {
+      toast('Batch quantities must add up to the stock quantity', 'warning'); return;
     }
     try {
       // v1.10.29 — Persist both prices. `rate` mirrors sellingPrice so any
@@ -134,6 +178,19 @@ export default function InventoryView() {
         category: form.category.trim() || undefined,
         minStock: form.minStock === '' ? undefined : Math.max(0, Number(form.minStock) || 0),
         customFields: Object.keys(form.customFields || {}).length ? form.customFields : undefined,
+        // Settings > Item extras. A box that is switched off keeps what the product already holds.
+        ...(extra.mrp ? { mrp: form.mrp === '' ? undefined : Math.max(0, Number(form.mrp) || 0) } : {}),
+        ...(extra.wholesale ? {
+          wholesalePrice: form.wholesalePrice === '' ? undefined : Math.max(0, Number(form.wholesalePrice) || 0),
+          wholesaleMinQty: form.wholesaleMinQty === '' ? undefined : Math.max(0, Number(form.wholesaleMinQty) || 0),
+        } : {}),
+        ...(extra.altUnit ? { altUnit: form.altUnit.trim() || undefined, altFactor: form.altUnit.trim() ? Number(form.altFactor) : undefined } : {}),
+        ...(extra.barcode ? { barcode: form.barcode.trim() || undefined } : {}),
+        ...(extra.image ? { image: form.image || undefined } : {}),
+        ...(extra.regional ? { regionalName: form.regionalName.trim() || undefined } : {}),
+        ...(extra.discount ? { discountPercent: form.discountPercent === '' ? undefined : Math.min(100, Math.max(0, Number(form.discountPercent) || 0)) } : {}),
+        ...(extra.batch ? { batches: batches.length ? batches.map(b => ({ batchNo: String(b.batchNo).trim(), mfgDate: b.mfgDate || '', expDate: b.expDate || '', qty: Number(b.qty) || 0 })) : undefined } : {}),
+        ...(extra.serial ? { serials: serials.length ? serials : undefined } : {}),
       };
       await saveProduct(product);
       toast(editingId ? 'Product updated' : 'Product added', 'success');
@@ -160,6 +217,8 @@ export default function InventoryView() {
       }
     }
   };
+
+  const setBatch = (i, patch) => setForm(prev => ({ ...prev, batches: prev.batches.map((b, j) => (j === i ? { ...b, ...patch } : b)) }));
 
   const updateField = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -328,6 +387,111 @@ export default function InventoryView() {
                     onChange={e => updateField('description', e.target.value)} placeholder="Brief description..." />
                 </div>
               )}
+              {extra.mrp && (
+                <div className="form-group">
+                  <label className="form-label">MRP</label>
+                  <input type="number" className="form-input" value={form.mrp} min="0" step="any" placeholder="0.00"
+                    onChange={e => updateField('mrp', e.target.value)} title="Maximum retail price printed on the pack" />
+                </div>
+              )}
+              {extra.wholesale && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Wholesale price</label>
+                    <input type="number" className="form-input" value={form.wholesalePrice} min="0" step="any" placeholder="0.00"
+                      onChange={e => updateField('wholesalePrice', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Wholesale from quantity</label>
+                    <input type="number" className="form-input" value={form.wholesaleMinQty} min="0" step="any" placeholder="e.g. 10"
+                      onChange={e => updateField('wholesaleMinQty', e.target.value)}
+                      title="A sale line at or above this quantity starts at the wholesale price" />
+                  </div>
+                </>
+              )}
+              {extra.discount && (
+                <div className="form-group">
+                  <label className="form-label">Discount %</label>
+                  <input type="number" className="form-input" value={form.discountPercent} min="0" max="100" step="any" placeholder="0"
+                    onChange={e => updateField('discountPercent', e.target.value)} title="A new sale line for this item starts with this discount" />
+                </div>
+              )}
+              {extra.altUnit && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Secondary unit</label>
+                    <select className="form-input" value={form.altUnit} onChange={e => updateField('altUnit', e.target.value)}>
+                      <option value="">None</option>
+                      {units.filter(u => u.label !== form.unit).map(u => <option key={u.label} value={u.label}>{u.label}</option>)}
+                    </select>
+                  </div>
+                  {form.altUnit && (
+                    <div className="form-group">
+                      <label className="form-label">1 {form.unit || 'unit'} = how many {form.altUnit}?</label>
+                      <input type="number" className="form-input" value={form.altFactor} min="0" step="any" placeholder="e.g. 12"
+                        onChange={e => updateField('altFactor', e.target.value)} />
+                    </div>
+                  )}
+                </>
+              )}
+              {extra.barcode && (
+                <div className="form-group">
+                  <label className="form-label">Barcode</label>
+                  <input type="text" className="form-input" value={form.barcode} maxLength={40} placeholder="Scan or type"
+                    onChange={e => updateField('barcode', e.target.value)} />
+                </div>
+              )}
+              {extra.regional && (
+                <div className="form-group">
+                  <label className="form-label">Name in a second language</label>
+                  <input type="text" className="form-input" value={form.regionalName} maxLength={120}
+                    onChange={e => updateField('regionalName', e.target.value)} title="Printed under the item name when Regional item names is on" />
+                </div>
+              )}
+              {extra.image && (
+                <div className="form-group">
+                  <label className="form-label">Picture</label>
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="form-input"
+                    onChange={e => readItemImage(e.target.files?.[0], (img) => updateField('image', img))} />
+                  {form.image && (
+                    <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <img src={form.image} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6 }} />
+                      <button type="button" className="btn btn-secondary" onClick={() => updateField('image', '')}>Remove</button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {extra.batch && (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Opening batches</label>
+                  {(form.batches || []).map((b, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <input className="form-input" style={{ flex: 2, minWidth: 90 }} placeholder="Batch no." value={b.batchNo || ''} aria-label="Batch number"
+                        onChange={e => setBatch(i, { batchNo: e.target.value })} />
+                      <input type="date" className="form-input" style={{ flex: 2, minWidth: 120 }} value={b.mfgDate || ''} aria-label="Manufactured on" title="Manufactured on"
+                        onChange={e => setBatch(i, { mfgDate: e.target.value })} />
+                      <input type="date" className="form-input" style={{ flex: 2, minWidth: 120 }} value={b.expDate || ''} aria-label="Expires on" title="Expires on"
+                        onChange={e => setBatch(i, { expDate: e.target.value })} />
+                      <input type="number" className="form-input" style={{ flex: 1, minWidth: 70 }} placeholder="Qty" min="0" step="any" value={b.qty ?? ''} aria-label="Batch quantity"
+                        onChange={e => setBatch(i, { qty: e.target.value })} />
+                      <button type="button" className="icon-btn icon-btn-red" aria-label="Remove batch"
+                        onClick={() => setForm(prev => ({ ...prev, batches: prev.batches.filter((_, j) => j !== i) }))}><X size={14} /></button>
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-secondary"
+                    onClick={() => setForm(prev => ({ ...prev, batches: [...(prev.batches || []), { batchNo: '', mfgDate: '', expDate: '', qty: '' }] }))}>
+                    <Plus size={14} /> Add batch
+                  </button>
+                </div>
+              )}
+              {extra.serial && (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Opening serial numbers</label>
+                  <textarea className="form-input" rows={3} value={form.serialsText} placeholder="One per line, or separated by commas"
+                    onChange={e => updateField('serialsText', e.target.value)} />
+                  <small className="field-hint">{parseSerials(form.serialsText).length} entered</small>
+                </div>
+              )}
               {show.custom.map(f => (
                 <div className="form-group" key={f.label}>
                   <label className="form-label">{f.label}</label>
@@ -374,6 +538,7 @@ export default function InventoryView() {
                   <th>Name</th>
                   {show.hsn && <th>HSN/SAC</th>}
                   <th>Rate</th>
+                  {extra.mrp && <th>MRP</th>}
                   {show.tax && <th>GST %</th>}
                   <th>Unit</th>
                   {show.stock && <th>Stock</th>}
@@ -383,9 +548,13 @@ export default function InventoryView() {
               <tbody>
                 {filtered.map(product => (
                   <tr key={product.id}>
-                    <td className="font-medium" title={product.description || ''}>{product.name}</td>
+                    <td className="font-medium" title={product.description || ''}>
+                      {extra.image && product.image && <img src={product.image} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }} />}
+                      {product.name}
+                    </td>
                     {show.hsn && <td className="text-muted">{product.hsn || '-'}</td>}
                     <td className="font-bold">{product.rate ? formatCurrency(product.rate, profileCurrency) : '-'}</td>
+                    {extra.mrp && <td>{product.mrp ? formatCurrency(product.mrp, profileCurrency) : '-'}</td>}
                     {show.tax && <td>{product.taxPercent ? `${product.taxPercent}%` : '-'}</td>}
                     <td className="text-muted">{product.unit || 'Nos'}</td>
                     {show.stock && <td>

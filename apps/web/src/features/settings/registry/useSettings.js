@@ -8,17 +8,24 @@ import { setAppSettings } from '../../../lib/appSettings';
 // The older reader of these values (/v1/businesses/:id/settings and the screens built on it) is untouched.
 
 const keyOf = (businessId) => ['settings', businessId];
+// The keys the plan does not include (setting -> feature), kept beside the values; the screen shows an upgrade note on them.
+const lockedKey = (businessId) => ['settings-locked', businessId];
 
 export function useSettings(businessId) {
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: keyOf(businessId),
     enabled: !!businessId,
-    queryFn: async () => (await apiClient.get(`/v1/settings?businessId=${businessId}`)).settings,
+    queryFn: async () => {
+      const res = await apiClient.get(`/v1/settings?businessId=${businessId}`);
+      qc.setQueryData(lockedKey(businessId), res.locked || {});
+      return res.settings;
+    },
   });
+  const lockedQuery = useQuery({ queryKey: lockedKey(businessId), queryFn: async () => ({}), enabled: false, staleTime: Infinity });
   const mutation = useMutation({
     mutationFn: async ({ key, value }) =>
-      (await apiClient.patch('/v1/settings', { businessId, values: { [key]: value } }, { quietForbidden: true })).settings,
+      apiClient.patch('/v1/settings', { businessId, values: { [key]: value } }, { quietForbidden: true }),
     onMutate: async ({ key, value }) => {
       await qc.cancelQueries({ queryKey: keyOf(businessId) });
       const previous = qc.getQueryData(keyOf(businessId));
@@ -26,13 +33,15 @@ export function useSettings(businessId) {
       return { previous };
     },
     onError: (_e, _v, ctx) => qc.setQueryData(keyOf(businessId), ctx?.previous),
-    onSuccess: (settings) => {
-      qc.setQueryData(keyOf(businessId), settings);
-      setAppSettings(businessId, settings);
+    onSuccess: (res) => {
+      qc.setQueryData(keyOf(businessId), res.settings);
+      qc.setQueryData(lockedKey(businessId), res.locked || {});
+      setAppSettings(businessId, res.settings);
     },
   });
   return {
     settings: query.data,
+    locked: lockedQuery.data || {},
     loading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

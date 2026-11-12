@@ -22,6 +22,11 @@ asks; the answer is written here before work continues.
 | D-13 | What is due to the supplier on a reverse-charge bill | total incl. RCM tax / total excl. RCM tax | **Exclude the RCM tax.** The tax is paid to the government through "Record RCM payment", which makes the ITC claimable in that month (3B 4(A)(3)) | Owner | 2026-11-12 | P3, P10 |
 | D-14 | GST on advances received (GSTR-1 Table 11) | every unallocated receipt / services only | **Services only** (Notification 66/2017-CT: no GST on advances for goods). The receipt asks "Advance for services?" with a rate and place of supply | Owner | 2026-11-12 | P10 |
 | D-15 | E-invoice (IRN) | offline JSON / provider API / skip | **Offline only**: build the INV-1 JSON, the user uploads it on the IRP and pastes back IRN, Ack no/date and signed QR; no credentials stored | Owner | 2026-11-12 | P8, P10 |
+| D-16 | Which plan gets batch / serial / secondary unit / wholesale / party-wise rates | Free / Silver / Gold | **Silver and Gold** (new feature `inventory_pro`). Free keeps the basic item form. A trial is Gold, so it has them | Claude (default, needs owner sign-off) | 2026-11-12 | SaaS |
+| D-17 | What a setting does on a plan that lacks its feature | hide it / read as off and refuse to turn on | **Reads as its default, can be switched off but not on**; what was saved is kept and returns on upgrade (`SETTING_FEATURE` in `plans.ts`) | Claude (default, needs owner sign-off) | 2026-11-12 | SaaS, P8 |
+| D-18 | "Enable accounting ledger" in Settings | plain switch / mirror of the real flag | **Mirror.** Shown from the real flag, changed only on the Accounting screen, which compares party balances first. Settings refuses the write | Claude (default, needs owner sign-off) | 2026-11-12 | P4, P8 |
+| D-19 | Multi currency | exchange-rate table / per-bill rate | **Per-bill rate stays** (it already existed). "Enable" defaults to on so no existing business loses the boxes; "Show both amounts" prints the INR total. No rate table | Claude (default, needs owner sign-off) | 2026-11-12 | P8 |
+| D-20 | Financial-year start month | change everything / books and reports only | **Year switchers of Dashboard, Reports and Expenses only.** GST returns, purchases (ITC), income tax and invoice numbering stay April to March, which the law fixes | Claude (default, needs owner sign-off) | 2026-11-12 | P8 |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
@@ -485,3 +490,76 @@ must review before the slice's Beta label (if any) is removed. Every number that
 8. **Settings made live:** `gst.rcm` (default changed to on, as the boxes always showed), `gst.einvoice.enabled`, `gst.tcs`
    (new bills start with the TCS line on) and `gst.tan` (validated, shown in the Form 27EQ report's meta).
 
+
+## Notes recorded during the settings completion and the Phase 0-12 audit (2026-11-12)
+
+Judgement calls, listed so a reviewer can overturn them. ⚠️ marks money or tax treatment.
+
+1. **Settings that were "Coming soon" and are now live (38 keys).** Before: 108 keys, 63 live, 45 not (the registry, not the
+   "about 55" of the request). Now: 106 keys, 101 live, 5 not; 2 more moved to the screen that owns them (item 10). The 5
+   still not live are `biz.type`, `biz.category`, `ui.lang`, `gst.exemptLabel`, `party.defaultKind` (item 12). The 38:
+   - *Item:* MRP, wholesale price (with a minimum quantity), secondary unit (with a conversion), picture, barcode, batch
+     (batch number, manufacture and expiry), serial numbers, item-wise discount, barcode format. Product form, bill
+     line (rate by party, wholesale or sale price; batch picker with expiry; serial box; MRP; conversion hint) and a
+     scan box on the bill. Pure rules in `apps/web/src/features/items/itemExtras.js`, 18 tests.
+   - *Party:* party-wise item rate, TDS / TCS flags (a new bill for that party starts with the line on), opening balance
+     (mandatory when the setting says so; counted in Party outstanding as money from before).
+   - *Transaction:* billing name, quick entry, barcode scan, purchase price on the row.
+   - *Print:* description, MRP, batch (with serials), second-language item name, payment mode, party balance, PAID stamp.
+   - *Regional:* financial-year start month, quantity decimals, amount in words in Hindi and Tamil.
+   - *GST:* registration type (a new bill starts as Composition or Bill of Supply), composition rate (tax payable shown on
+     the returns screen), return frequency (filing dates and the guide), HSN digits (checked when saving a sale), ITC
+     default (new purchase lines), e-way bill switch (the register is empty when off).
+   - *Accounting and currency:* see D-18, D-19; auto-post expenses (off leaves an expense out of the ledger until
+     "Post history again"); stock valuation (weighted average only, D-11).
+2. **Defaults changed to keep today's behaviour:** `print.show.description` true (a description has always printed),
+   `mc.enabled` true (the currency box has always been on the bill), `item.barcodeFormat` ean13 (the label page's default).
+3. **Batch and serial stock are worked out, never stored:** opening batches + purchase bills (+ lines) − sales + credit
+   notes − debit notes that return goods. An edit or a delete cannot leave a batch wrong. The cost is a scan of the
+   bills in memory when a bill is open, fine to a few thousand documents, not profiled beyond that.
+4. **A line in the secondary unit moves stock by `unitFactor`** (`stockEffect` multiplies by it; a line without one counts
+   as before, so no stored bill changes).
+5. ⚠️ **Batch / serial are checked on the web editor only.** The typed API (`/v1/invoices`, POS) does not know batches or
+   serials. A sale through the API or the POS counter ignores them.
+6. ⚠️ **GST due dates (`tax-engine/gstDue.ts`).** Monthly 11th / 20th. QRMP: IFF 13th (optional) and PMT-06 25th in the
+   first two months of a quarter; quarterly GSTR-1 on the 13th and GSTR-3B on the 22nd (states and UTs numbered 22 to 37,
+   Category I) or 24th (others) of the month after the quarter. Composition: CMP-08 on the 18th after each quarter,
+   GSTR-4 on 30 April. **These are the standing dates from the notifications; confirm with a CA, and note that the
+   government moves them by notification.** The state split is one table to change.
+7. ⚠️ **Composition tax** is `rate % of the period's taxable value`, split equally; exempt supplies are not removed. Shown as
+   a banner; CMP-08 is not filed from the app.
+8. ⚠️ **Hindi and Tamil amount in words** were written from the standard number words and checked for every number 1 to
+   99 (Hindi) and 1 to 999 (Tamil) for gaps, not by a native speaker. **Have one read a sample bill** before using it on
+   a legal invoice. Hindi does not use "and" before the last part; Tamil one lakh / one crore take "ஒரு".
+9. **Plan gating of settings (D-16, D-17).** `GET /v1/settings` returns `locked` (key to feature) and the default for
+   locked keys; `PATCH` answers 402 `payment_required` with the keys when a locked key is switched on. The Settings row
+   shows "Upgrade to use". The mapping table is `SETTING_FEATURE` in `packages/contracts/src/plans.ts`. 8 API tests.
+10. **Backup reminder** is removed from the registry; Backups owns it (a link in Settings › General).
+    **Cash in hand opening** is removed too (Cash & Bank owns it, and posts it); both appear as links.
+11. **Accepted gaps, all in the manual list:** no exchange-rate table; the exchange rate is typed per bill. No role matrix
+    (P8-S13) and no i18n catalogue (P11-S6); see the audit table below.
+12. **Not made live, on purpose:** `party.defaultKind` (web parties have no customer / supplier type yet),
+    `gst.exemptLabel` (prints through three templates; a follow-up), `biz.type` / `biz.category` (only meaningful with
+    the library seeding and analytics that do not exist), `ui.lang` (English only until P11-S6).
+
+### Audit: Phase 0 to 12 (2026-11-12)
+
+Method: each slice of `VYAPAR_IMPLEMENTATION_PHASES.md` against the routes, screens, migrations and tests in the repo, and
+the "Still not done" lines of the notes above. Full suites at the end: tax-engine 478, contracts 29, web 367, API 389.
+
+| Phase | State | What is left |
+|---|---|---|
+| P0 UI foundation | Done | none |
+| P1 Masters | Done | the web still keeps clients as workspace documents (P1-S3 note) |
+| P2 Sale enhancements | Done | none |
+| P3 Purchase side | Done | no "Record RCM payment" API endpoint; no web screen for the MSME flag |
+| P4 Ledger | Done | web screens still save workspace documents, so the ledger is empty for a business that only uses them (Phase 4 note 2); a 10,000-document backfill timing |
+| P5 Cash & Bank | Done | none known |
+| P6 Reports | Done | none known; 26Q file format not built |
+| P7 Utilities | Done | none known |
+| P8 Settings | Mostly | **P8-S13 Account Access matrix is not built** (roles are fixed presets); tax rate masters, number-series table, print designer table, default accounts table are "Coming soon" cards |
+| P9 Grow and messaging | Core done | P9-S6 online catalog and P9-S7 loyalty/offers are optional and not built; WhatsApp is a `wa.me` link (D-07) |
+| P10 Compliance | Mostly | 3B 4(A)(1)/(2) imports, 3.1(e), drill-downs (Phase 10 note 3); e-invoice not validated against the IRP sandbox |
+| P11 Hardening | Partial | performance budget and migration rehearsal done; **P11-S6 i18n catalogue not built**; accessibility audit and the external security review need a person; old UI removal not done |
+| P12 POS | Done | batches and serials are ignored at the counter (item 5) |
+| SaaS | Done | see the manual list in the hand-over: Razorpay account and keys, GST on subscriptions, terms and privacy pages |

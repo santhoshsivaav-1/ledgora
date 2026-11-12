@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScanBarcode } from 'lucide-react';
+import { getAppSetting } from '../../lib/appSettings';
 import { LABEL_SHEETS, sheetById, sheetProblem } from '@ledgora/tax-engine';
 import PageHeader from '../../components/ui/PageHeader';
 import { ErrorState, LoadingState } from '../../components/ui/States';
@@ -24,7 +25,7 @@ export default function BarcodePage() {
   const [picked, setPicked] = useState(() => new Set());
   const [sheetId, setSheetId] = useState('a4-65');
   const [custom, setCustom] = useState(CUSTOM);
-  const [type, setType] = useState('ean13');
+  const [type, setType] = useState(getAppSetting('item.barcodeFormat') || 'ean13'); // Settings > Item > Barcode format (EAN-13 until chosen)
   const [copies, setCopies] = useState(1);
   const [byStock, setByStock] = useState(false);
   const [show, setShow] = useState(DEFAULT_SHOW);

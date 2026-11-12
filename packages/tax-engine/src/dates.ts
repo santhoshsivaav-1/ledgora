@@ -17,6 +17,27 @@ export const formatDateGST = (dateStr: string | null | undefined) => {
 export const getFinancialYearStart = (date = new Date()) =>
   date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
 
+/**
+ * Settings > General > Financial year starts in: the year a date's book year starts in, for a year that starts in
+ * `startMonth` (1-12). April (4) is India's FY and gives getFinancialYearStart. GST returns, income tax and invoice
+ * numbering always use April; this is for the year switcher and period presets of the books and reports.
+ */
+export const bookYearStart = (date = new Date(), startMonth = 4) =>
+  date.getMonth() + 1 >= startMonth ? date.getFullYear() : date.getFullYear() - 1;
+
+/** The first and last day (yyyy-mm-dd) and a label of the book year starting in `startYear`. */
+export const bookYearBounds = (startYear: number, startMonth = 4) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const from = `${startYear}-${pad(startMonth)}-01`;
+  const endY = startMonth === 1 ? startYear : startYear + 1;
+  const endM = startMonth === 1 ? 12 : startMonth - 1;
+  const lastDay = new Date(endY, endM, 0).getDate();
+  const to = `${endY}-${pad(endM)}-${pad(lastDay)}`;
+  const label =
+    startMonth === 1 ? `${startYear}` : `${startYear}-${String(startYear + 1).slice(-2)}`;
+  return { from, to, label };
+};
+
 // "2026-27" — the short form used on invoice numbers and FY dropdowns.
 export const getFinancialYearLabel = (date = new Date()) => {
   const y = getFinancialYearStart(date);

@@ -744,6 +744,9 @@ export const ewayRegister = defineReport({
   }),
   run: async (tx, p) => {
     const { from, to } = period(p);
+    // Settings > GST > E-way bill: off, the register is empty (no prompt to raise one).
+    if (!(await settingValue(tx, p.businessId, 'gst.eway.enabled')))
+      return { rows: [], totals: { value: 0, pending: 0 }, meta: { from, to, limit: 0 } };
     // Settings > Transaction > E-way bill threshold; ₹50,000 until the owner changes it.
     const limit = Number(await settingValue(tx, p.businessId, 'txn.ewayThreshold')) || EWAY_LIMIT;
     const docs = (await saleDocs(tx, p.businessId, from, to, { creditNotes: false })).filter(

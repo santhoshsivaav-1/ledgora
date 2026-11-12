@@ -7,6 +7,8 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 import { schema } from '@ledgora/db';
 import {
   SETTINGS,
+  SETTING_FEATURE,
+  planAllows,
   gstinUsageResponse,
   parseSettingsPatch,
   settingsPatch,
@@ -19,8 +21,24 @@ import { AppError } from '../errors.ts';
 import type { Registrar } from '../http.ts';
 import { loadBusiness } from './businesses.ts';
 import { loadSettings, writeSettings } from './settingsStore.ts';
+import { planOfTx } from '../middleware/feature.ts';
 
 const { invoices } = schema;
+
+/**
+ * Settings whose paid feature the plan lacks read as their default (what was saved stays and returns on upgrade), and
+ * come back in `locked` so the screen can show an upgrade note.
+ */
+async function withPlan(tx: Parameters<typeof loadSettings>[0], businessId: string) {
+  const [settings, eff] = await Promise.all([loadSettings(tx, businessId), planOfTx(tx)]);
+  const locked: Record<string, string> = {};
+  for (const [key, feature] of Object.entries(SETTING_FEATURE)) {
+    if (planAllows(eff.plan, feature) || !(key in settings)) continue;
+    locked[key] = feature;
+    settings[key] = SETTINGS[key as SettingKey].default;
+  }
+  return { settings, locked };
+}
 
 export function settingsModule({ route }: Registrar) {
   route({
@@ -49,7 +67,7 @@ export function settingsModule({ route }: Registrar) {
     response: settingsResponse,
     handler: async ({ tx, query }) => {
       await loadBusiness(tx, query.businessId);
-      return { settings: await loadSettings(tx, query.businessId) };
+      return withPlan(tx, query.businessId);
     },
   });
 
@@ -76,6 +94,23 @@ export function settingsModule({ route }: Registrar) {
           keys: locked,
         });
 
+      // A paid setting can be switched off on any plan, but switched on only where the plan includes it.
+      const eff = await planOfTx(tx);
+      const needs = keys.filter((k) => {
+        const feature = SETTING_FEATURE[k];
+        return (
+          feature &&
+          !planAllows(eff.plan, feature) &&
+          JSON.stringify(values[k]) !== JSON.stringify(SETTINGS[k].default)
+        );
+      });
+      if (needs.length)
+        throw new AppError(
+          'payment_required',
+          `Your ${eff.label} plan does not include ${needs.map((k) => SETTINGS[k].label).join(', ')}. Upgrade to use it.`,
+          { feature: SETTING_FEATURE[needs[0]!], plan: eff.plan, keys: needs },
+        );
+
       const before = await loadSettings(tx, body.businessId);
       await writeSettings(tx, orgId, body.businessId, values);
       if (keys.length)
@@ -83,7 +118,7 @@ export function settingsModule({ route }: Registrar) {
           before: Object.fromEntries(keys.map((k) => [k, before[k]])),
           after: values,
         });
-      return { settings: await loadSettings(tx, body.businessId) };
+      return withPlan(tx, body.businessId);
     },
   });
 }

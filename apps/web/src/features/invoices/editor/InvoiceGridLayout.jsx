@@ -14,7 +14,8 @@
 // Every block and every table row here carries data-pdf-page-boundary, so a
 // page can end between rows or blocks but never cuts through one.
 import React from 'react';
-import { filledOrderDetails, getStateCode, printedSubtotal, roundQty } from '../../../utils';
+import { filledOrderDetails, formatQty, formatCurrency, getStateCode, printedSubtotal, roundQty } from '../../../utils';
+import ItemSubLines from '../../print/ItemSubLines';
 
 const LINE = '#1f2937';
 const B = `1px solid ${LINE}`;
@@ -297,10 +298,10 @@ function TallyLayout({ ctx }) {
                 <td style={{ ...vc, ...center }}>{i + 1}</td>
                 <td style={vc}>
                   <strong>{item.name || '-'}</strong>
-                  {item.description && <div style={{ ...small, whiteSpace: 'pre-wrap' }}>{item.description}</div>}
+                  <ItemSubLines item={item} fmt={(n) => formatCurrency(n)} style={small} />
                 </td>
                 {t.hsn && <td style={{ ...vc, ...center }}>{item.hsn || ''}</td>}
-                {t.itemQty && <td style={{ ...vc, ...right }}><strong>{item.quantity}{t.itemUnit && item.unit ? ` ${item.unit}` : ''}</strong></td>}
+                {t.itemQty && <td style={{ ...vc, ...right }}><strong>{formatQty(item.quantity)}{t.itemUnit && item.unit ? ` ${item.unit}` : ''}</strong></td>}
                 {t.rate && <td style={{ ...vc, ...right }}>{num(item.rate)}</td>}
                 {t.rate && <td style={{ ...vc, ...center }}>{item.unit || ''}</td>}
                 {ctx.hasAnyDiscount && <td style={{ ...vc, ...right }}>{l.discount > 0 ? num(l.discount) : ''}</td>}
@@ -467,11 +468,11 @@ function BoxedLayout({ ctx }) {
                   <td style={{ ...cell, ...center, borderLeft: 'none' }}>{i + 1}</td>
                   <td style={cell}>
                     {item.name || '-'}
-                    {item.description && <div style={{ ...small, whiteSpace: 'pre-wrap' }}>{item.description}</div>}
+                    <ItemSubLines item={item} fmt={(n) => formatCurrency(n)} style={small} />
                   </td>
                   {t.hsn && <td style={{ ...cell, ...center }}>{item.hsn || ''}</td>}
                   {t.itemQty && <td style={{ ...cell, ...center }}>{item.unit || ''}</td>}
-                  {t.itemQty && <td style={{ ...cell, ...center }}>{item.quantity}</td>}
+                  {t.itemQty && <td style={{ ...cell, ...center }}>{formatQty(item.quantity)}</td>}
                   {t.rate && <td style={{ ...cell, ...right }}>{num(item.rate)}</td>}
                   {ctx.hasAnyDiscount && <td style={{ ...cell, ...right }}>{l.discount > 0 ? num(l.discount) : ''}</td>}
                   <td style={{ ...cell, ...right, borderRight: 'none' }}>{num(l.taxable)}</td>

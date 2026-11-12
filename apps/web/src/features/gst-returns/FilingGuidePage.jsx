@@ -1,10 +1,14 @@
 import { Download, Upload } from 'lucide-react';
+import { gstDueSummary } from '@ledgora/tax-engine';
+import { useAppSettings } from '../../lib/appSettings';
 import { GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 
 // The filing checklist and guide. One page of GST returns (change 3.17).
 export default function FilingGuidePage({
   activeTab, guideTab, setGuideTab,
 }) {
+  const settings = useAppSettings();
+  const dueLine = gstDueSummary({ frequency: settings['gst.frequency'], regType: settings['gst.regType'] });
   return (
     <>
       {activeTab === 'guide' && (
@@ -13,7 +17,7 @@ export default function FilingGuidePage({
           <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginBottom: '0.75rem', borderLeft: '3px solid var(--primary)' }}>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
               <strong>Steps:</strong> Review GSTR-1 & 3B tabs → Export JSON → Upload to gst.gov.in → File GSTR-1 first, then GSTR-3B.
-              <span style={{ color: 'var(--text-muted)' }}> | Due: R1 by 11th, 3B by 20th of next month | Late fee: ₹50/day</span>
+              <span style={{ color: 'var(--text-muted)' }}> | Due: {dueLine} | Late fee: ₹50/day</span>
             </p>
           </div>
 

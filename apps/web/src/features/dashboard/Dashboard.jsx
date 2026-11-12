@@ -1,3 +1,4 @@
+import { useAppSetting } from '../../lib/appSettings';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { FileText, Trash2, Plus, IndianRupee, Receipt, Edit3, TrendingUp, Search, Copy, X, CheckCircle, Clock, AlertTriangle, MessageCircle, Mail, StickyNote, Send, Package, Download, Printer, Ban, Undo2, Eye } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
@@ -346,7 +347,8 @@ export default function Dashboard({ mode = 'home', scope = null, onNew, onEdit, 
   // v1.10.4 — audit M14. getFYOptions is date-based (only changes across
   // April-1 boundary); memoize with an empty dep so we run it once per
   // component mount, not on every render.
-  const fyOptions = useMemo(() => getFYOptions(), []);
+  const fyStartMonth = useAppSetting('fy.startMonth');
+  const fyOptions = useMemo(() => getFYOptions(5, new Date(), fyStartMonth), [fyStartMonth]);
 
   const loadBills = async () => {
     try {

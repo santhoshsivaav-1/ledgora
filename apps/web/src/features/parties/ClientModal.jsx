@@ -7,6 +7,7 @@ import PartyGroupPicker from './PartyGroupPicker';
 import { FEATURES } from '../../config/featureFlags';
 import { useAppSettings } from '../../lib/appSettings';
 import { customPartyFields } from './partyFields';
+import { getAllProducts } from '../../lib/data';
 
 export default function ClientModal({ show, onClose, onSave, client, isEditing, defaultCountry }) {
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
@@ -26,9 +27,16 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
     autoPrint: false,          // per-client auto-print override
     customFields: {},          // Settings > Party > Additional party fields, by label
+    openingBalance: '',        // Settings > Party > Opening balance: positive = they owe us
+    tdsApplicable: false,      // Settings > Party > TDS / TCS on party
+    tcsApplicable: false,
+    itemRates: {},             // Settings > Party > Party-wise item rate: product id -> rate
   };
+  const [products, setProducts] = useState([]);
+  useEffect(() => { if (show && appSettings['party.itemRates']) getAllProducts().then(setProducts).catch(() => {}); }, [show, appSettings['party.itemRates']]); // eslint-disable-line react-hooks/exhaustive-deps
   const [form, setForm] = useState({ ...emptyForm });
   const [taxIdWarning, setTaxIdWarning] = useState('');
+  const [openingError, setOpeningError] = useState('');
 
   useEffect(() => {
     if (show && client) {
@@ -44,11 +52,16 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
         customFields: client.customFields || {},
+        openingBalance: client.openingBalance ?? '',
+        tdsApplicable: !!client.tdsApplicable,
+        tcsApplicable: !!client.tcsApplicable,
+        itemRates: client.itemRates || {},
       });
     } else if (show) {
       setForm({ ...emptyForm });
     }
     setTaxIdWarning('');
+    setOpeningError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, client]);
 
@@ -81,7 +94,17 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
 
   const handleSave = () => {
     if (!form.name.trim()) return;
-    const { creditLimit, creditMode, ...rest } = form;
+    if (appSettings['party.openingRequired'] && !isEditing && form.openingBalance === '') {
+      setOpeningError('Enter an opening balance (0 if none). Settings › Party asks for it on every new party.');
+      return;
+    }
+    const { creditLimit, creditMode, openingBalance, itemRates, ...base } = form;
+    const rest = {
+      ...base,
+      ...(openingBalance === '' ? {} : { openingBalance: Number(openingBalance) || 0 }),
+      ...(appSettings['party.itemRates'] ? { itemRates: Object.fromEntries(Object.entries(itemRates || {}).filter(([, v]) => Number(v) > 0).map(([k, v]) => [k, Number(v)])) } : {}),
+    };
+    if (!appSettings['party.tdsTcs']) { delete rest.tdsApplicable; delete rest.tcsApplicable; }
     // Without the Phase 2 flag a client is saved exactly as before (no credit fields).
     if (!FEATURES.saleInlinePayments) return onSave(rest);
     const limit = creditLimit === '' || creditLimit == null ? null : Number(creditLimit);
@@ -188,6 +211,45 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
                 )}
               </div>
             </>
+          )}
+          <div className="form-group">
+            <label className="form-label" htmlFor="client-opening">Opening balance{appSettings['party.openingRequired'] && !isEditing ? ' *' : ''}</label>
+            <input id="client-opening" type="number" step="any" className="form-input" value={form.openingBalance} placeholder="0.00"
+              style={openingError ? { borderColor: '#dc2626' } : undefined}
+              onChange={e => { setForm(prev => ({ ...prev, openingBalance: e.target.value })); setOpeningError(''); }}
+              title="What this party owed you before you started (positive). It counts in Party outstanding." />
+            {openingError && <small role="alert" style={{ color: '#dc2626', fontSize: '0.7rem' }}>{openingError}</small>}
+          </div>
+          {appSettings['party.tdsTcs'] && (
+            <div className="form-group" style={{ gridColumn: 'span 2', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input type="checkbox" checked={!!form.tdsApplicable} onChange={e => setForm(prev => ({ ...prev, tdsApplicable: e.target.checked }))} /> This party deducts TDS
+              </label>
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input type="checkbox" checked={!!form.tcsApplicable} onChange={e => setForm(prev => ({ ...prev, tcsApplicable: e.target.checked }))} /> Collect TCS from this party
+              </label>
+              <small className="field-hint" style={{ flexBasis: '100%' }}>A new bill for this party starts with the TDS or TCS line switched on.</small>
+            </div>
+          )}
+          {appSettings['party.itemRates'] && (
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label className="form-label">Rates for this party</label>
+              {Object.entries(form.itemRates || {}).map(([pid, rate]) => (
+                <div key={pid} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <span style={{ flex: 2, alignSelf: 'center' }}>{products.find(p => p.id === pid)?.name || 'Removed item'}</span>
+                  <input type="number" min="0" step="any" className="form-input" style={{ flex: 1 }} value={rate} aria-label="Rate"
+                    onChange={e => setForm(prev => ({ ...prev, itemRates: { ...prev.itemRates, [pid]: e.target.value } }))} />
+                  <button type="button" className="icon-btn icon-btn-red" aria-label="Remove rate"
+                    onClick={() => setForm(prev => { const next = { ...prev.itemRates }; delete next[pid]; return { ...prev, itemRates: next }; })}><X size={14} /></button>
+                </div>
+              ))}
+              <select className="form-input" value="" aria-label="Add an item rate"
+                onChange={e => { const id = e.target.value; if (id) setForm(prev => ({ ...prev, itemRates: { ...prev.itemRates, [id]: products.find(p => p.id === id)?.sellingPrice ?? '' } })); }}>
+                <option value="">Add an item…</option>
+                {products.filter(p => !(p.id in (form.itemRates || {}))).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <small className="field-hint">A sale to this party starts these items at this rate.</small>
+            </div>
           )}
           {customFields.map(f => (
             <div className="form-group" key={f.label}>
