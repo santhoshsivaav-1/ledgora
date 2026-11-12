@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=../../.env src/server.ts",
     "backfill:ledger": "node --env-file-if-exists=../../.env src/backfillLedger.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "rehearse": "vitest run -c vitest.rehearsal.config.ts"
   },
   "devDependencies": {
     "@ledgora/config": "workspace:*",

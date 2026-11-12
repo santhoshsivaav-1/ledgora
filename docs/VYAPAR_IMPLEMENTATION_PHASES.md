@@ -4202,13 +4202,13 @@ Copy into the PR description or keep in this file; tick as slices merge.
 
 ### Phase 1
 - [x] P1-S1 Party groups (2026-11-09)
-- [ ] P1-S2 Party fields and addresses
-- [ ] P1-S3 Parties list and detail
-- [ ] P1-S4 Item categories and units
-- [ ] P1-S5 Item fields and tracking
+- [ ] P1-S2 Party fields and addresses (partial: `credit_limit` / `credit_mode` came forward with P2-S4, `msme` / `msme_agreed_days` with P10-S6; addresses, opening balance, TDS/TCS fields and the edit screen not built)
+- [ ] P1-S3 Parties list and detail (the Clients screen still keeps workspace documents, not `/v1/parties`)
+- [ ] P1-S4 Item categories and units (nav entries hidden as `planned: 'P1'`)
+- [ ] P1-S5 Item fields and tracking (barcode lives in `items.extra.barcode` from P12/P7; MRP, wholesale price, secondary unit, image, batch and serial not built)
 - [ ] P1-S6 Items list and drawer
-- [ ] P1-S7 Import wizards
-- [ ] P1-S8 Stock adjust and bulk update
+- [ ] P1-S7 Import wizards (nav entries hidden as `planned: 'P1'`)
+- [ ] P1-S8 Stock adjust and bulk update (Bulk Update hidden as `planned: 'P7'`)
 
 ### Phase 2
 - [x] P2-S1 Salesman master (2026-11-10)
@@ -4220,72 +4220,72 @@ Copy into the PR description or keep in this file; tick as slices merge.
 - [ ] P2-S7 Single-page editor with live preview (layout done 2026-11-10; 300 ms / 100-line and keyboard-only acceptance not yet measured)
 
 ### Phase 3
-- [ ] P3-S1 Purchase bill upgrades
-- [ ] P3-S2 Payment Out
-- [ ] P3-S3 Purchase Order
-- [ ] P3-S4 Purchase Return / Debit Note
-- [ ] P3-S5 Expenses upgrade
-- [ ] P3-S6 Other income
+- [x] P3-S1 Purchase bill upgrades (DECISIONS, Phase 3; `purchase-e2e.mjs` 16 checks)
+- [x] P3-S2 Payment Out
+- [x] P3-S3 Purchase Order
+- [x] P3-S4 Purchase Return / Debit Note
+- [x] P3-S5 Expenses upgrade
+- [x] P3-S6 Other income
 
 ### Phase 4
-- [ ] P4-S1 Chart of accounts
-- [ ] P4-S2 Posting engine
-- [ ] P4-S3 Posting wiring
-- [ ] P4-S4 Backfill
-- [ ] P4-S5 Verify My Data
-- [ ] P4-S6 FY and period lock
-- [ ] P4-S7 Ledger viewer and journal
+- [x] P4-S1 Chart of accounts (DECISIONS, Phase 4 note 1: all seven slices)
+- [x] P4-S2 Posting engine
+- [x] P4-S3 Posting wiring (typed tables only: the Sales / Purchases / Receipts / Expenses screens still save workspace documents, which the ledger does not post; Phase 4 note 2)
+- [x] P4-S4 Backfill (10k documents 16.5 s, rehearsal 1.11.0)
+- [x] P4-S5 Verify My Data
+- [x] P4-S6 FY and period lock
+- [x] P4-S7 Ledger viewer and journal
 
 ### Phase 5
-- [ ] P5-S1 Bank accounts
-- [ ] P5-S2 Cash in hand
-- [ ] P5-S3 Transfers
-- [ ] P5-S4 Cheques
-- [ ] P5-S5 Loans
-- [ ] P5-S6 Bank reconciliation
-- [ ] P5-S7 Dashboard widgets
+- [x] P5-S1 Bank accounts (DECISIONS, Phase 5: all seven slices; `cashbank-e2e.mjs` 28 checks)
+- [x] P5-S2 Cash in hand
+- [x] P5-S3 Transfers
+- [x] P5-S4 Cheques
+- [x] P5-S5 Loans
+- [x] P5-S6 Bank reconciliation
+- [x] P5-S7 Dashboard widgets
 
 ### Phase 6
-- [ ] P6-S1 Engine and hub
-- [ ] P6-S2 Transaction reports
-- [ ] P6-S3 Party reports
-- [ ] P6-S4 Item and stock reports
-- [ ] P6-S5 GST reports
-- [ ] P6-S6 Expense, bank, order, loan reports
-- [ ] P6-S7 Financial statements
-- [ ] P6-S8 Exports, favourites, scheduling
+- [x] P6-S1 Engine and hub
+- [x] P6-S2 Transaction reports (code: sale, purchase, all-transactions, bill-wise-profit; no notes section after the "core first" one)
+- [x] P6-S3 Party reports (code: all-parties, by-party, by-party-group, party-pnl, item-by-party, party-statement)
+- [x] P6-S4 Item and stock reports (code: stock-summary, low-stock, item-pnl, stock-by-category, item-discount)
+- [x] P6-S5 GST reports (code: gst-rate, HSN, form-27eq, eway-register)
+- [x] P6-S6 Expense, bank, order, loan reports
+- [x] P6-S7 Financial statements (cross-checks in `report-crosschecks.test.ts`)
+- [ ] P6-S8 Exports, favourites, scheduling (favourites and schedules exist; the server-side streaming CSV for 100k rows is not built)
 
 ### Phase 7
-- [ ] P7-S1 Barcode generator
-- [ ] P7-S2 Export to Tally
-- [ ] P7-S3 Close financial year
-- [ ] P7-S4 Backup and restore
-- [ ] P7-S5 Setup checklist
-- [ ] P7-S6 Trash and CA sharing
+- [x] P7-S1 Barcode generator (DECISIONS, Phase 7)
+- [x] P7-S2 Export to Tally (unverified against Tally itself: owner to run `docs/TALLY_IMPORT_CHECK.md`)
+- [x] P7-S3 Close financial year
+- [x] P7-S4 Backup and restore (Google Drive tested against a stand-in only)
+- [x] P7-S5 Setup checklist
+- [x] P7-S6 Trash and CA sharing
 
 ### Phase 8
-- [ ] P8-S1 Framework
-- [ ] P8-S2 General
-- [ ] P8-S3 Transaction
-- [ ] P8-S4 Print
-- [ ] P8-S5 Taxes
-- [ ] P8-S6 GST
-- [ ] P8-S7 Transaction message
-- [ ] P8-S8 Party
-- [ ] P8-S9 Item
-- [ ] P8-S10 Service reminder
-- [ ] P8-S11 Accounting
-- [ ] P8-S12 Multi currency
-- [ ] P8-S13 Account access
+- [x] P8-S1 Framework (commit a8e851c: typed registry, owner-only enforcement)
+- [ ] P8-S2 General (partial: `biz.type`, `biz.category`, `fy.startMonth`, `fmt.qtyDecimals`, `fmt.wordsLang`, `ui.lang`, `backup.remindDays` not live)
+- [ ] P8-S3 Transaction (not live: `txn.billingName`, `txn.quickEntry`, `txn.showPurchasePrice`, `txn.barcodeScan`)
+- [ ] P8-S4 Print (not live: description, MRP, batch, payment mode, party balance, PAID stamp, regional names)
+- [x] P8-S5 Taxes
+- [ ] P8-S6 GST (not live: registration type, composition rate, filing frequency, e-way bill, HSN digits, ITC default, exempt label)
+- [x] P8-S7 Transaction message
+- [ ] P8-S8 Party (not live: shipping, party-wise rate, TDS/TCS, default type, opening mandatory; needs P1-S2)
+- [ ] P8-S9 Item (not live: secondary unit, image, wholesale, MRP, batch, serial, item discount, barcode scan and format; needs P1-S5)
+- [x] P8-S10 Service reminder
+- [ ] P8-S11 Accounting (not live: the four `acct.*` rows; the ledger itself is switched on from Accounting)
+- [ ] P8-S12 Multi currency (not built)
+- [x] P8-S13 Account access
 
 ### Phase 9
-- [ ] P9-S1 Messaging core
-- [ ] P9-S2 Payment reminders
-- [ ] P9-S3 Share document
-- [ ] P9-S4 Salesman tracking
-- [ ] P9-S5 Service reminders run
-- [ ] P9-S6 Online catalog (optional)
-- [ ] P9-S7 Loyalty (optional)
+- [x] P9-S1 Messaging core (commit a8e851c; `wa.me` + e-mail, D-07)
+- [x] P9-S2 Payment reminders
+- [x] P9-S3 Share document
+- [x] P9-S4 Salesman tracking
+- [x] P9-S5 Service reminders run
+- [ ] P9-S6 Online catalog (optional, not built)
+- [x] P9-S7 Loyalty (as POS loyalty points, Phase 12)
 
 ### Phase 10
 - [x] P10-S1 Table 11 advances (services only, D-14; CA review pending)
@@ -4299,10 +4299,10 @@ Copy into the PR description or keep in this file; tick as slices merge.
 
 ### Phase 11
 - [ ] P11-S1 Old UI removal
-- [ ] P11-S2 Performance
+- [ ] P11-S2 Performance (indexes 0a100fc; initial JS 502 -> 323 KB gzip; API budgets measured in the 1.11.0 rehearsal; LCP, table render and typing latency not yet measured)
 - [ ] P11-S3 Accessibility
 - [ ] P11-S4 Security
-- [ ] P11-S5 Migration rehearsal
+- [x] P11-S5 Migration rehearsal (`docs/release/1.11.0-rehearsal.md`, synthetic data on a laptop; repeat on staging)
 - [ ] P11-S6 i18n
 - [ ] P11-S7 Docs and training
 - [ ] P11-S8 Release
