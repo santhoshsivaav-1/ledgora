@@ -20,6 +20,7 @@ export default function SettingsLayout({ children }) {
         ))}
         {can('team:read') && <NavLink to="/settings/team" className={({ isActive }) => (isActive ? 'active' : '')}>Team</NavLink>}
         <NavLink to="/settings/security" className={({ isActive }) => (isActive ? 'active' : '')}>Security</NavLink>
+        <NavLink to="/settings/billing" className={({ isActive }) => (isActive ? 'active' : '')}>Plan &amp; billing</NavLink>
       </nav>
       {children}
     </div>

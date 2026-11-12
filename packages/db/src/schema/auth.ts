@@ -186,4 +186,8 @@ export const subscriptions = pgTable('subscriptions', {
   status: text('status').notNull().default('trialing'), // trialing | active | past_due | canceled
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  /** SaaS billing: 'razorpay' once a checkout starts; its subscription id; 'month' | 'year'. */
+  provider: text('provider'),
+  providerSubscriptionId: text('provider_subscription_id'),
+  billingInterval: text('billing_interval'),
 });

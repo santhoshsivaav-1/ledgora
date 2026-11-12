@@ -1,3 +1,4 @@
+import { effectivePlan, planById } from '@ledgora/contracts';
 import { and, desc, eq, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema, withTenant } from '@ledgora/db';
@@ -61,6 +62,19 @@ export function accountModule({ route }: Registrar) {
         permissions: [...ROLE_PERMISSIONS[role]],
         businessIds: role !== 'owner' && limits.length ? limits.map((l) => l.b) : null,
         organizations: rows.map((r) => ({ id: r.id, name: r.name, role: r.role as Role })),
+        // SaaS plans: what the screens may offer (reads are never gated; writes to a missing feature answer 402).
+        entitlements: (() => {
+          const eff = effectivePlan(sub ?? null);
+          return {
+            plan: eff.plan,
+            label: eff.label,
+            trial: eff.trial,
+            trialDaysLeft: eff.trialDaysLeft,
+            graceDaysLeft: eff.graceDaysLeft,
+            expired: eff.expired,
+            features: [...planById(eff.plan).features],
+          };
+        })(),
         subscription: sub
           ? {
               plan: sub.plan,

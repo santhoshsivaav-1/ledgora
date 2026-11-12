@@ -34,6 +34,7 @@ import { posModule } from './modules/pos.ts';
 import { settingsModule } from './modules/settings.ts';
 import { publicLinkEndpoints } from './publicLink.ts';
 import { messagingModule } from './modules/messaging.ts';
+import { billingModule, billingWebhook } from './modules/billing.ts';
 import { utilitiesModule } from './modules/utilities.ts';
 import { backupsModule } from './modules/backups.ts';
 import { setupModule } from './modules/setup.ts';
@@ -107,6 +108,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     posModule,
     settingsModule,
     messagingModule,
+    billingModule,
     utilitiesModule,
     backupsModule,
     setupModule,
@@ -119,6 +121,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     mod(reg);
   localFileEndpoints(app, deps);
   publicLinkEndpoints(app, deps);
+  billingWebhook(app, deps);
 
   app.get('/v1/openapi.json', (c) => c.json(buildOpenApi(reg.documented, pkg.version)));
   app.get('/v1/docs', (c) => c.html(docsHtml));

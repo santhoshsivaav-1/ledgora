@@ -28,6 +28,8 @@ const STATUS: Record<Code, number> = {
   // Phase 3: a repeated supplier bill number is saved after the user confirms; receiving more than is ordered is wrong.
   duplicate_bill: 409,
   over_conversion: 422,
+  // SaaS plans: the organization's plan does not include this, or a plan limit is reached.
+  payment_required: 402,
   too_many_requests: 429,
   internal: 500,
 };

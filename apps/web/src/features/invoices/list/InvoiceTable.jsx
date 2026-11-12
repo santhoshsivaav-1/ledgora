@@ -6,6 +6,7 @@ import ActionsMenu from './ActionsMenu';
 import EinvoiceDialog from './EinvoiceDialog';
 import { einvoiceEligible, einvoiceLocked } from '../einvoice';
 import { getAppSetting } from '../../../lib/appSettings';
+import { useEntitlements } from '../../billing/useEntitlements';
 import { nextStepsFor } from '../../sales/salesFlow';
 
 // The invoice list (change 3.10): the filters, the quick-print and bulk actions, and the table with its row actions.
@@ -15,7 +16,8 @@ export default function InvoiceTable({
 }) {
   // P10-S7: Settings > GST > E-invoice offers the IRP JSON and IRN entry on B2B invoices and notes.
   const [einvBill, setEinvBill] = useState(null);
-  const einvoiceOn = getAppSetting('gst.einvoice.enabled');
+  const { hasFeature } = useEntitlements();
+  const einvoiceOn = getAppSetting('gst.einvoice.enabled') && hasFeature('einvoice'); // Gold plan (or trial)
   return (
         <div className="glass-panel">
           <div className="table-header"><h3>{scope ? scope.label : 'Invoices'}</h3></div>

@@ -36,6 +36,7 @@ export const ERROR_CODES = [
   // Vyapar parity Phase 3: a supplier bill number already on another bill this year; receiving more than is ordered.
   'duplicate_bill',
   'over_conversion',
+  'payment_required',
   'too_many_requests',
   'internal',
 ] as const;

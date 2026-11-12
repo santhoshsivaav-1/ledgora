@@ -10,6 +10,12 @@ const schema = z.object({
   API_LISTEN_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().url().default('postgres://ledgora:ledgora@localhost:5432/ledgora'),
   APP_URL: z.string().url().default('http://localhost:5173'),
+  /** SaaS billing (Razorpay subscriptions). All empty = checkout answers "billing is not set up"; plans still apply. */
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  /** Razorpay plan ids: "silver:month=plan_x,silver:year=plan_y,gold:month=plan_z,gold:year=plan_w". */
+  RAZORPAY_PLAN_IDS: z.string().optional(),
   /** Public address of this API; Better Auth builds e-mail links and cookie scope from it. */
   API_URL: z.string().url().optional(),
   /** Extra browser origins (comma separated) allowed to call the API with cookies, besides APP_URL. */

@@ -18,6 +18,18 @@ export const me = z.object({
   subscription: z
     .object({ plan: z.string(), status: z.string(), trialEndsAt: z.string().nullable() })
     .nullable(),
+  /** SaaS plans: the plan in force (a live trial is Gold) and its features. */
+  entitlements: z
+    .object({
+      plan: z.string(),
+      label: z.string(),
+      trial: z.boolean(),
+      trialDaysLeft: z.number(),
+      graceDaysLeft: z.number(),
+      expired: z.boolean(),
+      features: z.array(z.string()),
+    })
+    .optional(),
 });
 export type Me = z.infer<typeof me>;
 

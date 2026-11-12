@@ -7,6 +7,7 @@ import type { AppEnv } from './env.ts';
 import { AppError, validationError } from './errors.ts';
 import type { Storage } from './storage.ts';
 import type { Providers } from './messaging/providers.ts';
+import type { BillingProvider } from './billing/provider.ts';
 import type { Auth } from './auth/auth.ts';
 import {
   requireFeature,
@@ -26,6 +27,8 @@ export interface Deps {
   auth: Auth;
   /** Message providers by channel (P9). Tests pass fakes; omitted = makeProviders(env). */
   providers?: Providers;
+  /** SaaS billing provider. Tests pass a fake; omitted = Razorpay from env. */
+  billing?: BillingProvider;
 }
 
 export interface RouteSpec<
@@ -144,7 +147,10 @@ export function createRegistrar(app: Hono, deps: Deps) {
           const ctx = await requireOrg(c, deps.db, session);
           // The real path, not the route pattern: a pattern like /v1/workspace/collections/:collection says nothing about which collection.
           requirePermission(ctx, spec.method, c.req.path, spec.permission);
-          await requireFeature(ctx, spec.feature);
+          await requireFeature(deps.db, ctx, spec.method, c.req.path, {
+            explicit: spec.feature,
+            overwrite: c.req.query('overwrite'),
+          });
           // P7-S6: a member limited to a date range sees only that range (queries outside it are refused, rows cut).
           const limited = spec.method === 'get' && hasRange(ctx);
           if (limited) checkQuery(ctx, query.data);

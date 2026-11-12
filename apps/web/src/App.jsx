@@ -76,6 +76,8 @@ function GstReturnsPage() {
 const SettingsView = lazy(() => import('./features/settings/SettingsView'));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout'));
 const SettingsTabPage = lazy(() => import('./features/settings/registry/SettingsTabPage'));
+const BillingPage = lazy(() => import('./features/billing/BillingPage'));
+import PlanBanner from './features/billing/PlanBanner';
 const TeamPage = lazy(() => import('./features/settings/team/TeamPage'));
 const SecurityPage = lazy(() => import('./features/settings/security/SecurityPage'));
 const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
@@ -1042,6 +1044,14 @@ function App() {
                   }
                 />
                 <Route
+                  path="/settings/billing"
+                  element={
+                    <SettingsLayout>
+                      <BillingPage />
+                    </SettingsLayout>
+                  }
+                />
+                <Route
                   path="/settings/security"
                   element={
                     <SettingsLayout>
@@ -1206,6 +1216,7 @@ function App() {
             onOpenMenu={() => setVyDrawer(true)}
           />
           <div className="main-content">
+            <PlanBanner />
             {screens}
             {currentView === 'dashboard' && <AppFooter />}
           </div>
@@ -1242,6 +1253,7 @@ function App() {
 
       {installBanner}
       <div className="main-content">
+            <PlanBanner />
         <TopBar
           profile={profile}
           allProfiles={allProfiles}

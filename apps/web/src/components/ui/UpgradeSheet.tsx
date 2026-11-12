@@ -16,7 +16,10 @@ export default function UpgradeSheetHost() {
         <button className="icon-btn" style={{ float: 'right' }} onClick={() => setInfo(null)} title="Close"><X size={18} /></button>
         <h2 style={{ marginTop: 0 }}><Sparkles size={18} style={{ verticalAlign: '-3px' }} /> Upgrade to use this</h2>
         <p>{info.message}</p>
-        <button className="btn btn-primary" onClick={() => setInfo(null)}>Got it</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" onClick={() => { setInfo(null); window.location.assign('/settings/billing'); }}>See plans</button>
+          <button className="btn btn-secondary" onClick={() => setInfo(null)}>Not now</button>
+        </div>
       </div>
     </div>
   );

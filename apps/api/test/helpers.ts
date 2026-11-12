@@ -7,6 +7,7 @@ import { createApp } from '../src/app.ts';
 import { loadEnv } from '../src/env.ts';
 import { createStorage } from '../src/storage.ts';
 import type { Providers } from '../src/messaging/providers.ts';
+import type { BillingProvider } from '../src/billing/provider.ts';
 
 const url = () => {
   const u = process.env.TEST_DATABASE_URL;
@@ -18,6 +19,8 @@ export interface HarnessOptions {
   env?: Record<string, string>;
   /** P9: fake message providers; the default is the real set, so a test that sends must pass its own. */
   providers?: Providers;
+  /** SaaS billing: a fake provider (tests never call Razorpay). */
+  billing?: BillingProvider;
 }
 
 export function makeHarness(opts: HarnessOptions = {}) {
@@ -32,7 +35,13 @@ export function makeHarness(opts: HarnessOptions = {}) {
     ...opts.env,
   });
   const { db, sql, close } = createDb(url(), { max: 12 });
-  const app = createApp({ db, env, storage: createStorage(env), providers: opts.providers });
+  const app = createApp({
+    db,
+    env,
+    storage: createStorage(env),
+    providers: opts.providers,
+    billing: opts.billing,
+  });
 
   /** A caller bound to one session cookie. */
   const client =
