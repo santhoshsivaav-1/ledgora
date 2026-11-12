@@ -129,6 +129,9 @@ export interface PosLine {
   discountType?: 'amount' | 'percent';
   taxPercent: number;
   cessPercent?: number;
+  /** Batch and serial numbers picked at the counter, for an item that tracks them. */
+  batchNo?: string | null;
+  serials?: string[] | null;
 }
 
 export interface PosBill {
@@ -267,6 +270,8 @@ export interface PosInvoiceLine {
   taxPercent: number;
   cessPercent: number;
   description: string;
+  batchNo?: string;
+  serials?: string[];
 }
 
 /**
@@ -296,6 +301,8 @@ export function posInvoiceLines(bill: PosBill, settings: PosSettings): PosInvoic
       taxPercent: taxOverride ?? pos0(l.taxPercent),
       cessPercent: pos0(l.cessPercent),
       description: free ? `Includes ${r3(free)} free` : '',
+      ...(l.batchNo ? { batchNo: l.batchNo } : {}),
+      ...(l.serials?.length ? { serials: l.serials } : {}),
     };
   });
 }

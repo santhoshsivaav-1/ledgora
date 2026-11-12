@@ -135,3 +135,23 @@ describe('default accounts', () => {
     for (const r of DEFAULT_ACCOUNT_ROLES) expect(['income', 'expense']).toContain(r.kind);
   });
 });
+
+describe('lot stock (API and POS)', () => {
+  it('batches and serials from opening and moves; sale problems', async () => {
+    const { lotStock, serialStock, saleLotProblems, tracksBatches, tracksSerials } = await import('../src/index.ts');
+    const opening = { batches: [{ batchNo: 'B1', expDate: '2027-01-31', qty: 5 }], serials: ['S1', 'S2'] };
+    const moves = [{ sign: 1, quantity: 3, batchNo: 'B0', expDate: '2026-12-31' }, { sign: -1, quantity: 2, batchNo: 'b1', serials: ['s1'] }];
+    expect(lotStock(opening, moves)).toEqual([
+      { batchNo: 'B0', expDate: '2026-12-31', mfgDate: '', qty: 3 },
+      { batchNo: 'B1', expDate: '2027-01-31', mfgDate: '', qty: 3 },
+    ]);
+    expect(serialStock(opening, moves)).toEqual(['S2']);
+    expect(tracksBatches(opening)).toBe(true);
+    expect(tracksSerials({})).toBe(false);
+    const batches = lotStock(opening, moves);
+    expect(saleLotProblems({ name: 'X', quantity: 4, batchNo: 'B1' }, { batches, date: '2026-11-01', block: true })).toEqual(['X: batch B1 has only 3 left']);
+    expect(saleLotProblems({ name: 'X', quantity: 4, batchNo: 'B1' }, { batches, date: '2026-11-01' })).toEqual([]);
+    expect(saleLotProblems({ name: 'X', quantity: 2, serials: ['S2', 's2'] }, { serials: ['S2'], date: '2026-11-01' })).toEqual(['X: a serial number is repeated']);
+    expect(saleLotProblems({ name: 'X', quantity: 1, serials: ['S9'] }, { serials: ['S2'], date: '2026-11-01' })).toEqual(['X: not in stock: S9']);
+  });
+});

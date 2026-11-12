@@ -29,6 +29,11 @@ export const purchaseLineInput = z.object({
   taxPercent: z.number().min(0).max(100).default(0),
   cessPercent: z.number().min(0).max(100).default(0),
   itcStatus: z.enum(ITC_STATUS_VALUES).default('eligible'),
+  /** Batch and serial numbers, for an item that tracks them (kept on the line's extra). */
+  batchNo: z.string().trim().max(40).nullish(),
+  expDate: isoDate.nullish(),
+  mfgDate: isoDate.nullish(),
+  serials: z.array(z.string().trim().min(1).max(60)).max(500).nullish(),
 });
 
 export const purchaseInput = z

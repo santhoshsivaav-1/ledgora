@@ -310,6 +310,8 @@ export function posModule({ route }: Registrar) {
           discountType: l.discountType,
           taxPercent: l.taxPercent,
           cessPercent: l.cessPercent,
+          batchNo: l.batchNo ?? null,
+          serials: l.serials ?? null,
         })),
         billDiscount: body.billDiscount ?? undefined,
         billTaxPercent: body.billTaxPercent ?? null,

@@ -40,6 +40,7 @@ import {
   SALES_INVOICE_TYPES,
 } from '@ledgora/tax-engine';
 import { audit } from '../audit.ts';
+import { checkSaleLots } from './lots.ts';
 import { AppError, notFound } from '../errors.ts';
 import { listPage, stamps, type Registrar } from '../http.ts';
 import { loadBusiness } from './businesses.ts';
@@ -291,7 +292,13 @@ async function build(tx: Tx, input: BuildInput) {
       taxableAmount: c.taxable,
       taxAmount: c.tax + c.cess,
       lineTotal: Math.round((c.taxable + c.tax + c.cess) * 100) / 100,
-      extra: { discountType: l.discountType },
+      extra: {
+        discountType: l.discountType,
+        ...(l.batchNo
+          ? { batchNo: l.batchNo, expDate: l.expDate ?? null, mfgDate: l.mfgDate ?? null }
+          : {}),
+        ...(l.serials?.length ? { serials: l.serials } : {}),
+      },
     };
   });
   return {
@@ -493,6 +500,7 @@ export async function createInvoice(
   if (!input.partyId && input.payments.length && SALES_INVOICE_TYPES.includes(input.invoiceType))
     input = { ...input, partyId: await walkInParty(tx, orgId) };
   input = await checkReturn(tx, input);
+  await checkSaleLots(tx, input);
   const built = await build(tx, { ...input, sourceOrderId: extra.sourceOrderId });
   await checkInlinePayments(tx, {
     invoiceType: input.invoiceType,
@@ -681,6 +689,7 @@ export function invoicesModule({ route }: Registrar) {
       if (!body.partyId && body.payments.length && SALES_INVOICE_TYPES.includes(body.invoiceType))
         body = { ...body, partyId: await walkInParty(tx, orgId) };
       body = await checkReturn(tx, body, params.id);
+      await checkSaleLots(tx, body, params.id);
       const built = await build(tx, {
         ...body,
         sourceOrderId: (before.data as { sourceOrderId?: string }).sourceOrderId,

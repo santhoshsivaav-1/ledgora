@@ -95,6 +95,8 @@ export const posSaleInput = z.object({
         discountType: z.enum(['amount', 'percent']).default('amount'),
         taxPercent: z.number().min(0).max(100).default(0),
         cessPercent: z.number().min(0).max(100).default(0),
+        batchNo: z.string().trim().max(40).nullish(),
+        serials: z.array(z.string().trim().min(1).max(60)).max(500).nullish(),
       }),
     )
     .min(1, 'Add at least one item')

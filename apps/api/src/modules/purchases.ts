@@ -468,6 +468,12 @@ export async function createPurchase(
         taxAmount: l.taxAmount,
         lineTotal: l.lineTotal,
         landedCost: l.landedCost,
+        extra: {
+          ...(l.batchNo
+            ? { batchNo: l.batchNo, expDate: l.expDate ?? null, mfgDate: l.mfgDate ?? null }
+            : {}),
+          ...(l.serials?.length ? { serials: l.serials } : {}),
+        },
       })),
     )
     .returning();

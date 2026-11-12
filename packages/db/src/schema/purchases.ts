@@ -153,6 +153,8 @@ export const purchaseLines = pgTable(
     landedCost: numeric('landed_cost', { precision: 14, scale: 4, mode: 'number' })
       .notNull()
       .default(0),
+    /** Batch, expiry and serial numbers of what came in (for items that track them). */
+    extra: jsonb('extra').notNull().default({}),
   },
   (t) => [
     foreignKey({

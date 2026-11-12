@@ -6,6 +6,8 @@ import {
 import { confirmAction, promptAction } from '../../components/ui/ConfirmModal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { toast } from '../../components/ui/Toast';
+import { apiClient } from '../../lib/apiClient';
+import { getAppSetting } from '../../lib/appSettings';
 import { formatCurrency } from '../../utils';
 import { listBusinesses } from '../../lib/data/accounting';
 import { listBankAccounts } from '../../lib/data/cashbank';
@@ -123,8 +125,39 @@ export default function PosPage() {
     return () => clearTimeout(t);
   }, [query, ctx]);
 
-  const addItem = (item, qty = 1) => {
+  // Settings > Item: an item that tracks batches gets the first-expiring batch with stock (changeable on the line);
+  // one that tracks serial numbers asks for them. The server checks both again when the bill is saved.
+  const lotsFor = async (item) => {
+    if (!getAppSetting('item.batch') && !getAppSetting('item.serial')) return null;
+    try { return await apiClient.get(`/v1/items/${item.id}/lots`); } catch { return null; }
+  };
+  const addItem = async (item, qty = 1) => {
+    const lots = item.id ? await lotsFor(item) : null;
+    const today = new Date().toISOString().slice(0, 10);
+    const batch = lots?.tracksBatches && getAppSetting('item.batch')
+      ? lots.batches.find((b) => b.qty > 0 && !(b.expDate && b.expDate < today)) || null
+      : null;
+    if (lots?.tracksBatches && getAppSetting('item.batch') && !batch) { toast(`${item.name}: no batch in stock`, 'warning'); return; }
+    let serials = null;
+    if (lots?.tracksSerials && getAppSetting('item.serial')) {
+      const typed = await promptAction({
+        title: `Serial numbers for ${item.name}`,
+        message: `${qty} needed. In stock: ${lots.serials.slice(0, 8).join(', ')}${lots.serials.length > 8 ? '…' : ''}`,
+        placeholder: 'Scan or type, separated by commas',
+        confirmLabel: 'Add',
+      });
+      if (typed === null) return;
+      serials = typed.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+      if (serials.length !== qty) { toast(`${qty} serial number${qty === 1 ? '' : 's'} needed`, 'warning'); return; }
+    }
     patch((b) => {
+      // A tracked line is its own line (each batch or set of serials is sold separately).
+      if (batch || serials) {
+        // A tracked line is never merged into another: each batch or set of serial numbers is its own line.
+        const fresh = cartAdd([], item, settings, qty)[0];
+        const line = { ...fresh, key: `${fresh.key}#${Date.now()}`, stock: item.stock, trackStock: item.trackStock, batchNo: batch?.batchNo ?? null, serials, lots: lots?.batches || null };
+        return { lines: [...b.lines, line], selected: line.key };
+      }
       const lines = cartAdd(b.lines, item, settings, qty).map((l) => (l.itemId === item.id ? { ...l, stock: item.stock, trackStock: item.trackStock } : l));
       return { lines, selected: lines.find((l) => l.itemId === item.id)?.key };
     });
@@ -232,7 +265,7 @@ export default function PosPage() {
         businessId: ctx.biz.id,
         partyId: bill.customer?.id ?? null,
         invoiceDate: bill.date || todayIso(),
-        lines: bill.lines.map((l) => ({ itemId: l.itemId, name: l.name, hsn: l.hsn || '', unit: l.unit, quantity: l.quantity, freeQty: settings.freeQty ? l.freeQty || 0 : 0, rate: l.rate, discount: l.discount || 0, discountType: l.discountType || 'amount', taxPercent: l.taxPercent, cessPercent: l.cessPercent || 0 })),
+        lines: bill.lines.map((l) => ({ itemId: l.itemId, name: l.name, hsn: l.hsn || '', unit: l.unit, quantity: l.quantity, freeQty: settings.freeQty ? l.freeQty || 0 : 0, rate: l.rate, discount: l.discount || 0, discountType: l.discountType || 'amount', taxPercent: l.taxPercent, cessPercent: l.cessPercent || 0, ...(l.batchNo ? { batchNo: l.batchNo } : {}), ...(l.serials?.length ? { serials: l.serials } : {}) })),
         billDiscount: settings.billDiscount ? bill.billDiscount : null,
         billTaxPercent: settings.billTax ? bill.billTaxPercent : null,
         charges: bill.charges.map((c) => ({ name: c.name, amount: c.amount, gstRate: c.gstRate || 0, taxable: true, hsn: '' })),
@@ -339,7 +372,18 @@ export default function PosPage() {
                   const v = T.lines[i];
                   return (
                     <tr key={l.key} aria-selected={l.key === bill.selected} className={stockWarn(l) ? 'warn' : ''} onClick={() => patch({ selected: l.key })} title={stockWarn(l) ? `Only ${l.stock} in stock` : undefined}>
-                      <td>{i + 1}</td><td>{l.code}</td><td>{l.name}{l.freeQty > 0 && settings.freeQty ? <small> (+{l.freeQty} free)</small> : null}</td>
+                      <td>{i + 1}</td><td>{l.code}</td><td>{l.name}{l.freeQty > 0 && settings.freeQty ? <small> (+{l.freeQty} free)</small> : null}
+                        {l.batchNo && (
+                          <div><small>Batch{' '}
+                            {l.lots?.length > 1
+                              ? <select aria-label={`Batch of ${l.name}`} value={l.batchNo} onClick={(e) => e.stopPropagation()} onChange={(e) => patch((b) => ({ lines: b.lines.map((x) => (x.key === l.key ? { ...x, batchNo: e.target.value } : x)) }))}>
+                                  {l.lots.filter((bt) => bt.qty > 0).map((bt) => <option key={bt.batchNo} value={bt.batchNo}>{bt.batchNo}{bt.expDate ? ` · exp ${bt.expDate}` : ''} · {bt.qty} left</option>)}
+                                </select>
+                              : l.batchNo}
+                          </small></div>
+                        )}
+                        {l.serials?.length > 0 && <div><small>Serial {l.serials.join(', ')}</small></div>}
+                      </td>
                       <td className="n">{settings.directQtyChange ? <QtyInput value={l.quantity} onCommit={(n) => patch((b) => ({ lines: cartUpdate(b.lines, l.key, { quantity: n }) }))} /> : l.quantity}</td>
                       <td>{l.unit}</td><td className="n">{v.priceExTax.toFixed(2)}</td><td className="n">{v.discount.toFixed(2)}</td><td className="n">{v.tax.toFixed(2)}</td><td className="n"><strong>{v.total.toFixed(2)}</strong></td>
                     </tr>
