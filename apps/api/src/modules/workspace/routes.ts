@@ -1,3 +1,4 @@
+import { postsToLedger, syncWorkspaceDoc } from './ledgerBridge.ts';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema } from '@ledgora/db';
@@ -124,6 +125,11 @@ export function workspaceModule({ route }: Registrar) {
         }
       }
       const created = await putDoc(tx, orgId, params.collection, key, doc);
+      // The books: a bill, purchase, receipt or expense reposts its vouchers when its business has the ledger on.
+      if (postsToLedger(params.collection)) {
+        const row = await getDoc(tx, params.collection, key);
+        if (row) await syncWorkspaceDoc(tx, orgId, params.collection, row.id, row.data as Doc);
+      }
       await audit(
         tx,
         orgId,
@@ -185,11 +191,13 @@ export function workspaceModule({ route }: Registrar) {
         }
         if (!isOn(query.permanent)) {
           await tx.update(documents).set({ deletedAt: new Date() }).where(eq(documents.id, doc.id));
+          await syncWorkspaceDoc(tx, orgId, 'bills', doc.id, null, doc.data as Doc);
           await audit(tx, orgId, 'bills.trash', 'bills', null, { before: { id: params.id } });
           return { success: true as const, trashed: true };
         }
       }
       await tx.delete(documents).where(eq(documents.id, doc.id));
+      await syncWorkspaceDoc(tx, orgId, params.collection, doc.id, null, doc.data as Doc);
       await audit(tx, orgId, `${params.collection}.delete`, params.collection, null, {
         before: { id: params.id },
       });
@@ -363,6 +371,7 @@ export function workspaceModule({ route }: Registrar) {
           'An invoice with this number exists again. Rename or delete it first.',
         );
       await tx.update(documents).set({ deletedAt: null }).where(eq(documents.id, row.id));
+      await syncWorkspaceDoc(tx, orgId, 'bills', row.id, row.data as Doc);
       await audit(tx, orgId, 'bills.restore', 'bills', null, { after: { id: params.id } });
       return { success: true as const };
     },

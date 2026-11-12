@@ -1,5 +1,6 @@
 // Vyapar parity P4-S4: backfill. Posts every existing document of a business into the ledger, checks that the party
 // balances the ledger gives equal the ones worked out from the documents, and only then turns the ledger on.
+import { postWorkspaceHistory } from './workspace/ledgerBridge.ts';
 import { and, asc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
 import {
@@ -402,6 +403,10 @@ export async function backfillLedger(
           });
         }
       }
+      // The billing screens' documents (bills, purchases, receipts, expenses kept as workspace documents).
+      const ws = await postWorkspaceHistory(sp, orgId, o.businessId);
+      vouchers += ws.vouchers;
+      problems.push(...(ws.problems as never[]));
       const diffs = await partyDiffs(sp, o.businessId);
       const tb = await trialBalanceOf(sp, o.businessId);
       return {
@@ -435,5 +440,6 @@ export async function repostDocuments(tx: Tx, orgId: string, businessId: string)
     const r = await repost(tx, orgId, { businessId, refType: d.kind, refId: d.row.id, postings });
     if (r.changed) changed++;
   }
+  changed += (await postWorkspaceHistory(tx, orgId, businessId)).vouchers;
   return changed;
 }

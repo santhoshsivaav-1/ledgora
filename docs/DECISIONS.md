@@ -597,3 +597,31 @@ the "Still not done" lines of the notes above. Full suites at the end: tax-engin
    catalogue (P11-S6); batch and serial at the POS counter and in the typed API; posting workspace documents to the ledger;
    `biz.type`, `biz.category`, `ui.lang`, `gst.exemptLabel`, `party.defaultKind`. The suites do not drive a real browser:
    run the sign-up to first-invoice flow by hand once.
+
+## Notes recorded during the completion pass (2026-11-12, later)
+
+1. **Rate masters and default accounts.** `tax.gstRates` (the GST % list on bills and items), `tax.tdsRates` and
+   `tax.tcsRates` (your own rate for a section, or a new section) lay over the built-in lists (`sectionsWith`).
+   `acct.defaultAccounts` sends sales, purchases, discounts, round-off and the rest to accounts of the business's choosing,
+   of the same kind; postings are remapped in one place (`postingsFor`), so every voucher still balances.
+   ⚠️ **TDS rates fixed:** the sales-side list had 194H at 5% and 194-O at 1%; both changed from 1 October 2024 (Finance
+   (No. 2) Act 2024) to 2% and 0.1%. The purchase-side rules already used 2%.
+2. **Custom roles and the two rules.** A custom role is `custom_<slug>`, copied from any role, assignable to members and
+   invitations, deletable only when nobody has it. "Own transactions only" hides others' typed invoices (404) and the
+   screens' bills, receipts, purchases and expenses, and refuses editing or deleting them; the creator stamp
+   (`_createdBy`, `invoices.created_by`) is set by the server. Documents saved before the stamp count as someone else's.
+   "Hide purchase prices" strips product costs, keeps the stored cost on save, and reads a typed item's cost as 0.
+3. ⚠️ **GSTR-3B, the missing rows.** A line can be marked Nil rated, Exempt or Non-GST; such lines leave B2B, B2C, the HSN
+   summary and 3.1(a) and go to Table 8, 3.1(c) and 3.1(e). Unmarked 0% lines are read as before (in 3.1(a) at 0%), so a
+   business must mark its nil-rated goods for them to move. Purchase bills marked "Import of goods" credit 4(A)(1) as
+   IGST; "Import of services" is reverse charge (3.1(d)) with credit in 4(A)(2), kept out of 4(A)(3). The bill-of-entry
+   number, date and port code are stored but not exported anywhere yet (GSTR-3B does not need them). **CA to confirm.**
+4. **Batch and serial everywhere.** The typed API and the POS counter now check batches and serials the way the web editor
+   does (`tax-engine/lots.ts`), when Settings > Item has tracking on and the plan includes it.
+5. **The ledger now posts the screens' documents** (this reverses Phase 4 note 2, which left them out). Bills, purchases,
+   receipts and Payment Out vouchers, expenses and other income post through `tax-engine/wsPosting.ts` on every save,
+   edit, trash, restore and delete, and "Post history again" posts them all. Money is counted once: a bill posts only its
+   own inline payments (not those from a receipt, credit moved between bills, or advance adjustments); a purchase only
+   the payments made with it. ⚠️ **Limits:** workspace parties are names, so these vouchers carry no party (the party
+   ledger and Verify's party check cover typed parties only); a document belongs to the business whose GSTIN it carries,
+   else the default business; charges on workspace bills post into Sales, not Charges Income.
