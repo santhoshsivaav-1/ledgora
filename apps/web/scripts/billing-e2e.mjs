@@ -2,6 +2,7 @@
 // editor is stored in Postgres for the signed-in organization, survives a reload and a sign-out, and another
 // organization cannot see it. Same setup as auth-e2e.mjs (read its header). It creates throwaway accounts.
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
 const OUT = process.argv[2] || '';
@@ -27,18 +28,7 @@ async function account(browser, label) {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`pageerror (${label}):`, e.message.slice(0, 200)));
   const email = `bill${label}${Date.now()}@example.com`.toLowerCase(); // e-mail addresses are stored in lower case
-  await page.goto(APP);
-  await page.getByRole('tab', { name: 'Create account' }).click();
-  await page.getByLabel('Your name').fill(`Person ${label}`);
-  await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel(/Password/).fill(password);
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
-  const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject));
-  await page.goto(/https?:\/\/\S+/.exec(mail.text)[0]);
-  await page.getByLabel('Business name').fill(`Shop ${label}`);
-  await page.getByLabel('State').selectOption('Tamil Nadu');
-  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await signUpAndSetUp(page, { app: APP, name: `Person ${label}`, email: email, password, business: `Shop ${label}`, state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
   await page.locator('.account-bar').waitFor({ timeout: 15000 });
   // The first-run wizard appears once this business's print settings have loaded; skip it.
 await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
@@ -60,7 +50,7 @@ await nums.nth(1).fill('100');
 await page.waitForTimeout(500);
 await shot(page, 'billing-editor');
 const saving = page.waitForResponse((r) => r.url().includes('/v1/workspace/collections/bills') && r.request().method() === 'POST', { timeout: 15000 });
-await page.getByRole('button', { name: 'Save', exact: true }).click();
+await page.getByRole('button', { name: /^Save (Tax Invoice|Bill of Supply)/ }).first().click();
 await saving.catch(async (e) => { await shot(page, 'billing-save-failed'); throw e; });
 const saved = await bills(a.ctx);
 check('saving in the editor stores one bill for this organization', saved.length === 1, JSON.stringify(saved).slice(0, 200));

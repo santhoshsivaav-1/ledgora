@@ -2,6 +2,7 @@
 // and the invitation page. Same setup and warnings as auth-e2e.mjs (read its header): it creates accounts and writes
 // to the legacy server it talks to.
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 import { createHmac } from 'node:crypto';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
@@ -36,19 +37,7 @@ async function signUpAndOnboard(browser, label) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const email = `p3${label}${Date.now()}@example.com`;
-  await page.goto(APP);
-  await page.getByRole('tab', { name: 'Create account' }).click();
-  await page.getByLabel('Your name').fill(`Person ${label}`);
-  await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel(/Password/).fill(password);
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
-  const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject));
-  await page.goto(/https?:\/\/\S+/.exec(mail.text)[0]);
-  await page.getByRole('heading', { name: 'Tell us about your business' }).waitFor({ timeout: 15000 });
-  await page.getByLabel('Business name').fill(`Shop ${label}`);
-  await page.getByLabel('State').selectOption('Tamil Nadu');
-  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await signUpAndSetUp(page, { app: APP, name: `Person ${label}`, email: email, password, business: `Shop ${label}`, state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
   await page.locator('.account-bar').waitFor({ timeout: 15000 });
   // The first-run wizard appears once this business's print settings have loaded; skip it.
   await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
@@ -72,7 +61,7 @@ await page.goBack();
 await page.waitForURL((u) => u.pathname === '/');
 check('the browser Back button returns to the dashboard', true);
 await page.goto(`${APP}/?view=new`);
-await page.waitForURL('**/invoices/new');
+await page.waitForURL('**/invoices/new**');
 check('an old /?view=new shortcut still works', true);
 await page.goto(`${APP}/no/such/page`);
 await page.waitForURL((u) => u.pathname === '/');
@@ -103,16 +92,17 @@ await guest.getByLabel('Your name').fill('Sam Sales');
 await guest.getByLabel('E-mail').fill(salesEmail);
 await guest.getByLabel(/Password/).fill(password);
 await guest.getByRole('button', { name: 'Create account' }).click();
-await guest.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
-const vm = await waitForMail((m) => m.to === salesEmail && /Confirm/.test(m.subject));
-await guest.goto(/https?:\/\/\S+/.exec(vm.text)[0]);
-await guest.getByRole('heading', { name: 'Tell us about your business' }).waitFor({ timeout: 15000 });
-await guest.goto(inviteUrl); // open the link while still on the first-run form: the gate keeps onboarding first
-await guest.getByLabel('Business name').fill('Sam Own Shop');
-await guest.getByLabel('State').selectOption('Kerala');
-await guest.getByRole('button', { name: 'Save and continue' }).click();
-await guest.locator('.account-bar').waitFor({ timeout: 15000 });
-await guest.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
+// With e-mail confirmation on, confirm first; either way a new account lands on the plans page.
+const guestVerify = guest.getByRole('heading', { name: 'Check your e-mail' });
+const guestPlans = guest.getByRole('heading', { name: 'Choose how to start' });
+await Promise.race([guestVerify.waitFor({ timeout: 15000 }), guestPlans.waitFor({ timeout: 15000 })]);
+if (await guestVerify.isVisible()) {
+  const vm = await waitForMail((m) => m.to === salesEmail && /Confirm/.test(m.subject));
+  await guest.goto(/https?:\/\/\S+/.exec(vm.text)[0]);
+  await guestPlans.waitFor({ timeout: 15000 });
+}
+check('a new account is asked to choose how to start', await guestPlans.isVisible());
+// The invitation link goes straight to the accept page: someone joining a team chooses no plan and sets up nothing.
 await guest.goto(inviteUrl);
 await guest.getByRole('heading', { name: 'Invitation' }).waitFor({ timeout: 8000 }).catch(async () => { await shot(guest, 'accept-debug'); throw new Error('accept page did not open: ' + (await guest.locator('body').innerText()).slice(0, 300)); });
 check('the accept page names the inviter, the business and the role', /Person owner.*Shop owner.*Salesman/s.test(await guest.locator('body').innerText()));
@@ -155,7 +145,7 @@ await page.goto(`${APP}/settings/team`);
 await page.getByRole('dialog', { name: 'Upgrade your plan' }).waitFor({ timeout: 8000 }).catch(async () => { await shot(page, 'upgrade-debug'); throw new Error('no upgrade sheet: ' + (await page.locator('body').innerText()).slice(0, 300)); });
 check('a 402 answer opens the Upgrade sheet', /does not include team members/.test(await page.getByRole('dialog').innerText()));
 await shot(page, 'upgrade-sheet');
-await page.getByRole('button', { name: 'Got it' }).click();
+await page.getByRole('button', { name: 'Not now' }).click();
 await page.unroute('**/v1/members');
 
 // end the session from another place, then use the app: the next data request sends the user to sign-in

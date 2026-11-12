@@ -3,6 +3,7 @@
 // journal, run Verify My Data, and see the period lock refuse a write. Same setup as purchase-e2e.mjs: the web app on
 // E2E_APP_URL and the API on E2E_API_URL; it creates a throwaway account.
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
 const OUT = process.argv[2] || '';
@@ -24,18 +25,7 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } }
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('pageerror:', e.message.slice(0, 200)));
 const email = `led${Date.now()}@example.com`;
-await page.goto(APP);
-await page.getByRole('tab', { name: 'Create account' }).click();
-await page.getByLabel('Your name').fill('Bookkeeper');
-await page.getByLabel('E-mail').fill(email);
-await page.getByLabel(/Password/).fill(password);
-await page.getByRole('button', { name: 'Create account' }).click();
-const verify = page.getByRole('heading', { name: 'Check your e-mail' });
-await Promise.race([verify.waitFor(), page.getByLabel('Business name').waitFor()]);
-if (await verify.isVisible()) { const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject)); await page.goto(/https?:\/\/\S+/.exec(mail.text)[0]); }
-await page.getByLabel('Business name').fill('Books Traders');
-await page.getByLabel('State').selectOption('Tamil Nadu');
-await page.getByRole('button', { name: 'Save and continue' }).click();
+await signUpAndSetUp(page, { app: APP, name: 'Bookkeeper', email: email, password, business: 'Books Traders', state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
 await page.locator('.account-bar').waitFor({ timeout: 15000 });
 await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
 

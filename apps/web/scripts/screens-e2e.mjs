@@ -1,6 +1,7 @@
 // Opens every screen of the app on a desktop and on a 360 px phone and checks that it draws: no script error, the app
 // shell is there, and nothing is wider than the screen (changes 3.24). Same setup as auth-e2e.mjs (read its header).
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
 const OUT = process.argv[2] || '';
@@ -27,17 +28,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 160)));
 const email = `screens${Date.now()}@example.com`;
-await page.goto(APP);
-await page.getByRole('tab', { name: 'Create account' }).click();
-await page.getByLabel('Your name').fill('Screen Tester');
-await page.getByLabel('E-mail').fill(email);
-await page.getByLabel(/Password/).fill('correct-horse-9');
-await page.getByRole('button', { name: 'Create account' }).click();
-await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
-await page.goto(/https?:\/\/\S+/.exec((await waitForMail((m) => m.to === email && /Confirm/.test(m.subject))).text)[0]);
-await page.getByLabel('Business name').fill('Screens Shop');
-await page.getByLabel('State').selectOption('Tamil Nadu');
-await page.getByRole('button', { name: 'Save and continue' }).click();
+await signUpAndSetUp(page, { app: APP, name: 'Screen Tester', email: email, password, business: 'Screens Shop', state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
 await page.locator('.account-bar').waitFor({ timeout: 15000 });
 // The first-run wizard appears once this business's print settings have loaded; skip it.
 await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});

@@ -327,9 +327,13 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const typeConfig = INVOICE_TYPES[invoiceType];
   // A new document started from a sales page (New quotation, New delivery challan...) opens as that type, with the
   // GST columns that type shows; switching type in the editor does the same in handleTypeChange.
+  // The same applies to the type Settings > GST > Registration type starts a new bill with (a Bill of Supply for an
+  // unregistered or composition business): without this it opened as a Bill of Supply that still charged GST.
   useEffect(() => {
-    if (draft || editingBill || !initialType || initialType === 'tax-invoice') return;
-    const config = INVOICE_TYPES[initialType];
+    if (draft || editingBill) return;
+    const start = INVOICE_TYPES[initialType] ? initialType : invoiceType;
+    if (!start || start === 'tax-invoice') return;
+    const config = INVOICE_TYPES[start];
     if (config) setInvoiceOptions(prev => ({ ...prev, showGST: config.showGST, showPlaceOfSupply: config.showGST }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

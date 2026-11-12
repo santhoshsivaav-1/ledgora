@@ -155,3 +155,14 @@ describe('lot stock (API and POS)', () => {
     expect(saleLotProblems({ name: 'X', quantity: 1, serials: ['S9'] }, { serials: ['S2'], date: '2026-11-01' })).toEqual(['X: not in stock: S9']);
   });
 });
+
+describe('income-tax tables for years after 2025-26 (audit)', () => {
+  it('use the latest known new-regime slabs and 87A rebate, not the 2024-25 ones', async () => {
+    const { getNewRegimeSlabs, get87AConfig, NEW_REGIME_SLABS_FY_2025_26, NEW_REGIME_SLABS_FY_2024_25 } = await import('../src/index.ts');
+    expect(getNewRegimeSlabs('2026-27')).toBe(NEW_REGIME_SLABS_FY_2025_26);
+    expect(getNewRegimeSlabs('2025-26')).toBe(NEW_REGIME_SLABS_FY_2025_26);
+    expect(getNewRegimeSlabs('2024-25')).toBe(NEW_REGIME_SLABS_FY_2024_25);
+    expect(get87AConfig('new', '2026-27')).toEqual({ threshold: 1_200_000, cap: 60_000 });
+    expect(get87AConfig('new', '2023-24')).toEqual({ threshold: 700_000, cap: 25_000 });
+  });
+});

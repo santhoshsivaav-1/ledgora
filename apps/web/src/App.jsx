@@ -113,7 +113,7 @@ import SalesOverview from './features/sales/SalesOverview';
 import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
 // The component gallery (/dev/ui) exists in development builds only; Vite drops it from production.
 const UiGallery = import.meta.env.DEV ? lazy(() => import('./features/dev/UiGallery')) : null;
-import { getPrintSettings, loadPrintSettingsFor } from './features/print/printSettingsStore';
+import { getPrintSettings, loadPrintSettingsFor, savePrintSettings } from './features/print/printSettingsStore';
 
 const openDocs = () => window.open(DOCS_URL, '_blank', 'noopener,noreferrer');
 
@@ -236,7 +236,8 @@ function App() {
             profileLoaded.current = true;
             const p = await res.json();
             setProfile(p);
-            if (!p.businessName && !localStorage.getItem('freegstbill_onboarded')) {
+            // Not while someone opens an invitation: they are joining a business, not setting one up.
+            if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
               setShowWelcome(true);
             }
           }
@@ -441,7 +442,13 @@ function App() {
     loadPrintSettingsFor(businessKey).then(() => {
       if (!live) return;
       setPrintLoadedFor(businessKey);
-      setShowWizard(!getPrintSettings().onboardingComplete);
+      const ps = getPrintSettings();
+      if (ps.onboardingComplete) setShowWizard(false);
+      else if (profile?.businessName) {
+        // The business setup after sign-up already asked what the old first-run wizard asks: mark it done, not shown twice.
+        savePrintSettings({ ...ps, onboardingComplete: true, onboardingSkipped: false });
+        setShowWizard(false);
+      } else setShowWizard(!window.location.pathname.startsWith('/accept-invite/'));
     });
     return () => {
       live = false;

@@ -140,8 +140,13 @@ export const NEW_REGIME_SLABS =
  * v1.10.31 — Pick the new-regime slab table for a given FY. Extending
  * to a new FY = add a new SLABS constant + a case here.
  */
+// A year from 2025-26 on uses the Budget 2025 table: the latest one the app knows. It used to fall back to the 2024-25
+// table for every year that was not exactly 2025-26, so tax year 2026-27 was computed on the old ₹3L-₹7L slabs.
+// ⚠️ Confirm the 2026-27 rates (Income-tax Act 2025 / Budget 2026) and add a table here if they changed.
+const fromFy2025 = (fy: string) => /^\d{4}-\d{2}$/.test(fy) && fy >= '2025-26';
+
 export function getNewRegimeSlabs(fy = CURRENT_FY) {
-  if (fy === '2025-26') return NEW_REGIME_SLABS_FY_2025_26;
+  if (fromFy2025(fy)) return NEW_REGIME_SLABS_FY_2025_26;
   return NEW_REGIME_SLABS_FY_2024_25; // FY 24-25 and earlier
 }
 
@@ -155,7 +160,7 @@ export function get87AConfig(regime, fy = CURRENT_FY) {
     return { threshold: 500_000, cap: 12_500 };
   }
   // new regime
-  if (fy === '2025-26') return { threshold: 1_200_000, cap: 60_000 };
+  if (fromFy2025(fy)) return { threshold: 1_200_000, cap: 60_000 };
   return { threshold: 700_000, cap: 25_000 }; // FY 24-25
 }
 

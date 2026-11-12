@@ -3,6 +3,7 @@
 // and the books through the API. Same setup as ledger-e2e.mjs: the web app on E2E_APP_URL and the API on E2E_API_URL (one origin when the
 // API serves the built app); it creates a throwaway account. Screenshots go to the folder given as the first argument.
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -33,18 +34,7 @@ const field = (scope, label) => scope.locator('.form-group', { has: page.locator
 
 try {
   const email = `pos${Date.now()}@example.com`;
-  await page.goto(APP);
-  await page.getByRole('tab', { name: 'Create account' }).click();
-  await page.getByLabel('Your name').fill('Owner');
-  await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel(/Password/).fill(password);
-  await page.getByRole('button', { name: 'Create account' }).click();
-  const verify = page.getByRole('heading', { name: 'Check your e-mail' });
-  await Promise.race([verify.waitFor(), page.getByLabel('Business name').waitFor()]);
-  if (await verify.isVisible()) { const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject)); await page.goto(/https?:\/\/\S+/.exec(mail.text)[0]); }
-  await page.getByLabel('Business name').fill('Corner Store');
-  await page.getByLabel('State').selectOption('Tamil Nadu');
-  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await signUpAndSetUp(page, { app: APP, name: 'Owner', email: email, password, business: 'Corner Store', state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
   await page.locator('.account-bar').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
 

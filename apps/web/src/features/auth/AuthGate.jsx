@@ -39,7 +39,11 @@ export default function AuthGate({ children }) {
       setOnboarding(ob);
       const ent = who.entitlements;
       const owner = who.role === 'owner';
-      if (owner && ent?.needsPlan) setPhase('plans');
+      // Someone who signed up to join a team opens the invitation first: they are not choosing a plan or setting up
+      // a business of their own. After accepting, the shared business is active and needs neither.
+      const joining = window.location.pathname.startsWith('/accept-invite/');
+      if (joining) setPhase('in');
+      else if (owner && ent?.needsPlan) setPhase('plans');
       else if (!ob.complete) setPhase('onboarding');
       else if (flag(GUIDE_KEY)) setPhase('guide');
       // The timeline check at sign-in: an owner whose trial or plan has run out sees the plans once before the app.

@@ -3,6 +3,7 @@
 // opened once to see it loads. Same setup as cashbank-e2e.mjs: the API serving the built app on E2E_APP_URL; it creates a
 // throwaway account and its own documents. Screenshots go to the folder given as the first argument.
 import { createRequire } from 'node:module';
+import { signUpAndSetUp } from './e2eSignup.mjs';
 import { readFileSync } from 'node:fs';
 const require = createRequire(new URL('../package.json', import.meta.url));
 const { firefox } = require('playwright');
@@ -29,18 +30,7 @@ page.on('pageerror', (e) => { pageErrors.push(e.message); console.log('pageerror
 
 try {
   const email = `rp${Date.now()}@example.com`;
-  await page.goto(APP);
-  await page.getByRole('tab', { name: 'Create account' }).click();
-  await page.getByLabel('Your name').fill('Owner');
-  await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel(/Password/).fill(password);
-  await page.getByRole('button', { name: 'Create account' }).click();
-  const verify = page.getByRole('heading', { name: 'Check your e-mail' });
-  await Promise.race([verify.waitFor(), page.getByLabel('Business name').waitFor()]);
-  if (await verify.isVisible()) { const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject)); await page.goto(/https?:\/\/\S+/.exec(mail.text)[0]); }
-  await page.getByLabel('Business name').fill('Report Traders');
-  await page.getByLabel('State').selectOption('Tamil Nadu');
-  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await signUpAndSetUp(page, { app: APP, name: 'Owner', email: email, password, business: 'Report Traders', state: 'Tamil Nadu', waitForMail: typeof waitForMail === 'function' ? waitForMail : null });
   await page.locator('.account-bar').waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: /skip setup/i }).first().click({ timeout: 8000 }).catch(() => {});
 

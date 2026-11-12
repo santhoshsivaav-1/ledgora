@@ -188,9 +188,11 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
             {step > 0 && <button type="button" className="btn btn-secondary" onClick={() => { setErrors({}); setStep((n) => n - 1); }}><ArrowLeft size={14} /> {tr('setup.back', 'Back')}</button>}
             <button type="button" className="auth-link" style={{ marginTop: 0 }} onClick={onSignOut}><LogOut size={14} /> {tr('common.logout', 'Log out')}</button>
           </div>
+          {/* Separate keys: reusing one element turned "Next" into the submit button during its own click, which saved
+              the form and skipped the last step. */}
           {step < STEPS.length - 1
-            ? <button type="button" className="btn btn-primary" onClick={next}>{tr('setup.next', 'Next')} <ArrowRight size={14} /></button>
-            : <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : tr('setup.finish', 'Finish setup')}</button>}
+            ? <button key="next" type="button" className="btn btn-primary" onClick={next}>{tr('setup.next', 'Next')} <ArrowRight size={14} /></button>
+            : <button key="finish" type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : tr('setup.finish', 'Finish setup')}</button>}
         </div>
       </form>
     </div>
