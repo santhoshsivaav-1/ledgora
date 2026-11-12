@@ -24,7 +24,7 @@ function Field({ f, set, errors, id, label, hint, children, className = '', ...r
 export default function BusinessSetup({ me, business, onDone, onSignOut }) {
   const [step, setStep] = useState(0);
   const [f, setF] = useState({
-    name: business.name || '', gstin: business.gstin || '', state: business.state || '', regType: business.gstin ? 'regular' : 'unregistered', compRate: '1',
+    name: business.name || '', gstin: business.gstin || '', state: business.state || '', regType: business.gstin ? 'regular' : 'unregistered', compRate: '1', bizType: 'retail', bizCategory: '',
     address: business.address || '', city: business.city || '', pin: business.pin || '', phone: business.phone || me?.user?.phoneNumber || '', email: business.email || me?.user?.email || '',
     bankName: '', accountNumber: '', ifsc: '', upiId: '', fyStart: '4',
     defaultGst: '18', taxInclusive: false, terms: 'Goods once sold will not be taken back.\nPayment is due within the agreed days.',
@@ -114,6 +114,17 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
                   {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Field>
+              <Field f={f} set={set} errors={errors} id="bizType" label="Type of business">
+                <select id="bs-bizType" className="form-input" value={f.bizType} onChange={set('bizType')}>
+                  <option value="retail">Retail shop</option>
+                  <option value="wholesale">Wholesale</option>
+                  <option value="distributor">Distributor</option>
+                  <option value="service">Services</option>
+                  <option value="manufacturing">Manufacturing</option>
+                  <option value="other">Other</option>
+                </select>
+              </Field>
+              <Field f={f} set={set} errors={errors} id="bizCategory" label="What you sell (optional)" placeholder="e.g. Mobile phones" maxLength={60} />
               {f.regType === 'composition' && <Field f={f} set={set} errors={errors} id="compRate" label="Composition rate (%)" type="number" min="0" step="any" hint="1% for traders and manufacturers, 5% for restaurants, 6% for services" />}
             </div>
           </>

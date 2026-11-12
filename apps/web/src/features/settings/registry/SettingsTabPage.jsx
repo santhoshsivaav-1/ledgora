@@ -6,7 +6,8 @@ import { SettingRow, SettingsSection } from '../../../components/ui/SettingRow';
 import { LoadingState, ErrorState } from '../../../components/ui/States';
 import { toast } from '../../../components/ui/Toast';
 import PageHeader from '../../../components/ui/PageHeader';
-import { listBusinesses } from '../../../lib/data/accounting';
+import { listAccounts, listBusinesses } from '../../../lib/data/accounting';
+import { DEFAULT_ACCOUNT_ROLES } from '@ledgora/tax-engine';
 import { useEntitlements } from '../../billing/useEntitlements';
 import { comingSoonLabel, plannedOf, searchSettings, sectionsOf } from './model';
 import { useSettings } from './useSettings';
@@ -24,7 +25,7 @@ function NumList({ id, value, disabled, onChange }) {
   useEffect(() => setText((value || []).join(', ')), [value]);
   const commit = () => {
     const nums = text.split(/[,\s]+/).filter(Boolean).map(Number);
-    if (nums.some((n) => !Number.isInteger(n))) return setText((value || []).join(', '));
+    if (nums.some((n) => !Number.isFinite(n))) return setText((value || []).join(', ')); // the API checks whole numbers where it must
     if (nums.join(',') !== (value || []).join(',')) onChange(nums);
   };
   return <input id={id} className="ui-input" disabled={disabled} value={text} onChange={(e) => setText(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />;
@@ -35,7 +36,41 @@ const LIST_COLUMNS = {
   'txn.charges': { add: { name: '', gst: 18, sac: '' }, cols: [{ k: 'name', label: 'Name' }, { k: 'gst', label: 'GST %', type: 'number' }, { k: 'sac', label: 'SAC' }] },
   'party.custom': { add: { label: '', printOnInvoice: false }, cols: [{ k: 'label', label: 'Field name' }, { k: 'printOnInvoice', label: 'Print on invoice', type: 'checkbox' }] },
   'item.custom': { add: { label: '', printOnInvoice: false }, cols: [{ k: 'label', label: 'Field name' }, { k: 'printOnInvoice', label: 'Print on invoice', type: 'checkbox' }] },
+  'tax.tdsRates': { add: { code: '', rate: 0 }, cols: [{ k: 'code', label: 'Section (e.g. 194J)' }, { k: 'rate', label: 'Rate %', type: 'number' }] },
+  'tax.tcsRates': { add: { code: '', rate: 0 }, cols: [{ k: 'code', label: 'Section' }, { k: 'rate', label: 'Rate %', type: 'number' }] },
 };
+
+// Settings > Accounting > Default accounts: for each posting, one of this business's accounts of the same kind.
+function AccountsMap({ businessId, value, disabled, onChange }) {
+  const [accounts, setAccounts] = useState(null);
+  const [failed, setFailed] = useState('');
+  useEffect(() => {
+    if (!businessId) return;
+    listAccounts(businessId).then(setAccounts).catch((e) => setFailed(e?.message || 'Could not load accounts'));
+  }, [businessId]);
+  if (failed) return <span className="ui-help">{failed}</span>;
+  if (!accounts) return <span className="ui-help">Loading accounts…</span>;
+  if (!accounts.length) return <span className="ui-help">Switch the ledger on in Accounting first.</span>;
+  const v = value || {};
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {DEFAULT_ACCOUNT_ROLES.map((r) => (
+        <label key={r.role} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{r.label}</span>
+          <select className="ui-select" disabled={disabled} value={v[r.role] || r.code}
+            onChange={(e) => {
+              const next = { ...v };
+              if (e.target.value === r.code) delete next[r.role];
+              else next[r.role] = e.target.value;
+              onChange(next);
+            }}>
+            {accounts.filter((a) => a.kind === r.kind).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+          </select>
+        </label>
+      ))}
+    </div>
+  );
+}
 function ListEditor({ settingKey, value, disabled, onChange }) {
   const spec = LIST_COLUMNS[settingKey];
   const [rows, setRows] = useState(value || []);
@@ -68,7 +103,7 @@ function ListEditor({ settingKey, value, disabled, onChange }) {
   );
 }
 
-function Control({ id, settingKey, def, value, disabled, onChange }) {
+function Control({ id, settingKey, def, value, disabled, onChange, businessId }) {
   const common = { id, disabled, 'aria-disabled': disabled || undefined };
   if (def.control === 'switch')
     return <input type="checkbox" role="switch" {...common} checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
@@ -96,12 +131,14 @@ function Control({ id, settingKey, def, value, disabled, onChange }) {
     return <NumList id={id} value={value} disabled={disabled} onChange={onChange} />;
   if (def.control === 'list')
     return <ListEditor settingKey={settingKey} value={value} disabled={disabled} onChange={onChange} />;
+  if (def.control === 'accounts')
+    return <AccountsMap businessId={businessId} value={value} disabled={disabled} onChange={onChange} />;
   if (def.control === 'textarea')
     return <textarea className="ui-input" rows={2} {...common} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
   return <input className="ui-input" {...common} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
 }
 
-function Row({ k, value, canEdit, isOwner, onChange, highlight, needsPlan }) {
+function Row({ k, value, canEdit, isOwner, onChange, highlight, needsPlan, businessId }) {
   const def = SETTINGS[k];
   const id = `setting-${k}`;
   const locked = def.ownerOnly && !isOwner;
@@ -122,7 +159,7 @@ function Row({ k, value, canEdit, isOwner, onChange, highlight, needsPlan }) {
         }
         help={locked && def.live ? `${def.help}. Only the owner can change this.` : def.managedAt ? def.managedAt.note : def.help}
       >
-        <Control id={`${id}-control`} settingKey={k} def={def} value={value} disabled={disabled} onChange={(v) => onChange(k, v)} />
+        <Control id={`${id}-control`} settingKey={k} def={def} value={value} disabled={disabled} businessId={businessId} onChange={(v) => onChange(k, v)} />
       </SettingRow>
     </div>
   );
@@ -207,7 +244,7 @@ export default function SettingsTabPage({ tab }) {
       {sections.map((s) => (
         <SettingsSection key={s.title} title={s.title}>
           {s.keys.map((k) => (
-            <Row key={k} k={k} value={settings[k]} canEdit={can('settings:write')} isOwner={role === 'owner'} needsPlan={planLocked[k]} onChange={change} highlight={focus === k && litDone !== focus} />
+            <Row key={k} k={k} value={settings[k]} canEdit={can('settings:write')} isOwner={role === 'owner'} needsPlan={planLocked[k]} businessId={businessId} onChange={change} highlight={focus === k && litDone !== focus} />
           ))}
         </SettingsSection>
       ))}

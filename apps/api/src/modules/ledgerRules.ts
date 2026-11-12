@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
 import {
+  remapPostings,
   ACC,
   DEFAULT_CHART,
   debitNoteItcReversal,
@@ -416,10 +417,16 @@ export async function postingsFor(
   kind: LedgerKind,
   row: InvoiceRow | PurchaseRow | PaymentRow | ExpenseRow,
 ) {
-  if (kind === 'invoice') return invoicePostings(tx, orgId, row as InvoiceRow);
-  if (kind === 'purchase') return purchasePostings(tx, orgId, row as PurchaseRow);
-  if (kind === 'payment') return paymentPostings(tx, orgId, row as PaymentRow);
-  return expensePostings(tx, orgId, row as ExpenseRow);
+  const raw =
+    kind === 'invoice'
+      ? await invoicePostings(tx, orgId, row as InvoiceRow)
+      : kind === 'purchase'
+        ? await purchasePostings(tx, orgId, row as PurchaseRow)
+        : kind === 'payment'
+          ? await paymentPostings(tx, orgId, row as PaymentRow)
+          : await expensePostings(tx, orgId, row as ExpenseRow);
+  // Settings > Accounting > Default accounts: the business's own accounts for sales, purchases, discounts, round-off...
+  return remapPostings(raw, await settingValue(tx, row.businessId, 'acct.defaultAccounts'));
 }
 
 const TABLES = {

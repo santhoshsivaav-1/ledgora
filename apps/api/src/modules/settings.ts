@@ -4,6 +4,7 @@
 // inside business_settings.preferences), so the older readers keep working and a rollback loses nothing; the rest are
 // rows in setting_values (settingsStore.ts).
 import { and, count, eq, isNull } from 'drizzle-orm';
+import { DEFAULT_ACCOUNT_ROLES } from '@ledgora/tax-engine';
 import { schema } from '@ledgora/db';
 import {
   SETTINGS,
@@ -110,6 +111,34 @@ export function settingsModule({ route }: Registrar) {
           `Your ${eff.label} plan does not include ${needs.map((k) => SETTINGS[k].label).join(', ')}. Upgrade to use it.`,
           { feature: SETTING_FEATURE[needs[0]!], plan: eff.plan, keys: needs },
         );
+
+      // Default accounts must be real accounts of this business, of the same kind as what they replace.
+      const chosen = values['acct.defaultAccounts'] as Record<string, string> | undefined;
+      if (chosen && Object.keys(chosen).length) {
+        const rows = await tx
+          .select({ code: schema.accounts.code, kind: schema.accounts.kind })
+          .from(schema.accounts)
+          .where(eq(schema.accounts.businessId, body.businessId));
+        const kindOf = new Map(rows.map((r) => [r.code, r.kind]));
+        const problems = Object.entries(chosen).flatMap(([role, code]) => {
+          const def = DEFAULT_ACCOUNT_ROLES.find((r) => r.role === role);
+          if (!def) return [{ path: `acct.defaultAccounts.${role}`, message: 'Unknown posting' }];
+          if (!kindOf.size)
+            return [
+              { path: 'acct.defaultAccounts', message: 'Switch the ledger on first (Accounting)' },
+            ];
+          if (kindOf.get(code) !== def.kind)
+            return [
+              {
+                path: `acct.defaultAccounts.${role}`,
+                message: `${def.label} needs an ${def.kind} account`,
+              },
+            ];
+          return [];
+        });
+        if (problems.length)
+          throw new AppError('validation_failed', 'The request is not valid', problems);
+      }
 
       const before = await loadSettings(tx, body.businessId);
       await writeSettings(tx, orgId, body.businessId, values);

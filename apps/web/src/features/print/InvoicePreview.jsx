@@ -117,6 +117,9 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   // measurable hot spot. Now: one lookup + downstream aliases keep
   // JSX shape untouched.
   const _ps = getPrintSettings();
+  // Settings > GST > Exempt / nil label: a 0% line prints this word in the rate column instead of "0%".
+  const exemptLabel = (getAppSetting('gst.exemptLabel') || '').trim();
+  const rateText = (r) => (Number(r) === 0 && exemptLabel ? exemptLabel : `${r}%`);
 
   // Print Settings -> Formatting (number grouping, decimals, symbol position,
   // date format) was saved but never used on the invoice. The defaults keep
@@ -1225,19 +1228,19 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
                 {showGST && (
                   isIndia && isInterstate ? (
                     <>
-                      <td className="inv-td inv-td-center">{taxRate}%</td>
+                      <td className="inv-td inv-td-center">{rateText(taxRate)}</td>
                       <td className="inv-td inv-td-right">{fmt(taxAmount)}</td>
                     </>
                   ) : isIndia ? (
                     <>
-                      <td className="inv-td inv-td-center">{halfRate}%</td>
+                      <td className="inv-td inv-td-center">{rateText(halfRate)}</td>
                       <td className="inv-td inv-td-right">{fmt(halfTax)}</td>
-                      <td className="inv-td inv-td-center">{halfRate}%</td>
+                      <td className="inv-td inv-td-center">{rateText(halfRate)}</td>
                       <td className="inv-td inv-td-right">{fmt(halfTax)}</td>
                     </>
                   ) : (
                     <>
-                      <td className="inv-td inv-td-center">{taxRate}%</td>
+                      <td className="inv-td inv-td-center">{rateText(taxRate)}</td>
                       <td className="inv-td inv-td-right">{fmt(taxAmount)}</td>
                     </>
                   )

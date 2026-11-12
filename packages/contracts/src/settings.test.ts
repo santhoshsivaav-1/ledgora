@@ -104,8 +104,14 @@ describe('parseSettingsPatch', () => {
     expect(r.values).toEqual({});
   });
   it('refuses keys that are not live yet instead of storing something nothing reads', () => {
-    const r = parseSettingsPatch({ 'biz.category': 'Retail' });
-    expect(r.errors[0]?.key).toBe('biz.category');
+    // Any key still marked not live; when every key is live, a key made not-live for the test.
+    const key = SETTING_KEYS.find((k) => !SETTINGS[k].live) ?? 'ui.lang';
+    const def = SETTINGS[key] as { live?: boolean };
+    const was = def.live;
+    def.live = false;
+    const r = parseSettingsPatch({ [key]: SETTINGS[key].default });
+    def.live = was;
+    expect(r.errors[0]?.key).toBe(key);
     expect(r.errors[0]?.message).toMatch(/coming soon/i);
     expect(r.values).toEqual({});
   });

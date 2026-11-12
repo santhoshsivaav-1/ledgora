@@ -38,7 +38,8 @@ export type SettingControl =
   | 'select'
   | 'radio'
   | 'list'
-  | 'numlist';
+  | 'numlist'
+  | 'accounts';
 
 export interface SettingDef<T extends z.ZodType = z.ZodType> {
   type: T;
@@ -156,10 +157,17 @@ export const SETTINGS = {
         ['manufacturing', 'Manufacturing'],
         ['other', 'Other'],
       ),
-      phase: 'P1',
+      live: true,
     },
   ),
-  'biz.category': profile(text(60), '', 'Business category', 'Used for analytics only', 'text'),
+  'biz.category': profile(
+    text(60),
+    '',
+    'Business category',
+    'What you sell, in your words (for example "Mobile shop"); kept with your business details',
+    'text',
+    { live: true },
+  ),
   'fy.startMonth': regional(
     z.number().int().min(1).max(12),
     4,
@@ -525,6 +533,30 @@ export const SETTINGS = {
     'Price inclusive of tax by default',
     'New bills start with tax-inclusive prices',
     'switch',
+  ),
+  'tax.gstRates': at('taxes', 'Rate masters')(
+    z.array(z.number().min(0).max(100)).min(1).max(20),
+    [0, 0.1, 0.25, 3, 5, 12, 18, 28, 40],
+    'GST rates offered',
+    'The rates in the GST % list on bills and items (any other rate can still be typed as Custom)',
+    'numlist',
+    { live: true },
+  ),
+  'tax.tdsRates': at('taxes', 'Rate masters')(
+    z.array(z.object({ code: text(20).min(1), rate: z.number().min(0).max(100) })).max(30),
+    [],
+    'TDS rates',
+    'Your own rate for a TDS section (for example 194J at 2), or a section that is not listed',
+    'list',
+    { live: true },
+  ),
+  'tax.tcsRates': at('taxes', 'Rate masters')(
+    z.array(z.object({ code: text(20).min(1), rate: z.number().min(0).max(100) })).max(30),
+    [],
+    'TCS rates',
+    'Your own rate for a TCS section, or one that is not listed',
+    'list',
+    { live: true },
   ),
   'tax.defaultItemRate': at('taxes', 'Defaults')(
     z.number().min(0).max(100),
@@ -911,6 +943,14 @@ export const SETTINGS = {
     'select',
     { options: opts(['average', 'Weighted average']), live: true },
   ),
+  'acct.defaultAccounts': accounting('Default accounts')(
+    z.record(z.string(), z.string().regex(/^\d{3,8}$/, 'Pick an account')),
+    {},
+    'Post to these accounts',
+    'Send sales, purchases, discounts, round-off and the rest to accounts of your own (same kind). Needs the ledger on',
+    'accounts',
+    { live: true },
+  ),
   'acct.autoPostExpense': accounting('Ledger')(
     toggle,
     true,
@@ -998,6 +1038,8 @@ export const LIVE_IN_APP = [
   'print.show.paymentMode',
   'print.show.partyBalance',
   'print.show.paidStamp',
+  'gst.exemptLabel',
+  'party.defaultKind',
   'fmt.date',
   'fmt.currency',
   'fmt.decimals',
@@ -1071,17 +1113,14 @@ export const PLANNED_TABLES: readonly {
   {
     tab: 'transaction',
     title: 'Number series per document type',
-    note: 'Prefix, next number, padding and yearly reset. Today: Settings > Invoices & print.',
+    note: 'Prefix, next number, padding, financial-year part and yearly restart for each document type.',
+    href: '/settings/documents',
   },
   {
     tab: 'print',
-    title: 'Logo, signature and stamp, thermal options, cheque print',
-    note: 'Part of the print designer.',
-  },
-  {
-    tab: 'taxes',
-    title: 'Tax rates, tax groups, cess, TCS rates, TDS sections, extra levies',
-    note: 'Rate masters that tax calculation will read.',
+    title: 'Logo, signature, stamp and thermal printing',
+    note: 'Upload them and set sizes, labels, language and the thermal layout in the print designer.',
+    href: '/settings/documents',
   },
   {
     tab: 'message',
@@ -1092,7 +1131,7 @@ export const PLANNED_TABLES: readonly {
   {
     tab: 'service',
     title: 'Service reminders',
-    note: 'Recurring service reminders (every N days or months, remind M days before) are managed in Grow > Reminders > Service. This follows the inferred meaning in the blueprint; confirm it against Vyapar before relying on it.',
+    note: 'Recurring service reminders (every N days or months, remind M days before) are managed in Grow > Reminders > Service.',
     href: '/grow/reminders?tab=service',
   },
   {
@@ -1109,8 +1148,9 @@ export const PLANNED_TABLES: readonly {
   },
   {
     tab: 'accounting',
-    title: 'Default accounts and opening balances',
-    note: 'Sales, purchase, round-off, discount and the other defaults the books post to.',
+    title: 'Chart of accounts and opening balances',
+    note: 'Add accounts and their opening balances on the Accounting screen.',
+    href: '/accounting',
   },
   {
     tab: 'currency',

@@ -44,6 +44,8 @@ export function settingsFrom(f) {
     'item.defaultGst': Number(f.defaultGst),
     'tax.priceInclusive': !!f.taxInclusive,
     'txn.terms.text': f.terms.trim().slice(0, 1000),
+    'biz.type': f.bizType || 'retail',
+    'biz.category': (f.bizCategory || '').trim().slice(0, 60),
   };
   if (f.regType === 'composition') out['gst.compRate'] = Number(f.compRate);
   for (const k of Object.keys(out)) if (!(k in SETTINGS)) delete out[k];

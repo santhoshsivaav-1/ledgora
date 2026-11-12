@@ -45,6 +45,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   const [clients, setClients] = useState([]);
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
+  const [kindFilter, setKindFilter] = useState(''); // '' | customer | supplier (Settings > Party > party type)
   const [expandedClient, setExpandedClient] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [modalClient, setModalClient] = useState(null);
@@ -603,9 +604,10 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
     ...bills.map(b => b.clientName).filter(Boolean)
   ])];
 
-  const filteredClients = search.trim()
+  const kindOf = (name) => clients.find(c => c.name === name)?.kind || 'customer';
+  const filteredClients = (search.trim()
     ? allClientNames.filter(name => name.toLowerCase().includes(search.toLowerCase()))
-    : allClientNames;
+    : allClientNames).filter(name => !kindFilter || kindOf(name) === kindFilter || kindOf(name) === 'both');
 
   // Sort by outstanding amount
   const sortedClients = [...filteredClients].sort((a, b) => {
@@ -796,6 +798,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
             onChange={e => setSearch(e.target.value)} className="search-input" />
           {search && <button className="icon-btn" onClick={() => setSearch('')}><X size={14} /></button>}
         </div>
+        <select className="form-input" style={{ width: 'auto', marginTop: 8 }} aria-label="Party type" value={kindFilter} onChange={e => setKindFilter(e.target.value)}>
+          <option value="">All parties</option>
+          <option value="customer">Customers</option>
+          <option value="supplier">Suppliers</option>
+        </select>
       </div>
 
       {/* Client cards */}

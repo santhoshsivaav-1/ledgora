@@ -15,6 +15,7 @@
 // page can end between rows or blocks but never cuts through one.
 import React from 'react';
 import { filledOrderDetails, formatQty, formatCurrency, getStateCode, printedSubtotal, roundQty } from '../../../utils';
+import { getAppSetting } from '../../../lib/appSettings';
 import ItemSubLines from '../../print/ItemSubLines';
 
 const LINE = '#1f2937';
@@ -115,7 +116,7 @@ export function HsnSummaryTable({ ctx }) {
                 <td style={{ ...cell, ...center }}>{r.rate / 2}%</td><td style={{ ...cell, ...right }}>{num(r.tax / 2)}</td>
               </>
             ) : (
-              <><td style={{ ...cell, ...center }}>{r.rate}%</td><td style={{ ...cell, ...right }}>{num(r.tax)}</td></>
+              <><td style={{ ...cell, ...center }}>{Number(r.rate) === 0 && (getAppSetting('gst.exemptLabel') || '').trim() ? getAppSetting('gst.exemptLabel').trim() : `${r.rate}%`}</td><td style={{ ...cell, ...right }}>{num(r.tax)}</td></>
             )}
             <td style={{ ...cell, ...right }}>{num(r.tax)}</td>
           </tr>

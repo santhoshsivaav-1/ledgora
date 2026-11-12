@@ -96,6 +96,7 @@ export const SETTING_FEATURE: Readonly<Record<string, Feature>> = {
   'msg.enabled': 'messaging',
   'gst.einvoice.enabled': 'einvoice',
   'acct.autoPostExpense': 'accounting',
+  'acct.defaultAccounts': 'accounting',
 };
 export const TRIAL_DAYS = 7;
 export const GRACE_DAYS = 7;

@@ -868,3 +868,59 @@ export function runningBalance(
     return run;
   });
 }
+
+// ---- Settings > Accounting > Default accounts --------------------------------------------------------------------------
+
+/** The postings a business may send to an account of its own choosing instead of the built-in one, and the kind it must be. */
+export const DEFAULT_ACCOUNT_ROLES = [
+  { role: 'sales', code: ACC.SALES, kind: 'income', label: 'Sales' },
+  { role: 'salesReturn', code: ACC.SALES_RETURN, kind: 'income', label: 'Sales returns' },
+  {
+    role: 'chargesIncome',
+    code: ACC.CHARGES_INCOME,
+    kind: 'income',
+    label: 'Charges billed to customers',
+  },
+  { role: 'otherIncome', code: ACC.OTHER_INCOME, kind: 'income', label: 'Other income' },
+  {
+    role: 'discountReceived',
+    code: ACC.DISCOUNT_RECEIVED,
+    kind: 'income',
+    label: 'Discount received',
+  },
+  { role: 'roundGain', code: ACC.ROUND_GAIN, kind: 'income', label: 'Round-off (gain)' },
+  { role: 'purchases', code: ACC.PURCHASES, kind: 'expense', label: 'Purchases' },
+  { role: 'purchaseReturn', code: ACC.PURCHASE_RETURN, kind: 'expense', label: 'Purchase returns' },
+  {
+    role: 'expenses',
+    code: ACC.EXPENSES,
+    kind: 'expense',
+    label: 'Expenses (no category account)',
+  },
+  {
+    role: 'discountAllowed',
+    code: ACC.DISCOUNT_ALLOWED,
+    kind: 'expense',
+    label: 'Discount allowed',
+  },
+  { role: 'roundLoss', code: ACC.ROUND_LOSS, kind: 'expense', label: 'Round-off (loss)' },
+  { role: 'bankCharges', code: ACC.BANK_CHARGES, kind: 'expense', label: 'Bank charges' },
+] as const;
+export type DefaultAccountRole = (typeof DEFAULT_ACCOUNT_ROLES)[number]['role'];
+
+/** Moves each posting line from a built-in account to the business's chosen one. Totals are unchanged, so a voucher stays balanced. */
+export function remapPostings(
+  postings: Posting[],
+  chosen: Partial<Record<string, string>> | null | undefined,
+): Posting[] {
+  const map = new Map<string, string>();
+  for (const r of DEFAULT_ACCOUNT_ROLES) {
+    const to = chosen?.[r.role];
+    if (to && to !== r.code) map.set(r.code, to);
+  }
+  if (!map.size) return postings;
+  return postings.map((p) => ({
+    ...p,
+    lines: p.lines.map((l) => (map.has(l.account) ? { ...l, account: map.get(l.account)! } : l)),
+  }));
+}

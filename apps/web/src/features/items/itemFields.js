@@ -13,7 +13,8 @@ export function newItemDefaults(s = {}) {
   return {
     unit: changed(s, 'item.defaultUnit') ? s['item.defaultUnit'].trim() : 'Pcs',
     taxPercent: gstKey ? String(s[gstKey]) : '',
-    itemType: on(s, 'item.types') ? 'product' : '',
+    // Settings > General > Business type: a service business starts new items as services.
+    itemType: on(s, 'item.types') ? (s['biz.type'] === 'service' ? 'service' : 'product') : '',
   };
 }
 

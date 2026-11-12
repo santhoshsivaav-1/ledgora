@@ -56,7 +56,7 @@ describe('business setup', () => {
   });
   it('answers become real, live settings', () => {
     const s = settingsFrom({ ...base, regType: 'composition', compRate: '1', fyStart: '1', defaultGst: '12', taxInclusive: true, terms: 'Pay in 15 days' });
-    expect(s).toEqual({ 'gst.regType': 'composition', 'gst.compRate': 1, 'fy.startMonth': 1, 'tax.defaultItemRate': 12, 'item.defaultGst': 12, 'tax.priceInclusive': true, 'txn.terms.text': 'Pay in 15 days' });
+    expect(s).toEqual({ 'gst.regType': 'composition', 'gst.compRate': 1, 'fy.startMonth': 1, 'tax.defaultItemRate': 12, 'item.defaultGst': 12, 'tax.priceInclusive': true, 'txn.terms.text': 'Pay in 15 days', 'biz.type': 'retail', 'biz.category': '' });
     for (const k of Object.keys(s)) expect(SETTINGS[k].live, k).toBe(true);
     expect(settingsFrom(base)['gst.compRate']).toBeUndefined();
     expect(profileFrom({ ...base, bankName: ' SBI ', ifsc: 'sbin0001234' })).toMatchObject({ bankName: 'SBI', ifsc: 'SBIN0001234' });

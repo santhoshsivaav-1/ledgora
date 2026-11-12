@@ -86,7 +86,7 @@ describe('plan table for settings', () => {
   });
   it('only a handful of keys are still coming soon, and each is named', () => {
     const soon = Object.keys(SETTINGS).filter((k) => !SETTINGS[k].live);
-    expect(soon.sort()).toEqual(['biz.category', 'biz.type', 'gst.exemptLabel', 'party.defaultKind', 'ui.lang']);
+    expect(soon.sort()).toEqual(['ui.lang']);
     expect(liveKeys().length + soon.length).toBe(Object.keys(SETTINGS).length);
     expect(LIVE_IN_APP.length).toBeGreaterThan(60);
   });

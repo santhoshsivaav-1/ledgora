@@ -27,6 +27,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
     autoPrint: false,          // per-client auto-print override
     customFields: {},          // Settings > Party > Additional party fields, by label
+    kind: appSettings['party.defaultKind'] || 'customer', // Settings > Party > Default party type
     openingBalance: '',        // Settings > Party > Opening balance: positive = they owe us
     tdsApplicable: false,      // Settings > Party > TDS / TCS on party
     tcsApplicable: false,
@@ -52,6 +53,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
         customFields: client.customFields || {},
+        kind: client.kind || 'customer',
         openingBalance: client.openingBalance ?? '',
         tdsApplicable: !!client.tdsApplicable,
         tcsApplicable: !!client.tcsApplicable,
@@ -212,6 +214,14 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
               </div>
             </>
           )}
+          <div className="form-group">
+            <label className="form-label" htmlFor="client-kind">Party type</label>
+            <select id="client-kind" className="form-input" value={form.kind} onChange={e => setForm(prev => ({ ...prev, kind: e.target.value }))}>
+              <option value="customer">Customer</option>
+              <option value="supplier">Supplier</option>
+              <option value="both">Customer and supplier</option>
+            </select>
+          </div>
           <div className="form-group">
             <label className="form-label" htmlFor="client-opening">Opening balance{appSettings['party.openingRequired'] && !isEditing ? ' *' : ''}</label>
             <input id="client-opening" type="number" step="any" className="form-input" value={form.openingBalance} placeholder="0.00"

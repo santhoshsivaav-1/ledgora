@@ -104,3 +104,33 @@ describe('the new live keys', () => {
     expect((await patch(t, { 'gst.hsnDigits': 5 })).status).toBe(400);
   });
 });
+
+describe('default accounts', () => {
+  it('needs the ledger, refuses an account of the wrong kind, and moves postings once set', async () => {
+    const t = await h.newTenant();
+    const early = await patch(t, { 'acct.defaultAccounts': { sales: '4100' } });
+    expect(early.status).toBe(400);
+    expect(JSON.stringify(early.body)).toMatch(/ledger on first/);
+    const on = await t.call('POST', '/v1/accounting/backfill', {
+      businessId: t.businessId,
+      dryRun: false,
+    });
+    expect(on.status, on.text).toBe(200);
+    expect((await patch(t, { 'acct.defaultAccounts': { sales: '1000' } })).status).toBe(400); // Cash is an asset
+    const ok = await patch(t, { 'acct.defaultAccounts': { sales: '4100' } }); // Other Income, an income account
+    expect(ok.status, ok.text).toBe(200);
+    const inv = await t.call('POST', '/v1/invoices', {
+      businessId: t.businessId,
+      invoiceDate: '2026-10-01',
+      items: [{ name: 'Thing', quantity: 1, rate: 100, taxPercent: 18 }],
+    });
+    expect(inv.status, inv.text).toBe(201);
+    const tb = await t.call('GET', `/v1/ledger/trial-balance?businessId=${t.businessId}`);
+    expect(tb.status, tb.text).toBe(200);
+    const line = (code: string) => tb.body.lines.find((r: any) => r.code === code);
+    // the sale went to 4100 Other Income, nothing to 4000 Sales, and the books still balance
+    expect(line('4100')).toMatchObject({ kind: 'income', credit: 100 });
+    expect(line('4000')).toBeUndefined();
+    expect(tb.body.balanced).toBe(true);
+  });
+});

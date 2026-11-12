@@ -1,6 +1,7 @@
 import { getAppSetting } from '../../../lib/appSettings';
 import { Settings } from 'lucide-react';
 import { getRegionMode } from '../../../lib/data';
+import { sectionsWith } from '@ledgora/tax-engine';
 import { INVOICE_TYPES, getCountriesForRegion, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, getActiveAccounts, getAccountById, PAPER_SIZES, getPaperSize, invoiceOptionOn, DEFAULT_DECLARATION, localToday, toLocalIsoDate, parseLocalDate } from '../../../utils';
 import InvoicePreview from '../../print/InvoicePreview';
 import { ACCENT_PRESETS, DEFAULT_OPTIONS, PDF_STYLES } from './editorConstants';
@@ -10,6 +11,9 @@ import DocFlowTracker from '../../sales/DocFlowTracker';
 export default function InvoiceTypePanel({
   details, handleTypeChange, invoiceOptions, invoiceType, isIssuedInvoice, profile, setInvoiceOptions, showOptions, toggleOption, typeConfig, lockedType = false, sourceDoc = null,
 }) {
+  // Settings > Taxes > TDS / TCS rates over the built-in sections.
+  const tdsList = sectionsWith(TDS_SECTIONS, getAppSetting('tax.tdsRates'));
+  const tcsList = sectionsWith(TCS_SECTIONS, getAppSetting('tax.tcsRates'));
   return (
           <div className="glass-panel p-6 mb-6">
             {/* v1.10.69 (#71 item 1) - Customize moved up to the sticky
@@ -217,9 +221,9 @@ export default function InvoiceTypePanel({
                           // Turning TCS on for an invoice whose remembered section can no
                           // longer be chosen (206C(1H)) starts from the first current one.
                           const turningOn = !prev.showTCS;
-                          const valid = TCS_SECTIONS.some(s => s.code === prev.tcsSection);
+                          const valid = tcsList.some(s => s.code === prev.tcsSection);
                           return turningOn && !valid
-                            ? { ...prev, showTCS: true, tcsSection: TCS_SECTIONS[0].code, tcsRate: TCS_SECTIONS[0].rate }
+                            ? { ...prev, showTCS: true, tcsSection: tcsList[0].code, tcsRate: tcsList[0].rate }
                             : { ...prev, showTCS: turningOn };
                         })}
                         style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
@@ -228,16 +232,16 @@ export default function InvoiceTypePanel({
                     </label>
                     {invoiceOptions.showTCS && (
                       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
-                        <select className="form-input" value={invoiceOptions.tcsSection || TCS_SECTIONS[0].code}
+                        <select className="form-input" value={invoiceOptions.tcsSection || tcsList[0].code}
                           onChange={(e) => {
                             const code = e.target.value;
-                            const section = TCS_SECTIONS.find(s => s.code === code);
+                            const section = tcsList.find(s => s.code === code);
                             setInvoiceOptions(prev => ({ ...prev, tcsSection: code, tcsRate: code === 'custom' ? prev.tcsRate : section?.rate ?? prev.tcsRate }));
                           }}>
                           {REMOVED_TCS_SECTIONS[invoiceOptions.tcsSection] && (
                             <option value={invoiceOptions.tcsSection} disabled>{REMOVED_TCS_SECTIONS[invoiceOptions.tcsSection]}</option>
                           )}
-                          {TCS_SECTIONS.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                          {tcsList.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                         </select>
                         <input type="number" step="any" min="0" max="100" className="form-input"
                           value={invoiceOptions.tcsRate}
@@ -263,10 +267,10 @@ export default function InvoiceTypePanel({
                         <select className="form-input" value={invoiceOptions.tdsSection || '194Q'}
                           onChange={(e) => {
                             const code = e.target.value;
-                            const section = TDS_SECTIONS.find(s => s.code === code);
+                            const section = tdsList.find(s => s.code === code);
                             setInvoiceOptions(prev => ({ ...prev, tdsSection: code, tdsRate: code === 'custom' ? prev.tdsRate : section?.rate ?? prev.tdsRate }));
                           }}>
-                          {TDS_SECTIONS.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
+                          {tdsList.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                         </select>
                         <input type="number" step="any" min="0" max="100" className="form-input"
                           value={invoiceOptions.tdsRate}

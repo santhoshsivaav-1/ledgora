@@ -27,8 +27,10 @@ export const TDS_SECTIONS = [
   { code: '194J-tech', label: '194J — Technical services (lower rate)', rate: 2 },
   { code: '194I', label: '194I — Rent (land / building)', rate: 10 },
   { code: '194I-pm', label: '194I — Rent (plant / machinery)', rate: 2 },
-  { code: '194H', label: '194H — Commission / brokerage', rate: 5 },
-  { code: '194O', label: '194O — E-commerce participant', rate: 1 },
+  // 2% from 1 October 2024 (Finance (No. 2) Act 2024; was 5%).
+  { code: '194H', label: '194H — Commission / brokerage', rate: 2 },
+  // 0.1% from 1 October 2024 (Finance (No. 2) Act 2024; was 1%).
+  { code: '194O', label: '194O — E-commerce participant', rate: 0.1 },
   { code: '195', label: '195 — Payments to non-residents (varies)', rate: 0 },
   { code: 'custom', label: 'Custom section / rate', rate: 0 },
 ];
@@ -48,3 +50,33 @@ export const TCS_SECTIONS = [
   { code: '206C(1)', label: '206C(1) — Tendu leaves / scrap / minerals (varies)', rate: 1 },
   { code: 'custom', label: 'Custom rate', rate: 0 },
 ];
+
+/**
+ * Settings > Taxes > TDS / TCS rates: the built-in sections with the business's own rates laid over them. An override
+ * for a known section changes its rate (the label says so); an unknown code is added before "Custom". Rates outside
+ * 0-100 are ignored.
+ */
+export function sectionsWith<T extends { code: string; label: string; rate: number }>(
+  base: readonly T[],
+  overrides: readonly { code: string; rate: number }[] | null | undefined,
+): T[] {
+  const list = base.map((s) => ({ ...s }));
+  for (const o of overrides || []) {
+    const code = String(o?.code || '').trim();
+    const rate = Number(o?.rate);
+    if (!code || !(rate >= 0 && rate <= 100)) continue;
+    const hit = list.find((s) => s.code.toLowerCase() === code.toLowerCase());
+    if (hit) {
+      if (hit.code !== 'custom') {
+        hit.rate = rate;
+        hit.label = `${hit.label.replace(/ \(your rate.*\)$/, '')} (your rate ${rate}%)`;
+      }
+      continue;
+    }
+    const custom = list.findIndex((s) => s.code === 'custom');
+    const added = { code, label: `${code} (your rate ${rate}%)`, rate } as T;
+    if (custom >= 0) list.splice(custom, 0, added);
+    else list.push(added);
+  }
+  return list;
+}

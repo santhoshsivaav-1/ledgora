@@ -2,7 +2,7 @@
 // registration, the book year start month, and stock for lines sold in a secondary unit.
 import { describe, expect, it } from 'vitest';
 import {
-  amountInWordsLang, bookYearBounds, compositionTax, bookYearStart, gstDueSummary, gstDuesForPeriod, numberToWords, qrmp3bDay, stockEffect,
+  amountInWordsLang, bookYearBounds, compositionTax, sectionsWith, TDS_SECTIONS, remapPostings, DEFAULT_ACCOUNT_ROLES, ACC, bookYearStart, gstDueSummary, gstDuesForPeriod, numberToWords, qrmp3bDay, stockEffect,
 } from '../src/index.ts';
 
 describe('amount in words by language', () => {
@@ -98,5 +98,40 @@ describe('composition tax', () => {
     expect(compositionTax(250000, 1)).toEqual({ total: 2500, central: 1250, state: 1250 });
     expect(compositionTax(1001, 1)).toEqual({ total: 10.01, central: 5.01, state: 5 });
     expect(compositionTax(-5, 1).total).toBe(0);
+  });
+});
+
+describe('TDS / TCS rate masters', () => {
+  it('current statutory rates for commission and e-commerce', () => {
+    expect(TDS_SECTIONS.find((s) => s.code === '194H').rate).toBe(2);
+    expect(TDS_SECTIONS.find((s) => s.code === '194O').rate).toBe(0.1);
+  });
+  it('an override changes a rate, an unknown code is added before Custom, nonsense is ignored', () => {
+    const list = sectionsWith(TDS_SECTIONS, [{ code: '194j', rate: 2 }, { code: '194T', rate: 10 }, { code: 'x', rate: 400 }, { code: '', rate: 1 }]);
+    expect(list.find((s) => s.code === '194J')).toMatchObject({ rate: 2 });
+    expect(list.find((s) => s.code === '194J').label).toMatch(/your rate 2%/);
+    const i = list.findIndex((s) => s.code === '194T');
+    expect(list[i + 1].code).toBe('custom');
+    expect(list.some((s) => s.code === 'x')).toBe(false);
+    expect(TDS_SECTIONS.find((s) => s.code === '194J').rate).toBe(10); // the built-in list is untouched
+    expect(sectionsWith(TDS_SECTIONS, null)).toHaveLength(TDS_SECTIONS.length);
+  });
+});
+
+describe('default accounts', () => {
+  const p = [{ date: '2026-11-01', refType: 'invoice', refId: '1', lines: [
+    { account: ACC.RECEIVABLE, debit: 118 }, { account: ACC.SALES, credit: 100 }, { account: ACC.OUT_CGST, credit: 9 }, { account: ACC.OUT_SGST, credit: 9 },
+  ] }];
+  it('moves only the chosen built-in accounts, keeping the voucher balanced', () => {
+    const out = remapPostings(p, { sales: '4005' });
+    expect(out[0].lines.map((l) => l.account)).toEqual([ACC.RECEIVABLE, '4005', ACC.OUT_CGST, ACC.OUT_SGST]);
+    const dr = out[0].lines.reduce((n, l) => n + (l.debit || 0), 0);
+    const cr = out[0].lines.reduce((n, l) => n + (l.credit || 0), 0);
+    expect(dr).toBe(cr);
+    expect(remapPostings(p, {})).toBe(p);
+    expect(remapPostings(p, { sales: ACC.SALES })).toBe(p);
+  });
+  it('covers only income and expense postings', () => {
+    for (const r of DEFAULT_ACCOUNT_ROLES) expect(['income', 'expense']).toContain(r.kind);
   });
 });

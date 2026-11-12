@@ -347,9 +347,13 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const customRates = Array.isArray(_psPrintForRates.customTaxRates)
     ? _psPrintForRates.customTaxRates.map(Number).filter(n => isFinite(n) && n >= 0 && n <= 100)
     : [];
-  const baseCountryRates = sellerCountryConfig.taxRates && sellerCountryConfig.taxRates.length
-    ? sellerCountryConfig.taxRates
-    : [0, 5, 12, 18, 28, 40];
+  // Settings > Taxes > GST rates offered (India); other countries keep their own list.
+  const ownGstRates = appSettings['tax.gstRates'];
+  const baseCountryRates = sellerCountryConfig.code === 'IN' && Array.isArray(ownGstRates) && ownGstRates.length
+    ? ownGstRates
+    : sellerCountryConfig.taxRates && sellerCountryConfig.taxRates.length
+      ? sellerCountryConfig.taxRates
+      : [0, 5, 12, 18, 28, 40];
   const countryTaxRates = useMemo(
     () => [...new Set([...baseCountryRates, ...customRates])].sort((a, b) => a - b),
     // eslint-disable-next-line react-hooks/exhaustive-deps
