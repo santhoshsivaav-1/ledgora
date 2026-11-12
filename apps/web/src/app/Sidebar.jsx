@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { t } from '../i18n';
 import {
   FileText,
   Menu,
@@ -54,7 +55,7 @@ function NavParent({ item, currentView, setCurrentView }) {
         aria-expanded={open}
         onClick={toggle}
       >
-        <item.icon size={18} /> <span>{item.label}</span>
+        <item.icon size={18} /> <span>{t(`nav.${item.id}`, item.label)}</span>
         <ChevronRight size={15} className={`nav-chevron${open ? ' nav-chevron-open' : ''}`} />
       </button>
       {open && (
@@ -66,7 +67,7 @@ function NavParent({ item, currentView, setCurrentView }) {
               className={`nav-btn nav-sub-btn ${currentView === c.id ? 'nav-btn-active' : ''}`}
               onClick={() => setCurrentView(c.id)}
             >
-              <c.icon size={16} /> <span>{c.label}</span>
+              <c.icon size={16} /> <span>{t(`nav.${c.id}`, c.label)}</span>
             </button>
           ))}
         </div>
@@ -191,7 +192,7 @@ export default function Sidebar({
                   className={`nav-btn ${currentView === item.id ? 'nav-btn-active' : ''}`}
                   onClick={item.onClick || (() => setCurrentView(item.id))}
                 >
-                  <item.icon size={18} /> {item.label}
+                  <item.icon size={18} /> {t(`nav.${item.id}`, item.label)}
                 </button>
               )}
             </Fragment>

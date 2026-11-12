@@ -1,5 +1,6 @@
 import { Building2, ChevronDown, Pencil, Plus, Search } from 'lucide-react';
 import PlanChip from '../features/billing/PlanChip';
+import { t } from '../i18n';
 
 // The strip above every screen (change 3.5): which business you are working in, a quick way to start an invoice, and the
 // command palette. The business switcher used to sit in the sidebar.
@@ -110,11 +111,11 @@ export default function TopBar({
           onClick={onOpenPalette}
           title="Jump to any screen or action"
         >
-          <Search size={14} /> Search <kbd>Ctrl K</kbd>
+          <Search size={14} /> {t('top.search', 'Search')} <kbd>Ctrl K</kbd>
         </button>
         {canWrite && (
           <button type="button" className="btn btn-primary topbar-new" onClick={onNewInvoice}>
-            <Plus size={16} /> {newLabel}
+            <Plus size={16} /> {newLabel === 'New invoice' ? t('top.newInvoice', newLabel) : newLabel}
           </button>
         )}
       </div>

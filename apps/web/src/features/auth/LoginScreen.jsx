@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Mail, Phone, ShieldCheck, ArrowLeft, Check } from 'lucide-react';
+import { LANGS, setLocalLang, useLang, useT } from '../../i18n';
 import {
   ApiError, requestPasswordReset, resendVerification, resetPassword, sendPhoneCode, signInEmail, signUpEmail,
   verifyBackupCode, verifyPhoneCode, verifyTotp,
@@ -41,6 +42,8 @@ export default function LoginScreen({ onSignedIn }) {
   const [codeSent, setCodeSent] = useState(false);
   const [useBackup, setUseBackup] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+  const tr = useT();
+  const lang = useLang();
 
   const go = (m) => { setError(''); setMode(m); };
 
@@ -112,42 +115,47 @@ export default function LoginScreen({ onSignedIn }) {
     <div className="auth-shell auth-split">
       <aside className="auth-hero" aria-label="About Ledgora">
         <div className="auth-brand auth-hero-brand">Ledgora</div>
-        <h2>GST billing that runs your whole shop</h2>
+        <h2>{tr('hero.title', 'GST billing that runs your whole shop')}</h2>
         <ul>
-          <li><Check size={16} /> GST invoices, e-way bills and returns, correct from the first bill</li>
-          <li><Check size={16} /> Stock, purchases, expenses, bank and books in one place</li>
-          <li><Check size={16} /> Send bills and reminders on WhatsApp, collect by UPI</li>
-          <li><Check size={16} /> Works for you and your team, with the access you decide</li>
+          <li><Check size={16} /> {tr('hero.1', 'GST invoices, e-way bills and returns, correct from the first bill')}</li>
+          <li><Check size={16} /> {tr('hero.2', 'Stock, purchases, expenses, bank and books in one place')}</li>
+          <li><Check size={16} /> {tr('hero.3', 'Send bills and reminders on WhatsApp, collect by UPI')}</li>
+          <li><Check size={16} /> {tr('hero.4', 'Works for you and your team, with the access you decide')}</li>
         </ul>
-        <p className="auth-hero-note">Try everything free for 7 days. No card needed.</p>
+        <p className="auth-hero-note">{tr('hero.note', 'Try everything free for 7 days. No card needed.')}</p>
       </aside>
       <div className="auth-card glass-panel">
         <div className="auth-brand auth-card-brand">Ledgora</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <select className="form-input" style={{ width: 'auto', padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} aria-label="Language" value={lang} onChange={(e) => setLocalLang(e.target.value)}>
+            {LANGS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+          </select>
+        </div>
 
         {(mode === 'signin' || mode === 'signup' || mode === 'phone') && (
           <div className="auth-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'on' : ''} onClick={() => go('signin')}><Mail size={14} /> Sign in</button>
-            <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'on' : ''} onClick={() => go('signup')}>Create account</button>
-            <button type="button" role="tab" aria-selected={mode === 'phone'} className={mode === 'phone' ? 'on' : ''} onClick={() => go('phone')}><Phone size={14} /> Phone</button>
+            <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'on' : ''} onClick={() => go('signin')}><Mail size={14} /> {tr('auth.signIn', 'Sign in')}</button>
+            <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'on' : ''} onClick={() => go('signup')}>{tr('auth.createAccount', 'Create account')}</button>
+            <button type="button" role="tab" aria-selected={mode === 'phone'} className={mode === 'phone' ? 'on' : ''} onClick={() => go('phone')}><Phone size={14} /> {tr('auth.phone', 'Phone')}</button>
           </div>
         )}
 
         {mode === 'signin' && (
           <form onSubmit={signIn}>
-            <h1 className="auth-title">Welcome back</h1>
-            <p className="auth-muted">Sign in to your business.</p>
+            <h1 className="auth-title">{tr('auth.welcome', 'Welcome back')}</h1>
+            <p className="auth-muted">{tr('auth.signInHint', 'Sign in to your business.')}</p>
             <Field f={f} set={set} id="email" label="E-mail" type="email" autoComplete="email" autoFocus />
             <Field f={f} set={set} id="password" label="Password" type="password" autoComplete="current-password" />
             <Msg error={error} notice={notice} />
             <button className="btn btn-primary auth-wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-            <button type="button" className="auth-link" onClick={() => go('forgot')}>Forgot password?</button>
+            <button type="button" className="auth-link" onClick={() => go('forgot')}>{tr('auth.forgot', 'Forgot password?')}</button>
           </form>
         )}
 
         {mode === 'signup' && (
           <form onSubmit={signUp}>
-            <h1 className="auth-title">Create your account</h1>
-            <p className="auth-muted">Free for 7 days with every feature. No card needed. You choose your plan, then set up your business.</p>
+            <h1 className="auth-title">{tr('auth.create', 'Create your account')}</h1>
+            <p className="auth-muted">{tr('auth.trialHint', 'Free for 7 days with every feature. No card needed. You choose your plan, then set up your business.')}</p>
             <Field f={f} set={set} id="name" label="Your name" autoComplete="name" required={false} />
             <Field f={f} set={set} id="email" label="E-mail" type="email" autoComplete="email" />
             <Field f={f} set={set} id="password" label="Password (8+ characters)" type="password" autoComplete="new-password" minLength={8} />

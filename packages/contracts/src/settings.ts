@@ -201,10 +201,14 @@ export const SETTINGS = {
     'select',
     { options: opts(['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil']) },
   ),
-  'ui.lang': regional(z.enum(['en']), 'en', 'App language', 'Language of the screens', 'select', {
-    options: opts(['en', 'English']),
-    phase: 'P11',
-  }),
+  'ui.lang': regional(
+    z.enum(['en', 'hi', 'ta']),
+    'en',
+    'App language',
+    'Menus, the header and the sign-in, plans and setup screens; other screens stay in English for now. Each person can also pick a language on the sign-in screen',
+    'select',
+    { options: opts(['en', 'English'], ['hi', 'हिन्दी'], ['ta', 'தமிழ்']), live: true },
+  ),
   'sec.autoLock': security(
     z.enum(['1', '5', '15', '30', 'never']),
     'never',

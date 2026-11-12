@@ -5,6 +5,7 @@ import { getProfile, saveProfile } from '../../lib/data';
 import { apiClient } from '../../lib/apiClient';
 import { ApiError, saveOnboarding } from '../../services/session';
 import { STEPS, stepProblem, settingsFrom, profileFrom } from './setupRules';
+import { useT } from '../../i18n';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -32,6 +33,7 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [errors, setErrors] = useState({});
+  const tr = useT();
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
   // Someone who used the old single-user app has a profile saved on this computer: start from it.
@@ -95,7 +97,7 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
 
         {id === 'business' && (
           <>
-            <h1 className="auth-title">Tell us about your business</h1>
+            <h1 className="auth-title">{tr('setup.title', 'Tell us about your business')}</h1>
             <p className="auth-muted">This is printed on every invoice and decides how GST is split.</p>
             <div className="auth-grid">
               <Field f={f} set={set} errors={errors} id="name" label="Business name *" className="auth-span2" autoFocus />
@@ -183,12 +185,12 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
         {error && <div className="auth-error" role="alert">{error}</div>}
         <div className="auth-actions">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {step > 0 && <button type="button" className="btn btn-secondary" onClick={() => { setErrors({}); setStep((n) => n - 1); }}><ArrowLeft size={14} /> Back</button>}
-            <button type="button" className="auth-link" style={{ marginTop: 0 }} onClick={onSignOut}><LogOut size={14} /> Log out</button>
+            {step > 0 && <button type="button" className="btn btn-secondary" onClick={() => { setErrors({}); setStep((n) => n - 1); }}><ArrowLeft size={14} /> {tr('setup.back', 'Back')}</button>}
+            <button type="button" className="auth-link" style={{ marginTop: 0 }} onClick={onSignOut}><LogOut size={14} /> {tr('common.logout', 'Log out')}</button>
           </div>
           {step < STEPS.length - 1
-            ? <button type="button" className="btn btn-primary" onClick={next}>Next <ArrowRight size={14} /></button>
-            : <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Finish setup'}</button>}
+            ? <button type="button" className="btn btn-primary" onClick={next}>{tr('setup.next', 'Next')} <ArrowRight size={14} /></button>
+            : <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : tr('setup.finish', 'Finish setup')}</button>}
         </div>
       </form>
     </div>

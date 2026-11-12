@@ -5,6 +5,7 @@ import { toast } from '../../components/ui/Toast';
 import PlanMatrix from '../billing/PlanMatrix';
 import { getBilling, startCheckout, startTrial } from '../../lib/data/billing';
 import { TRIAL_DAYS } from '@ledgora/contracts';
+import { useT } from '../../i18n';
 
 // Shown once after sign-up (mode "start") and again at sign-in when the trial or plan has ended (mode "ended"): the plans
 // side by side, what each includes and what it does not, and at the bottom the way in. Starting the trial needs no card.
@@ -13,6 +14,7 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
   const [error, setError] = useState(null);
   const [interval, setInterval] = useState('year');
   const [busy, setBusy] = useState('');
+  const tr = useT();
   useEffect(() => { getBilling().then(setData).catch(setError); }, []);
 
   if (error) return <div className="auth-shell"><ErrorState message={error.message} onRetry={() => { setError(null); getBilling().then(setData).catch(setError); }} /></div>;
@@ -33,14 +35,14 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
     <div className="plans-shell">
       <header className="plans-head">
         <div className="auth-brand">Ledgora</div>
-        <h1>{ended ? 'Your plan has ended' : 'Choose how to start'}</h1>
+        <h1>{ended ? tr('plans.ended', 'Your plan has ended') : tr('plans.choose', 'Choose how to start')}</h1>
         <p className="auth-muted">
           {ended
             ? 'Your data is safe and you can still open everything. Pick a plan to use the paid features again, or carry on with Free.'
             : `Try every feature free for ${TRIAL_DAYS} days. No card needed. After that you pick a plan, or stay on Free.`}
         </p>
         <div role="radiogroup" aria-label="Billing period" className="plans-interval">
-          {[['month', 'Monthly'], ['year', 'Yearly (about 2 months free)']].map(([v, l]) => (
+          {[['month', tr('plans.monthly', 'Monthly')], ['year', tr('plans.yearly', 'Yearly (about 2 months free)')]].map(([v, l]) => (
             <button key={v} type="button" role="radio" aria-checked={interval === v} className={`btn ${interval === v ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setInterval(v)}>{l}</button>
           ))}
         </div>
@@ -55,11 +57,11 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
           <>
             {!ended && (
               <button type="button" className="btn btn-primary plans-cta" disabled={!!busy} onClick={() => choose('trial')}>
-                <ShieldCheck size={18} /> {busy === 'trial' ? 'Starting…' : `Start ${TRIAL_DAYS}-day free trial`}
+                <ShieldCheck size={18} /> {busy === 'trial' ? 'Starting…' : tr('plans.startTrial', `Start ${TRIAL_DAYS}-day free trial`)}
               </button>
             )}
             <button type="button" className={ended ? 'btn btn-primary plans-cta' : 'auth-link'} disabled={!!busy} onClick={() => (ended ? onDone() : choose('free'))}>
-              {ended ? 'Continue on Free' : 'Skip the trial and use Free'}
+              {ended ? tr('plans.continueFree', 'Continue on Free') : tr('plans.useFree', 'Skip the trial and use Free')}
             </button>
             {!ended && <p className="auth-muted">Every feature for {TRIAL_DAYS} days, then Free unless you choose a plan. Cancel nothing, there is nothing to cancel.</p>}
           </>
