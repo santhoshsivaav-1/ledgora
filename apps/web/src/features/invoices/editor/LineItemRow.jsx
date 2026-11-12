@@ -234,8 +234,16 @@ export const LineItem = memo(function LineItem({
         <div className="line-item-field" style={{ flex: 1 }}>
           <label className="form-label">{taxLabel} %</label>
           <select className="form-input"
-            value={countryTaxRates.includes(Number(item.taxPercent)) ? String(item.taxPercent) : '__custom__'}
+            value={item.supplyKind ? `kind:${item.supplyKind}` : countryTaxRates.includes(Number(item.taxPercent)) ? String(item.taxPercent) : '__custom__'}
             onChange={async (e) => {
+              // Nil-rated, exempt and non-GST lines carry no tax and are reported apart in GSTR-1 Table 8 and 3B 3.1(c)/(e).
+              if (e.target.value.startsWith('kind:')) {
+                onFieldChange(item.id, 'taxPercent', 0);
+                onFieldChange(item.id, 'cessPercent', 0);
+                onFieldChange(item.id, 'supplyKind', e.target.value.slice(5));
+                return;
+              }
+              if (item.supplyKind) onFieldChange(item.id, 'supplyKind', undefined);
               if (e.target.value === '__custom__') {
                 const raw = await promptAction({
                   title: `Custom ${taxLabel} rate`,
@@ -256,7 +264,14 @@ export const LineItem = memo(function LineItem({
             {countryTaxRates.map(r => (
               <option key={r} value={String(r)}>{r}%</option>
             ))}
-            <option value="__custom__">{countryTaxRates.includes(Number(item.taxPercent)) ? 'Custom…' : `${item.taxPercent}% (custom)`}</option>
+            <option value="__custom__">{countryTaxRates.includes(Number(item.taxPercent)) || item.supplyKind ? 'Custom…' : `${item.taxPercent}% (custom)`}</option>
+            {(profileCountry || 'India') === 'India' && (
+              <>
+                <option value="kind:nil">Nil rated</option>
+                <option value="kind:exempt">Exempt</option>
+                <option value="kind:nongst">Non-GST</option>
+              </>
+            )}
           </select>
         </div>
       )}

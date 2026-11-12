@@ -24,7 +24,7 @@ describe('GSTR-1 Table 8 (bills of supply)', () => {
     expect(r.total).toBe(1850);
   });
   it('is empty when there are no bills of supply', () => {
-    expect(nilExemptSummary([], { isInter: () => false, split })).toEqual({ inv: [], total: 0 });
+    expect(nilExemptSummary([], { isInter: () => false, split })).toEqual({ inv: [], total: 0, nilExempt: 0, nonGst: 0 });
   });
 });
 

@@ -4,7 +4,7 @@ import { billIsInterstate, computeItemTaxSplit } from './gstHelpers';
 
 // GSTR-3B: the monthly summary return. One page of GST returns (change 3.17).
 export default function Gstr3bPage({
-  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, rcm = null, onRecordRcm, unreg32 = [], inward5 = null, supplies31a = grandTotals, exempt31c = nilExempt.total,
+  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, rcm = null, onRecordRcm, unreg32 = [], inward5 = null, supplies31a = grandTotals, exempt31c = nilExempt.total, nonGst31e = 0,
 }) {
   return (
     <>
@@ -31,6 +31,7 @@ export default function Gstr3bPage({
                   <tr><td className="font-medium">(a) Outward taxable supplies (other than zero-rated, nil-rated and exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.sgst)}</td></tr>
                   <tr><td className="font-medium">(b) Zero-rated supplies (exports, SEZ)</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td></tr>
                   <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(exempt31c)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{exempt31c > nilExempt.total ? 'Bills of supply and exempt other income' : nilExempt.total > 0 ? 'Bills of supply' : 'N/A'}</td></tr>
+                  {nonGst31e > 0 && <tr><td className="font-medium">(e) Non-GST outward supplies</td><td style={{ textAlign: 'right' }}>{formatCurrency(nonGst31e)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Lines marked Non-GST</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -97,6 +98,8 @@ export default function Gstr3bPage({
                   <table className="data-table" style={{ minWidth: '500px' }}>
                     <thead><tr><th>Details</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th></tr></thead>
                     <tbody>
+                      {some(table4?.avl.impg) && row('(A)(1) Import of goods', table4.avl.impg)}
+                      {some(table4?.avl.imps) && row('(A)(2) Import of services', table4.avl.imps)}
                       {some(isrc) && row('(A)(3) Inward supplies liable to reverse charge', isrc)}
                       {row('(A) ITC Available — All other ITC', oth)}
                       {some(table4?.avl.reclaim) && row('(A)(5) Re-claimed ITC — supplier paid after 180 days', table4.avl.reclaim)}

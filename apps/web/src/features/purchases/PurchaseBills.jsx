@@ -60,6 +60,8 @@ const emptyForm = {
   dueDate: '',
   placeOfSupply: '',
   reverseCharge: false, // RCM: we pay the GST (3B 3.1(d)) and claim it in 4(A)(3)
+  importType: '', // '' | goods (bill of entry, 4(A)(1)) | services (reverse charge, 4(A)(2))
+  boeNumber: '', boeDate: '', portCode: '',
   charges: [],
   tds194QPercent: 0,
   paymentRows: [],
@@ -274,6 +276,8 @@ export default function PurchaseBills() {
       dueDate: purchase.dueDate || '',
       placeOfSupply: purchase.placeOfSupply || '',
       reverseCharge: !!purchase.reverseCharge,
+      importType: purchase.importType || '',
+      boeNumber: purchase.boeNumber || '', boeDate: purchase.boeDate || '', portCode: purchase.portCode || '',
       charges: (purchase.charges || []).map(c => ({ ...c })),
       tds194QPercent: purchase.tds194QPercent || 0,
       paymentRows: inlineRowsOfPurchase(purchase),
@@ -378,7 +382,9 @@ export default function PurchaseBills() {
         dueDate: form.dueDate || '',
         attachment: form.attachment || null,
         placeOfSupply: form.placeOfSupply || '',
-        reverseCharge: !!form.reverseCharge,
+        reverseCharge: !!form.reverseCharge || form.importType === 'services',
+        ...(form.importType ? { importType: form.importType, interstate: true } : {}),
+        ...(form.importType === 'goods' ? { boeNumber: form.boeNumber.trim(), boeDate: form.boeDate || '', portCode: form.portCode.trim().toUpperCase() } : {}),
         charges: (form.charges || []).filter(c => Number(c.amount) > 0),
         tds194QPercent: Number(form.tds194QPercent) || 0,
         tdsAmount: totals.tdsAmount,
@@ -1063,6 +1069,23 @@ export default function PurchaseBills() {
                   </span>
                 </label>
               </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label" htmlFor="pur-import">Import</label>
+                <select id="pur-import" className="form-input" value={form.importType || ''}
+                  onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, importType: v, ...(v ? { interstate: true } : {}), ...(v === 'services' ? { reverseCharge: true } : {}) })); }}>
+                  <option value="">Not an import</option>
+                  <option value="goods">Import of goods (IGST paid on the bill of entry)</option>
+                  <option value="services">Import of services (IGST under reverse charge)</option>
+                </select>
+                <small style={{ color: '#94a3b8', fontSize: '0.72rem' }}>The credit goes to GSTR-3B 4(A)(1) for goods or 4(A)(2) for services. Enter the IGST as the tax on the lines.</small>
+              </div>
+              {form.importType === 'goods' && (
+                <>
+                  <div className="form-group"><label className="form-label" htmlFor="pur-boe">Bill of entry number</label><input id="pur-boe" className="form-input" value={form.boeNumber || ''} onChange={e => updateField('boeNumber', e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label" htmlFor="pur-boe-date">Bill of entry date</label><input id="pur-boe-date" type="date" className="form-input" value={form.boeDate || ''} onChange={e => updateField('boeDate', e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label" htmlFor="pur-port">Port code</label><input id="pur-port" className="form-input" maxLength={6} value={form.portCode || ''} onChange={e => updateField('portCode', e.target.value)} placeholder="INMAA1" /></div>
+                </>
+              )}
               {(getAppSetting('gst.rcm') || form.reverseCharge) && (
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer' }}>

@@ -1,3 +1,4 @@
+import { withoutNonTaxable } from './gstReturnTables';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, ChevronRight, AlertTriangle, BookOpen, BarChart3 } from 'lucide-react';
 import { itc180ForPeriod } from '../purchases/purchaseExtras';
@@ -154,13 +155,15 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // (b2bRows, hsnMap, warnings, etc.) still run per render but consume
   // stable arrays — subsequent memoizations can layer on later without
   // touching this file's export helpers.
+  // Lines marked nil-rated, exempt or non-GST leave the taxable tables here (they go to Table 8 / 3.1(c) / 3.1(e) below).
   const filteredBills = useMemo(() => bills.filter(bill => {
     const type = bill.invoiceType || 'tax-invoice';
     if (!GST_TYPES.includes(type)) return false;
     if (!bill.data) return false;
     return filterByPeriod(bill.invoiceDate);
+  }).map(bill => withoutNonTaxable(bill, (item, b) => computeItemTaxSplit(item, billIsInterstate(b), !!b.data?.taxInclusive, false))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [bills, filterMode, fyFilter, quarterFilter, monthFilter, yearFilter]);
+    [bills, filterMode, fyFilter, quarterFilter, monthFilter, yearFilter]);
   const allFilteredBills = useMemo(() => bills.filter(bill => bill.data && filterByPeriod(bill.invoiceDate)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bills, filterMode, fyFilter, quarterFilter, monthFilter, yearFilter]);
@@ -195,8 +198,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       && bill.data?.totals?.isInterstate !== false;
   };
   const exportBills = regularBills.filter(isExportBill);
-  const b2bRegular = regularBills.filter(b => b.data?.client?.gstin && !isExportBill(b));
-  const b2cRegular = regularBills.filter(b => !b.data?.client?.gstin && !isExportBill(b));
+  const b2bRegular = regularBills.filter(b => b.data?.client?.gstin && !isExportBill(b) && !b._kindOnly);
+  const b2cRegular = regularBills.filter(b => !b.data?.client?.gstin && !isExportBill(b) && !b._kindOnly);
   const b2cLarge = b2cRegular.filter(b => {
     const isInter = billIsInterstate(b);
     return isInter && (b.totalAmount || 0) > b2clThreshold(b.invoiceDate);
@@ -408,7 +411,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // Net ITC: what the set-off uses.
   const itcFromExpenses = { cgst: table4.net.cgst, sgst: table4.net.sgst, igst: table4.net.igst };
   const itcAvailable4A = {
-    igst: table4.avl.isrc.igst + table4.avl.oth.igst,
+    igst: table4.avl.impg.igst + table4.avl.imps.igst + table4.avl.isrc.igst + table4.avl.oth.igst,
     cgst: table4.avl.isrc.cgst + table4.avl.oth.cgst,
     sgst: table4.avl.isrc.sgst + table4.avl.oth.sgst,
   };
@@ -424,7 +427,9 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   const zeroRated31b = sez31.b;
   const unreg32 = interStateUnregistered(unregisteredInterRows([...regularBills, ...creditNotes]));
   const inward5 = exemptInward(filteredPurchases.filter(isPurchaseBill));
-  const exempt31c = nilExempt.total;
+  // 3.1(c) nil-rated and exempt (bills of supply and marked lines); 3.1(e) non-GST.
+  const exempt31c = nilExempt.nilExempt;
+  const nonGst31e = nilExempt.nonGst;
   // Output tax: 3.1(a) (sales and taxable other income) plus the IGST on exports.
   const outputTax = { cgst: supplies31a.cgst, sgst: supplies31a.sgst, igst: supplies31a.igst + zeroRated31b.igst };
   // v1.10.76 (#81) - credit set off across heads in the legal order (see setOffITC).
@@ -751,13 +756,14 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
           camt: round2(t.camt), samt: round2(t.samt), csamt: round2(t.csamt),
         };
       })(),
-      osup_nongst: { txval: 0 },
+      osup_nongst: { txval: round2(nonGst31e) },
     };
 
     const itc_elg = {
       itc_avl: [
-        { ty: 'IMPG', iamt: 0, camt: 0, samt: 0, csamt: 0 },
-        { ty: 'IMPS', iamt: 0, camt: 0, samt: 0, csamt: 0 },
+        // 4(A)(1) and 4(A)(2): purchase bills marked as an import of goods (bill of entry) or of services.
+        { ty: 'IMPG', iamt: round2(table4.avl.impg.igst), camt: 0, samt: 0, csamt: round2(table4.avl.impg.cess) },
+        { ty: 'IMPS', iamt: round2(table4.avl.imps.igst), camt: 0, samt: 0, csamt: round2(table4.avl.imps.cess) },
         // Phase 3: credit on reverse-charge purchases, 4(A)(3).
         { ty: 'ISRC', iamt: round2(table4.avl.isrc.igst), camt: round2(table4.avl.isrc.cgst), samt: round2(table4.avl.isrc.sgst), csamt: round2(table4.avl.isrc.cess) },
         { ty: 'ISD',  iamt: 0, camt: 0, samt: 0, csamt: 0 },
@@ -1284,6 +1290,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         rcm={rcm}
         onRecordRcm={recordRcmPayment}
         exempt31c={exempt31c}
+        nonGst31e={nonGst31e}
         markFiled={markFiled}
         netPayable={netPayable}
         netTax={netTax}

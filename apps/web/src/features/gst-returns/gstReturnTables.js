@@ -19,20 +19,78 @@ export const withChargeLines = (bill) =>
 // Table 8 rows are split by where the buyer is and whether the buyer is registered.
 export const nilSupplyType = (isInter, registered) => `${isInter ? 'INTR' : 'INTRA'}${registered ? 'B2B' : 'B2C'}`;
 
+// A line can say what kind of supply it is when it carries no GST: 'nil' (nil-rated goods, like fresh vegetables),
+// 'exempt' (exempt by notification, like health care) or 'nongst' (outside GST, like petrol or alcohol for drinking).
+// Such lines are not taxable supplies: they leave B2B, B2C, the HSN summary and 3B 3.1(a), and are reported in GSTR-1
+// Table 8 and 3B 3.1(c) (nil and exempt) or 3.1(e) (non-GST). A line without the mark is read exactly as before.
+export const SUPPLY_KINDS = ['nil', 'exempt', 'nongst'];
+export const lineKind = (item) => (SUPPLY_KINDS.includes(item?.supplyKind) ? item.supplyKind : null);
+const KIND_FIELD = { nil: 'nil_amt', exempt: 'expt_amt', nongst: 'ngsup_amt' };
+
+/**
+ * A bill as the taxable tables read it: the marked lines taken out and its taxable value and total lowered by them (they
+ * carry no tax), with `_kindOnly` when nothing taxable is left. Returns the bill unchanged when no line is marked.
+ */
+export function withoutNonTaxable(bill, split) {
+  const items = bill?.data?.items || [];
+  if (!items.some(lineKind)) return bill;
+  let out = 0;
+  const keep = [];
+  for (const it of items) {
+    if (lineKind(it)) out += split(it, bill).taxable;
+    else keep.push(it);
+  }
+  const t = bill.data.totals || {};
+  const taxable = t.taxableAmount ?? ((t.subtotal || 0) - (t.totalDiscount || 0));
+  return {
+    ...bill,
+    totalAmount: round2((Number(bill.totalAmount) || 0) - out),
+    _kindOnly: keep.length === 0,
+    data: { ...bill.data, items: keep, totals: { ...t, taxableAmount: round2(taxable - out), total: round2((t.total || 0) - out) } },
+  };
+}
+
 // Bills of supply carry no GST: they are exempt supplies. (Composition dealers' bills are reported in CMP-08, not here.)
+// Lines marked nil / exempt / non-GST on tax invoices join them, each in its own column; a credit note takes its marked
+// lines back out.
 export function nilExemptSummary(bills, { isInter, split }) {
   const rows = {};
-  for (const bill of bills) {
-    if ((bill.invoiceType || 'tax-invoice') !== 'bill-of-supply' || !bill.data) continue;
+  const row = (bill) => {
     const ty = nilSupplyType(isInter(bill), !!bill.data.client?.gstin);
     if (!rows[ty]) rows[ty] = { sply_ty: ty, expt_amt: 0, nil_amt: 0, ngsup_amt: 0 };
-    for (const item of bill.data.items || []) rows[ty].expt_amt += split(item, bill).taxable;
+    return rows[ty];
+  };
+  for (const bill of bills) {
+    if (!bill.data) continue;
+    const type = bill.invoiceType || 'tax-invoice';
+    if (type === 'bill-of-supply') {
+      const r = row(bill);
+      for (const item of bill.data.items || []) {
+        const k = lineKind(item);
+        r[k ? KIND_FIELD[k] : 'expt_amt'] += split(item, bill).taxable;
+      }
+      continue;
+    }
+    if (type !== 'tax-invoice' && type !== 'credit-note') continue;
+    const sign = type === 'credit-note' ? -1 : 1;
+    for (const item of bill.data.items || []) {
+      const k = lineKind(item);
+      if (k) row(bill)[KIND_FIELD[k]] += sign * split(item, bill).taxable;
+    }
   }
   const inv = Object.values(rows)
-    .map((r) => ({ ...r, expt_amt: round2(r.expt_amt) }))
-    .filter((r) => r.expt_amt > 0)
+    .map((r) => ({ ...r, expt_amt: round2(r.expt_amt), nil_amt: round2(r.nil_amt), ngsup_amt: round2(r.ngsup_amt) }))
+    .filter((r) => r.expt_amt || r.nil_amt || r.ngsup_amt)
     .sort((a, b) => a.sply_ty.localeCompare(b.sply_ty));
-  return { inv, total: round2(inv.reduce((t, r) => t + r.expt_amt + r.nil_amt + r.ngsup_amt, 0)) };
+  const sum = (f) => round2(inv.reduce((t, r) => t + r[f], 0));
+  return {
+    inv,
+    total: round2(inv.reduce((t, r) => t + r.expt_amt + r.nil_amt + r.ngsup_amt, 0)),
+    /** 3B 3.1(c): nil-rated and exempt. */
+    nilExempt: round2(sum('expt_amt') + sum('nil_amt')),
+    /** 3B 3.1(e): non-GST. */
+    nonGst: sum('ngsup_amt'),
+  };
 }
 
 // Table 6A. WPAY = export with IGST paid, WOPAY = under LUT / bond. The shipping bill is filed with customs and is not
@@ -101,8 +159,9 @@ export function purchaseItcHeads(p) {
 }
 
 /** Purchase bills as tax-engine's rcmItcForPeriod reads them (P10-S2): date, flag, tax heads and the RCM payment. */
+// An import of services is reverse charge too, but its credit is 4(A)(2), not 4(A)(3), so it is left out here.
 export const rcmBillsOf = (purchases = []) =>
-  purchases.filter(isPurchaseBill).map((p) => ({
+  purchases.filter((p) => isPurchaseBill(p) && p.importType !== 'services').map((p) => ({
     id: p.id, date: p.date, reverseCharge: !!p.reverseCharge, heads: purchaseItcHeads(p).all, rcmPayment: p.rcmPayment || null,
     number: p.invoiceNumber || p.number, supplier: p.supplierName, taxable: Number(p.taxableAmount) || 0,
   }));
@@ -133,9 +192,19 @@ export function itcTable4({ purchases = [], expenses = [], itc180 = null, rcm = 
     if (e.itcEligible === false) rul = addHeads(rul, h);
   }
   const bills = purchases.filter(isPurchaseBill);
+  // 4(A)(1) import of goods: the IGST paid to customs on the bill of entry. 4(A)(2) import of services: the IGST paid under
+  // reverse charge on services bought from abroad (its liability is in 3.1(d) like any reverse-charge bill).
+  let impg = heads0();
+  let imps = heads0();
   for (const p of bills) {
     const { all, ineligible } = purchaseItcHeads(p);
     rul = addHeads(rul, ineligible);
+    if (p.importType === 'goods' || p.importType === 'services') {
+      const igst = { igst: all.igst + all.cgst + all.sgst, cgst: 0, sgst: 0, cess: all.cess };
+      if (p.importType === 'goods') impg = addHeads(impg, igst);
+      else imps = addHeads(imps, igst);
+      continue;
+    }
     // P10-S2: with `rcm` (rcmItcForPeriod) the credit on reverse charge is claimed in the period its tax was paid,
     // below; without it, as before, in the bill's own period.
     if (p.reverseCharge) { if (!rcm) isrc = addHeads(isrc, all); }
@@ -156,9 +225,9 @@ export function itcTable4({ purchases = [], expenses = [], itc180 = null, rcm = 
   // Expenses first, then purchases: the order GSTReturns has always added them in, so the float sums match too.
   const oth = { igst: fromExpenses.igst + fromPurchases.igst, cgst: fromExpenses.cgst + fromPurchases.cgst, sgst: fromExpenses.sgst + fromPurchases.sgst, cess: fromPurchases.cess };
   const net = {};
-  for (const k of ['igst', 'cgst', 'sgst', 'cess']) net[k] = Math.max(0, isrc[k] + oth[k] + reclaim[k] - rul[k] - dnRev[k]);
+  for (const k of ['igst', 'cgst', 'sgst', 'cess']) net[k] = Math.max(0, impg[k] + imps[k] + isrc[k] + oth[k] + reclaim[k] - rul[k] - dnRev[k]);
   const reversed = rul.igst + rul.cgst + rul.sgst + rul.cess + dnRev.igst + dnRev.cgst + dnRev.sgst + dnRev.cess > 0 || reclaim.igst + reclaim.cgst + reclaim.sgst + reclaim.cess > 0;
-  return { avl: { isrc, oth, reclaim }, rev: { rul, oth: dnRev }, net, reversed };
+  return { avl: { impg, imps, isrc, oth, reclaim }, rev: { rul, oth: dnRev }, net, reversed };
 }
 
 /**
