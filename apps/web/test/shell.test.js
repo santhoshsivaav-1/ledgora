@@ -33,7 +33,7 @@ describe('navigation (one source for the new menu)', () => {
   it('hides planned screens, then entries the role may not open, then switched-off modules', () => {
     const visibleIds = leaves(visibleNav(NAV, allowAll)).map((l) => l.id);
     expect(visibleIds).not.toContain('party-groups');
-    expect(visibleIds).not.toContain('reminders'); // planned for P9
+    expect(visibleIds).toEqual(expect.arrayContaining(['reminders', 'catalog'])); // Grow has two screens now
     expect(visibleIds).toContain('cheques'); // shipped in Phase 5
     const noPurchases = visibleNav(NAV, {
       can: (p) => p !== 'purchase:read',

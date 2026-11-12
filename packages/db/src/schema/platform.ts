@@ -1,4 +1,14 @@
-import { index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { base } from './common.ts';
 
 /** The tenant. Sign-up and membership arrive in Phase 2; Phase 1 only needs the row to hang data on. */
@@ -63,3 +73,20 @@ export const jobs = pgTable(
   },
   (t) => [index('jobs_org_idx').on(t.orgId, t.createdAt)],
 );
+
+/**
+ * P9-S6 online catalog: the public address of a business's catalogue. Looked up without a tenant (a visitor is not
+ * signed in), so it is a platform table like organizations, not a tenant table; the API only writes the caller's own row.
+ */
+export const publicCatalogs = pgTable('public_catalogs', {
+  slug: text('slug').primaryKey(),
+  orgId: uuid('org_id').notNull().unique(),
+  businessId: uuid('business_id').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  title: text('title').notNull().default(''),
+  /** The WhatsApp number enquiries go to, with country code. */
+  whatsapp: text('whatsapp').notNull().default(''),
+  showPrice: boolean('show_price').notNull().default(true),
+  showStock: boolean('show_stock').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

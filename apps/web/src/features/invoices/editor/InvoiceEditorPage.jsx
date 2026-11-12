@@ -3191,6 +3191,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
             <section id="doc-step-items" className="sheet-sec sheet-items">
               <LineItemsGrid
                 addDeliveryCharge={addDeliveryCharge}
+                billTotal={(Number(totals.total) || 0) + (Number(totals.invoiceDiscountAmount) || 0)}
+                billDate={details.invoiceDate}
                 scanBarcode={extras.barcode && appSettings['txn.barcodeScan'] ? scanBarcode : null}
                 batchOptionsFor={(item) => { const p = productsRef.current.find((x) => x.id === item.productId); return p ? batchStock(p, { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current }) : []; }}
                 serialStockFor={(item) => { const p = productsRef.current.find((x) => x.id === item.productId); return p ? serialsInStock(p, { bills: allBillsRef.current, purchases: purchasesRef.current, excludeBillId: editingBillIdRef.current }) : []; }}

@@ -97,6 +97,7 @@ const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoi
 const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
 const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
 const RemindersPage = lazy(() => import('./features/grow/RemindersPage'));
+const CatalogSettingsPage = lazy(() => import('./features/catalog/CatalogSettingsPage'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
 const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
@@ -990,6 +991,7 @@ function App() {
                   <Route path={pathForView('salesman')} element={<SalesmenView key={businessKey} />} />
                 )}
                 <Route path={pathForView('reminders')} element={<RemindersPage key={businessKey} />} />
+                <Route path={pathForView('catalog')} element={<CatalogSettingsPage key={businessKey} />} />
                 <Route path="/reports" element={<ReportsHub key={businessKey} />} />
                 <Route path="/reports/classic" element={<ReportsView key={businessKey} />} />
                 <Route path="/reports/cash-bank/:reportId" element={<CashBankReportRedirect />} />

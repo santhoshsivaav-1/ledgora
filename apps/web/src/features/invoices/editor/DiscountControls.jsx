@@ -1,11 +1,25 @@
 import { currencySymbolFor } from './editorConstants';
 import { useAppSettings } from '../../../lib/appSettings';
 import { discountRules } from './settingsDefaults';
+import { useState } from 'react';
+import { offerFor } from './offers';
+import { toast } from '../../../components/ui/Toast';
 
 // The whole-bill discount (a fixed amount or a percent of the total, applied after tax) under the line items (change 3.9).
-export default function DiscountControls({ invoiceOptions, setInvoiceOptions, clampNonNeg }) {
-  const rules = discountRules(useAppSettings()); // Settings > Transaction > Discount mode and unit
+export default function DiscountControls({ invoiceOptions, setInvoiceOptions, clampNonNeg, billTotal = 0, billDate = '' }) {
+  const appSettings = useAppSettings();
+  const rules = discountRules(appSettings); // Settings > Transaction > Discount mode and unit
+  const [code, setCode] = useState(invoiceOptions.offerCode || '');
+  const coupons = appSettings['offer.coupons'] || [];
   if (!rules.bill) return null;
+  // Settings > Party > Offer codes: the code's discount becomes the whole-bill discount, and the code is kept on the bill.
+  const applyOffer = () => {
+    const before = Number(billTotal) || 0;
+    const r = offerFor(code, coupons, { date: billDate, total: before });
+    if (!r.ok) { toast(r.message, 'warning'); return; }
+    setInvoiceOptions((prev) => ({ ...prev, offerCode: r.code, invoiceDiscountType: r.type, invoiceDiscountValue: r.value }));
+    toast(`Offer ${r.code} applied`, 'success');
+  };
   return (
     <>
             {/* v1.10.22 — invoice-level (whole-bill) discount. Sits below
@@ -29,6 +43,19 @@ export default function DiscountControls({ invoiceOptions, setInvoiceOptions, cl
                 Applied after tax. For GST-compliant pre-tax discount, use per-line discount instead.
               </span>
             </div>
+            {coupons.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                <label htmlFor="offer-code" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Offer code</label>
+                <input id="offer-code" className="form-input" style={{ width: 140, textTransform: 'uppercase' }} value={code}
+                  onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyOffer(); } }} />
+                <button type="button" className="btn btn-secondary" onClick={applyOffer}>Apply</button>
+                {invoiceOptions.offerCode && (
+                  <button type="button" className="btn btn-secondary" onClick={() => { setCode(''); setInvoiceOptions((prev) => ({ ...prev, offerCode: undefined, invoiceDiscountValue: 0 })); }}>
+                    Remove {invoiceOptions.offerCode}
+                  </button>
+                )}
+              </div>
+            )}
     </>
   );
 }

@@ -7,7 +7,7 @@ import { useAppSettings } from '../../../lib/appSettings';
 
 // The line-items table with add, delete, discount and unit controls (change 3.9).
 export default function LineItemsGrid({
-  addDeliveryCharge, scanBarcode, batchOptionsFor, serialStockFor, productOf, addItem, clampNonNeg, countryTaxRates, getProductSuggestions, handleAddCustomUnit, handleItemChange, handleRemoveCustomUnit, hasDeliveryCharge, invoiceOptions, items, profile, removeItem, selectProduct, setInvoiceOptions, setProductSearch, setTaxInclusive, showGST, taxInclusive, taxLabel, units,
+  addDeliveryCharge, billTotal = 0, billDate = '', scanBarcode, batchOptionsFor, serialStockFor, productOf, addItem, clampNonNeg, countryTaxRates, getProductSuggestions, handleAddCustomUnit, handleItemChange, handleRemoveCustomUnit, hasDeliveryCharge, invoiceOptions, items, profile, removeItem, selectProduct, setInvoiceOptions, setProductSearch, setTaxInclusive, showGST, taxInclusive, taxLabel, units,
 }) {
   const appSettings = useAppSettings();
   const [scan, setScan] = useState('');
@@ -77,7 +77,7 @@ export default function LineItemsGrid({
               )}
             </div>
 
-            <DiscountControls invoiceOptions={invoiceOptions} setInvoiceOptions={setInvoiceOptions} clampNonNeg={clampNonNeg} />
+            <DiscountControls invoiceOptions={invoiceOptions} setInvoiceOptions={setInvoiceOptions} clampNonNeg={clampNonNeg} billTotal={billTotal} billDate={billDate} />
           </div>
   );
 }

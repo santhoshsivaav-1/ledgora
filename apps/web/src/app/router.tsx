@@ -50,6 +50,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },
   // Vyapar parity Phase 9: payment and service reminders, the Messages log and templates.
   { id: 'reminders', path: '/grow/reminders', title: 'Reminders' },
+  { id: 'catalog', path: '/grow/catalog', title: 'Online catalog' },
   { id: 'reports', path: '/reports', title: 'Reports' },
   // Vyapar parity Phase 5: Cash & Bank is one screen with tabs (/cash-bank/:tab), like the books.
   { id: 'cashbank', path: '/cash-bank', title: 'Cash & Bank' },

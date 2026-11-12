@@ -21,6 +21,7 @@ export const FEATURES = [
     id: 'inventory_pro',
     label: 'Batch and serial tracking, secondary units, wholesale and party-wise rates',
   },
+  { id: 'catalog_offers', label: 'Online catalog and offer codes' },
 ] as const;
 export type Feature = (typeof FEATURES)[number]['id'];
 export type PlanId = 'free' | 'silver' | 'gold';
@@ -48,6 +49,7 @@ const SILVER: Feature[] = [
   'cloud_backup',
   'report_schedules',
   'inventory_pro',
+  'catalog_offers',
 ];
 export const PLANS: readonly Plan[] = [
   {
@@ -97,6 +99,7 @@ export const SETTING_FEATURE: Readonly<Record<string, Feature>> = {
   'gst.einvoice.enabled': 'einvoice',
   'acct.autoPostExpense': 'accounting',
   'acct.defaultAccounts': 'accounting',
+  'offer.coupons': 'catalog_offers',
 };
 export const TRIAL_DAYS = 7;
 export const GRACE_DAYS = 7;
@@ -168,6 +171,7 @@ export function featureForRoute(method: string, path: string): Feature | null {
     [/^\/v1\/utilities\/fy-/, 'accounting'],
     [/^\/v1\/(cashbank|bank-accounts|cash|transfers|cheques|loans)(\/|$)/, 'cashbank'],
     [/^\/v1\/utilities\/tally/, 'tally'],
+    [/^\/v1\/catalog(\/|$)/, 'catalog_offers'],
   ];
   return table.find(([re]) => re.test(path))?.[1] ?? null;
 }

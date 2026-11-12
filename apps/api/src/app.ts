@@ -19,6 +19,7 @@ import { filesModule, localFileEndpoints } from './modules/files.ts';
 import { invoicesModule } from './modules/invoices.ts';
 import { itemsModule } from './modules/items.ts';
 import { lotsModule } from './modules/lots.ts';
+import { catalogModule } from './modules/catalog.ts';
 import { partiesModule } from './modules/parties.ts';
 import { partyGroupsModule } from './modules/partyGroups.ts';
 import { paymentsModule } from './modules/payments.ts';
@@ -95,6 +96,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     partiesModule,
     partyGroupsModule,
     lotsModule,
+    catalogModule,
     itemsModule,
     invoicesModule,
     paymentsModule,

@@ -296,3 +296,20 @@ export const visitList = z.object({ data: z.array(visitRow), retentionDays: z.nu
 export const visitListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+/** P9-S6 online catalog: the owner's controls. */
+export const catalogSettings = z.object({
+  businessId: z.string().uuid(),
+  enabled: z.boolean(),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Use 3 to 40 letters, digits or dashes'),
+  title: z.string().trim().max(80).default(''),
+  whatsapp: z
+    .union([z.literal(''), z.string().regex(/^\+?\d{10,15}$/, 'A phone number with country code')])
+    .default(''),
+  showPrice: z.boolean().default(true),
+  showStock: z.boolean().default(true),
+});

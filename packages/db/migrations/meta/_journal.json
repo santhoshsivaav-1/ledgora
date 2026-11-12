@@ -197,6 +197,13 @@
       "when": 1794500609958,
       "tag": "0027_purchase_line_extra",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794501151785,
+      "tag": "0028_public_catalogs",
+      "breakpoints": true
     }
   ]
 }

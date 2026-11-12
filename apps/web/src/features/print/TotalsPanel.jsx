@@ -62,6 +62,7 @@ export default function TotalsPanel({
                 {totals.invoiceDiscountType === 'percent' && totals.invoiceDiscountValue > 0
                   ? ` (${totals.invoiceDiscountValue}%)`
                   : ''}
+                {options?.offerCode ? ` · offer ${options.offerCode}` : ''}
               </span>
               <span>−{fmt(totals.invoiceDiscountAmount)}</span>
             </div>

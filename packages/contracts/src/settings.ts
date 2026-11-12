@@ -960,6 +960,27 @@ export const SETTINGS = {
     { live: true },
   ),
 
+  // ---- Offers (P9-S7) ----
+  'offer.coupons': party('Offers')(
+    z
+      .array(
+        z.object({
+          code: text(20).min(2),
+          percent: z.number().min(0).max(100),
+          amount: money,
+          minBill: money,
+          from: z.union([isoDate, z.literal('')]),
+          to: z.union([isoDate, z.literal('')]),
+        }),
+      )
+      .max(50),
+    [],
+    'Offer codes',
+    'A code a customer quotes for a discount on the whole bill: % off or ₹ off, from a minimum bill, between two dates',
+    'list',
+    { live: true },
+  ),
+
   // ---- Messaging (Phase 9) ----
   'msg.enabled': at('message', 'Messaging', { ownerOnly: true })(
     toggle,

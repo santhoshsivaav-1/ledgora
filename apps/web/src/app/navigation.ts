@@ -141,6 +141,7 @@ export const NAV: NavEntry[] = [
     icon: TrendingUp,
     children: [
       { id: 'reminders', label: 'Payment Reminders', view: 'reminders', perm: 'message:read' },
+      { id: 'catalog', label: 'Online Catalog', view: 'catalog', perm: 'business:read' },
       // The salesman master and its performance table (P2-S1) ship with the Phase 2 flag; visits/check-ins stay P9.
       {
         id: 'salesman',

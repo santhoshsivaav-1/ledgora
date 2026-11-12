@@ -37,6 +37,10 @@ const LIST_COLUMNS = {
   'party.custom': { add: { label: '', printOnInvoice: false }, cols: [{ k: 'label', label: 'Field name' }, { k: 'printOnInvoice', label: 'Print on invoice', type: 'checkbox' }] },
   'item.custom': { add: { label: '', printOnInvoice: false }, cols: [{ k: 'label', label: 'Field name' }, { k: 'printOnInvoice', label: 'Print on invoice', type: 'checkbox' }] },
   'tax.tdsRates': { add: { code: '', rate: 0 }, cols: [{ k: 'code', label: 'Section (e.g. 194J)' }, { k: 'rate', label: 'Rate %', type: 'number' }] },
+  'offer.coupons': {
+    add: { code: '', percent: 0, amount: 0, minBill: 0, from: '', to: '' },
+    cols: [{ k: 'code', label: 'Code' }, { k: 'percent', label: '% off', type: 'number' }, { k: 'amount', label: '₹ off', type: 'number' }, { k: 'minBill', label: 'Min bill ₹', type: 'number' }, { k: 'from', label: 'From', type: 'date' }, { k: 'to', label: 'To', type: 'date' }],
+  },
   'tax.tcsRates': { add: { code: '', rate: 0 }, cols: [{ k: 'code', label: 'Section' }, { k: 'rate', label: 'Rate %', type: 'number' }] },
 };
 

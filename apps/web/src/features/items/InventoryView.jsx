@@ -23,7 +23,7 @@ const emptyForm = {
   name: '', hsn: '', purchasePrice: '', sellingPrice: '', taxPercent: '', unit: 'Pcs', stock: '', description: '',
   itemType: '', category: '', minStock: '', customFields: {},
   mrp: '', wholesalePrice: '', wholesaleMinQty: '', altUnit: '', altFactor: '', barcode: '', image: '', regionalName: '',
-  discountPercent: '', batches: [], serialsText: '',
+  discountPercent: '', batches: [], serialsText: '', showInCatalog: false,
 };
 
 // A picture is kept on the product as a small data URL (longest side 160px), so it needs no file storage.
@@ -117,7 +117,7 @@ export default function InventoryView() {
       mrp: product.mrp ?? '', wholesalePrice: product.wholesalePrice ?? '', wholesaleMinQty: product.wholesaleMinQty ?? '',
       altUnit: product.altUnit || '', altFactor: product.altFactor ?? '', barcode: product.barcode || '', image: product.image || '',
       regionalName: product.regionalName || '', discountPercent: product.discountPercent ?? '',
-      batches: product.batches || [], serialsText: (product.serials || []).join('\n'),
+      batches: product.batches || [], serialsText: (product.serials || []).join('\n'), showInCatalog: !!product.showInCatalog,
     });
     setEditingId(product.id);
     setShowForm(true);
@@ -193,6 +193,7 @@ export default function InventoryView() {
         ...(extra.discount ? { discountPercent: form.discountPercent === '' ? undefined : Math.min(100, Math.max(0, Number(form.discountPercent) || 0)) } : {}),
         ...(extra.batch ? { batches: batches.length ? batches.map(b => ({ batchNo: String(b.batchNo).trim(), mfgDate: b.mfgDate || '', expDate: b.expDate || '', qty: Number(b.qty) || 0 })) : undefined } : {}),
         ...(extra.serial ? { serials: serials.length ? serials : undefined } : {}),
+        showInCatalog: !!form.showInCatalog || undefined, // Grow > Online catalog
       };
       await saveProduct(product);
       toast(editingId ? 'Product updated' : 'Product added', 'success');
@@ -494,6 +495,11 @@ export default function InventoryView() {
                   <small className="field-hint">{parseSerials(form.serialsText).length} entered</small>
                 </div>
               )}
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" checked={!!form.showInCatalog} onChange={e => updateField('showInCatalog', e.target.checked)} /> Show in online catalog
+                </label>
+              </div>
               {show.custom.map(f => (
                 <div className="form-group" key={f.label}>
                   <label className="form-label">{f.label}</label>
