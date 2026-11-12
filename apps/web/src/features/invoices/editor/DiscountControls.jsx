@@ -1,7 +1,11 @@
 import { currencySymbolFor } from './editorConstants';
+import { useAppSettings } from '../../../lib/appSettings';
+import { discountRules } from './settingsDefaults';
 
 // The whole-bill discount (a fixed amount or a percent of the total, applied after tax) under the line items (change 3.9).
 export default function DiscountControls({ invoiceOptions, setInvoiceOptions, clampNonNeg }) {
+  const rules = discountRules(useAppSettings()); // Settings > Transaction > Discount mode and unit
+  if (!rules.bill) return null;
   return (
     <>
             {/* v1.10.22 — invoice-level (whole-bill) discount. Sits below
@@ -18,8 +22,8 @@ export default function DiscountControls({ invoiceOptions, setInvoiceOptions, cl
                 value={invoiceOptions.invoiceDiscountType === 'percent' ? 'percent' : 'fixed'}
                 onChange={(e) => setInvoiceOptions(prev => ({ ...prev, invoiceDiscountType: e.target.value }))}
                 style={{ width: 128 }}>
-                <option value="fixed">{currencySymbolFor(invoiceOptions.currency)} (fixed)</option>
-                <option value="percent">% of total</option>
+                {rules.amount && <option value="fixed">{currencySymbolFor(invoiceOptions.currency)} (fixed)</option>}
+                {rules.percent && <option value="percent">% of total</option>}
               </select>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 Applied after tax. For GST-compliant pre-tax discount, use per-line discount instead.

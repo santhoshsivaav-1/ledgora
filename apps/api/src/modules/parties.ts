@@ -37,6 +37,9 @@ export const toParty = (r: typeof parties.$inferSelect): Party => ({
   groupId: r.groupId,
   creditLimit: r.creditLimit,
   creditMode: r.creditMode as Party['creditMode'],
+  doNotMessage: r.doNotMessage,
+  msme: r.msme,
+  msmeAgreedDays: r.msmeAgreedDays,
   extra: r.extra as Record<string, unknown>,
   ...stamps(r),
 });

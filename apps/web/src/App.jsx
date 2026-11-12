@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { FileText, Download, X } from 'lucide-react';
+import { SETTINGS_TABS } from '@ledgora/contracts';
 import {
   getAllProfiles,
   saveProfile,
@@ -32,6 +33,8 @@ import InvoiceGenerator from './features/invoices/editor/InvoiceEditorPage';
 import SetupWizard from './features/onboarding/SetupWizard';
 import BranchModal from './features/settings/BranchModal';
 import { useSession } from './features/auth/SessionContext';
+import { loadAppSettings, resetAppSettings } from './lib/appSettings';
+import useAutoLock from './app/useAutoLock';
 import ToastContainer from './components/ui/Toast';
 import { useTheme } from './app/providers';
 import NotificationPopover from './app/NotificationBell';
@@ -72,6 +75,7 @@ function GstReturnsPage() {
 
 const SettingsView = lazy(() => import('./features/settings/SettingsView'));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout'));
+const SettingsTabPage = lazy(() => import('./features/settings/registry/SettingsTabPage'));
 const TeamPage = lazy(() => import('./features/settings/team/TeamPage'));
 const SecurityPage = lazy(() => import('./features/settings/security/SecurityPage'));
 const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
@@ -89,6 +93,7 @@ const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
 const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoices'));
 const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
 const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
+const RemindersPage = lazy(() => import('./features/grow/RemindersPage'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
 const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
@@ -114,6 +119,12 @@ const ViewLoading = LoadingState;
 
 function App() {
   const { me, signOut } = useSession();
+  // The business's typed settings (Settings screen) are loaded once so every screen can obey them (lib/appSettings.js).
+  useEffect(() => {
+    if (!me) return resetAppSettings();
+    loadAppSettings().catch(() => {});
+  }, [me?.organization?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useAutoLock(!!me, signOut);
   // v1.9.3 — Setup Wizard shown on first-run (before onboardingComplete = true)
   // Decided once this business's print settings have loaded (see printLoadedFor below).
   const [showWizard, setShowWizard] = useState(false);
@@ -975,6 +986,7 @@ function App() {
                 {FEATURES.saleInlinePayments && (
                   <Route path={pathForView('salesman')} element={<SalesmenView key={businessKey} />} />
                 )}
+                <Route path={pathForView('reminders')} element={<RemindersPage key={businessKey} />} />
                 <Route path="/reports" element={<ReportsHub key={businessKey} />} />
                 <Route path="/reports/classic" element={<ReportsView key={businessKey} />} />
                 <Route path="/reports/cash-bank/:reportId" element={<CashBankReportRedirect />} />
@@ -991,7 +1003,18 @@ function App() {
                     )
                   }
                 />
-                <Route path="/settings" element={<Navigate to="/settings/business" replace />} />
+                <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                {SETTINGS_TABS.map(({ id }) => (
+                  <Route
+                    key={id}
+                    path={`/settings/${id}`}
+                    element={
+                      <SettingsLayout>
+                        <SettingsTabPage tab={id} key={businessKey} />
+                      </SettingsLayout>
+                    }
+                  />
+                ))}
                 {['business', 'documents', 'features', 'data'].map((tab) => (
                   <Route
                     key={tab}

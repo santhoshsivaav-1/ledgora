@@ -4,7 +4,7 @@ import { getTaxableAmount } from './gstHelpers';
 
 // GSTR-1: outward supplies, with the JSON for the portal. One page of GST returns (change 3.17).
 export default function Gstr1Page({
-  activeTab, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, exportHSN, grandTotals, hsnRows, nilExempt, exportBills, markFiled, periodFiling,
+  activeTab, advances, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, exportHSN, grandTotals, hsnRows, nilExempt, exportBills, markFiled, periodFiling,
 }) {
   return (
     <>
@@ -283,6 +283,32 @@ export default function Gstr1Page({
               </table>
             </div>
           </div>
+          {advances && (advances.at.length > 0 || advances.txpd.length > 0) && (
+            <div className="glass-panel p-6 mb-6">
+              <h3 className="section-title">Table 11: Advances for services</h3>
+              <p className="type-desc" style={{ marginTop: 0 }}>
+                Tax on advances is due when the money arrives (advances for goods carry no GST). An advance settled by an
+                invoice in the same period is reported only through the invoice. Grand Total above is invoices only;
+                GSTR-3B 3.1(a) adds the net of this table.
+              </p>
+              {[['11A(1) Advance received in period', advances.at], ['11B(1) Advance adjusted or refunded in period', advances.txpd]].map(([title, rows]) => rows.length > 0 && (
+                <div key={title} className="table-scroll" style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem' }}>{title}</h4>
+                  <table className="data-table">
+                    <thead><tr><th>POS</th><th>Rate</th><th style={{ textAlign: 'right' }}>Gross advance</th><th style={{ textAlign: 'right' }}>Taxable</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th><th style={{ textAlign: 'right' }}>Cess</th></tr></thead>
+                    <tbody>
+                      {rows.map((r) => (
+                        <tr key={`${r.pos}-${r.rate}`}>
+                          <td>{r.pos}</td><td>{r.rate}%</td>
+                          {[r.gross, r.taxable, r.iamt, r.camt, r.samt, r.csamt].map((v, i) => <td key={i} style={{ textAlign: 'right' }}>{formatCurrency(v)}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </>

@@ -4,6 +4,8 @@ import { createApp } from './app.ts';
 import { loadEnv } from './env.ts';
 import { whenJobsIdle } from './modules/transfer.ts';
 import { startBackupScheduler } from './backup/scheduler.ts';
+import { startMessagingScheduler } from './messaging/jobs.ts';
+import { makeProviders } from './messaging/providers.ts';
 import { startReportScheduler } from './reports/schedules.ts';
 import { createStorage } from './storage.ts';
 
@@ -15,9 +17,11 @@ const storage = createStorage(env);
 const app = createApp({ db, env, storage });
 const stopReports = startReportScheduler(db, env);
 const stopBackups = startBackupScheduler(db, { storage, env }, env);
+const stopMessaging = startMessagingScheduler(db, makeProviders(env), env);
 const stopScheduler = () => {
   stopReports();
   stopBackups();
+  stopMessaging();
 };
 const server = serve({ fetch: app.fetch, port: env.API_LISTEN_PORT }, (info) => {
   console.log(`Ledgora API on http://localhost:${info.port}  (docs: /v1/docs, health: /health)`);

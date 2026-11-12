@@ -1,12 +1,15 @@
 import { Check } from 'lucide-react';
 import { getStatesForCountry, ORDER_DETAIL_FIELDS, INVOICE_TYPES } from '../../../utils';
 import { copyFor } from '../../sales/salesFlow';
+import { useAppSettings } from '../../../lib/appSettings';
+import { visibleOrderFields } from './settingsDefaults';
 
 // The number, date, due date and place of supply.
 export default function InvoiceDetailsPanel({
   details, invoiceOptions, invoiceType, profile, setDetails,
 }) {
   const copy = copyFor(invoiceType);
+  const orderFields = visibleOrderFields(ORDER_DETAIL_FIELDS, useAppSettings(), details); // Settings > Transaction
   return (
           <div className="glass-panel p-6 mb-6">
             <h3 className="section-title">{INVOICE_TYPES[invoiceType]?.label || 'Invoice'} Details</h3>
@@ -108,7 +111,7 @@ export default function InvoiceDetailsPanel({
               {/* v1.10.73 - order, dispatch and reference details: the boxes on a
                   Tally-style invoice. Optional; closed unless one is filled. */}
               {(() => {
-                const filled = ORDER_DETAIL_FIELDS.filter(f => String(details[f.key] || '').trim()).length;
+                const filled = orderFields.filter(f => String(details[f.key] || '').trim()).length;
                 const periodBackwards = details.periodFrom && details.periodTo && details.periodTo < details.periodFrom;
                 return (
                   <details className="form-group full-width" open={filled > 0 || undefined}
@@ -118,7 +121,7 @@ export default function InvoiceDetailsPanel({
                       <span style={{ color: 'var(--text-muted)' }}> (optional{filled ? `, ${filled} filled` : ''}) - buyer's order no, vehicle no, service period, work details</span>
                     </summary>
                     <div className="grid grid-cols-2 gap-3" style={{ marginTop: '0.6rem' }}>
-                      {ORDER_DETAIL_FIELDS.map(f => (
+                      {orderFields.map(f => (
                         <div key={f.key} className={`form-group${f.wide ? ' full-width' : ''}`}>
                           <label className="form-label" style={{ fontSize: '0.78rem' }}>{f.label}</label>
                           <input type={f.type || 'text'} className="form-input" value={details[f.key] || ''}

@@ -39,6 +39,7 @@ import {
   partyStatement,
   purchaseLineTax,
   purchaseTotals,
+  rcmSupplierDue,
   returnableQtyPurchase,
 } from '@ledgora/tax-engine';
 import { audit } from '../audit.ts';
@@ -799,10 +800,19 @@ export function purchasesModule({ route }: Registrar) {
         .filter((d) => d.docType === 'debit-note' && d.refundMode !== 'adjust')
         .reduce((t, d) => t + d.total, 0);
       return partyStatement({
-        // What we owe on a bill is its total less the §194Q TDS we keep and pay to the government instead.
+        // What we owe on a bill is its total less the §194Q TDS we keep and pay to the government instead, and less
+        // the RCM tax on a reverse-charge bill (D-13), which is paid to the government too.
         documents: docs
           .filter((d) => d.docType === 'bill')
-          .map((d) => ({ total: d.total - d.tdsAmount })),
+          .map((d) => ({
+            total: rcmSupplierDue({
+              total: d.total,
+              reverseCharge: d.reverseCharge,
+              tax: d.cgst + d.sgst + d.igst,
+              cess: d.cess,
+              tds: d.tdsAmount,
+            }),
+          })),
         payments: outs.map((o) => ({
           amount: o.amount,
           discount: o.discountAmount,

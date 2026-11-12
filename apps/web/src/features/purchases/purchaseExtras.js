@@ -4,6 +4,7 @@
 
 import {
   allocatePayment,
+  rcmSupplierDue,
   cashPaymentCheck,
   cleanCharges,
   getFinancialYearLabel,
@@ -62,13 +63,14 @@ export const purchasePaid = (p) => r2((p?.payments || []).reduce((s, x) => s + (
 
 /**
  * What we owe on a bill before payments: the total less §194Q TDS we withheld, less debit notes against it that are
- * settled by adjusting what we owe.
+ * settled by adjusting what we owe, less the RCM tax on a reverse-charge bill (D-13).
  */
 export function purchaseDue(p, debitNotes = []) {
   const adjusted = (debitNotes || [])
     .filter((d) => d.againstPurchaseId === p.id && (d.refundMode || 'adjust') === 'adjust')
     .reduce((s, d) => s + (Number(d.totalAmount) || 0), 0);
-  return r2(Math.max(0, (Number(p.totalAmount) || 0) - (Number(p.tdsAmount) || 0) - adjusted));
+  // D-13: on a reverse-charge bill the supplier is not owed the tax; we pay it to the government (Record RCM payment).
+  return rcmSupplierDue({ total: p.totalAmount, reverseCharge: !!p.reverseCharge, tax: p.totalTax, cess: p.totalCess, tds: p.tdsAmount, adjusted });
 }
 
 export const purchasePending = (p, debitNotes = []) => r2(Math.max(0, purchaseDue(p, debitNotes) - purchasePaid(p)));
@@ -300,7 +302,7 @@ export function supplierStatementOf({ supplierName, bills = [], vouchers = [], d
   const mine = (d) => sameName(d.supplierName, supplierName);
   const rows = [];
   for (const b of bills.filter(mine)) {
-    rows.push({ date: b.date, type: 'Bill', ref: b.invoiceNumber || b.number, payable: r2((Number(b.totalAmount) || 0) - (Number(b.tdsAmount) || 0)) });
+    rows.push({ date: b.date, type: 'Bill', ref: b.invoiceNumber || b.number, payable: rcmSupplierDue({ total: b.totalAmount, reverseCharge: !!b.reverseCharge, tax: b.totalTax, cess: b.totalCess, tds: b.tdsAmount }) });
     for (const p of (b.payments || []).filter((x) => x.source === PURCHASE_INLINE))
       rows.push({ date: p.date || b.date, type: 'Paid with bill', ref: b.invoiceNumber, payable: -r2(p.amount) });
   }
@@ -378,7 +380,7 @@ export function itcInputsOf(purchases) {
     if (!p?.id || (p.docType && p.docType !== 'bill')) continue;
     const e = itcSplit(p.items || [], { interstate: !!p.interstate, charges: p.charges }).eligible;
     const itc = r2(e.cgst + e.sgst + e.igst + e.cess);
-    bills.push({ id: p.id, supplier: p.supplierName, number: p.invoiceNumber || p.number, date: p.date, payable: r2((Number(p.totalAmount) || 0) - (Number(p.tdsAmount) || 0)), itc, _heads: e });
+    bills.push({ id: p.id, supplier: p.supplierName, number: p.invoiceNumber || p.number, date: p.date, payable: rcmSupplierDue({ total: p.totalAmount, reverseCharge: !!p.reverseCharge, tax: p.totalTax, cess: p.totalCess, tds: p.tdsAmount }), itc, _heads: e });
     for (const x of p.payments || []) payments.push({ billId: p.id, amount: x.amount, date: x.date || p.date });
   }
   return { bills, payments };

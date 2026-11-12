@@ -1,14 +1,21 @@
 import { STATUS_CONFIG } from './statusConfig';
 import { FileText, Plus, IndianRupee, Edit3, Search, Copy, X, CheckCircle, Clock, AlertTriangle, MessageCircle, Mail, StickyNote, Send, Download, Printer, Ban, Undo2, Eye, ArrowRightCircle } from 'lucide-react';
 import { formatCurrency, INVOICE_TYPES, isCancelledBill, SALES_INVOICE_TYPES, amountDue } from '../../../utils';
+import { useState } from 'react';
 import ActionsMenu from './ActionsMenu';
+import EinvoiceDialog from './EinvoiceDialog';
+import { einvoiceEligible, einvoiceLocked } from '../einvoice';
+import { getAppSetting } from '../../../lib/appSettings';
 import { nextStepsFor } from '../../sales/salesFlow';
 
 // The invoice list (change 3.10): the filters, the quick-print and bulk actions, and the table with its row actions.
 // The Dashboard and the Invoices page both show it. It only draws; the page that holds it owns the data and the handlers.
 export default function InvoiceTable({
-  scope, tracksPayments = true, bills, bulkBusy, bulkCancel, bulkExportJSON, bulkExportPDF, bulkMarkStatus, bulkPrintByFilter, changeStatus, clearFilters, clearSelection, dateFrom, dateTo, filtered, fyFilter, fyOptions, getClientPhone, handleCancelInvoice, handleView, hasFilters, onConvert, onDuplicate, onNew, onPrint, openPaymentModal, search, selectedIds, sendReminder, setDateFrom, setDateTo, setFyFilter, setSearch, setShowColumnPicker, setStatusFilter, setTypeFilter, setViewBill, setVisibleColumns, shareEmail, shareWhatsApp, showColumnPicker, statusFilter, toggleSelect, toggleSelectAllVisible, typeFilter, undoCancel, visibleColumns,
+  scope, tracksPayments = true, bills, bulkBusy, bulkCancel, bulkExportJSON, bulkExportPDF, bulkMarkStatus, bulkPrintByFilter, changeStatus, clearFilters, clearSelection, dateFrom, dateTo, filtered, fyFilter, fyOptions, getClientPhone, handleCancelInvoice, handleView, hasFilters, onConvert, onDuplicate, onNew, onPrint, openPaymentModal, search, selectedIds, sendReminder, setDateFrom, setDateTo, setFyFilter, setSearch, setShowColumnPicker, setStatusFilter, setTypeFilter, setViewBill, setVisibleColumns, shareEmail, shareWhatsApp, showColumnPicker, statusFilter, toggleSelect, toggleSelectAllVisible, typeFilter, undoCancel, visibleColumns, onBillChanged,
 }) {
+  // P10-S7: Settings > GST > E-invoice offers the IRP JSON and IRN entry on B2B invoices and notes.
+  const [einvBill, setEinvBill] = useState(null);
+  const einvoiceOn = getAppSetting('gst.einvoice.enabled');
   return (
         <div className="glass-panel">
           <div className="table-header"><h3>{scope ? scope.label : 'Invoices'}</h3></div>
@@ -213,6 +220,7 @@ export default function InvoiceTable({
                         {visibleColumns.date && <td className="text-muted">{new Date(bill.invoiceDate).toLocaleDateString('en-IN')}</td>}
                         {visibleColumns.invoice && <td>
                           <span className="invoice-badge">{bill.invoiceNumber}</span>
+                          {einvoiceLocked(bill) && <span className="invoice-badge" title="E-invoice IRN generated" style={{ marginLeft: 4, background: '#ecfdf5', color: '#047857' }}>IRN</span>}
                           {/* where it came from in the sales flow (quotation -> sales order -> ...) */}
                           {bill.data?.sourceDoc?.number && (
                             <span className="flow-ref" title={`Raised from ${INVOICE_TYPES[bill.data.sourceDoc.type]?.label || 'document'} ${bill.data.sourceDoc.number}`}>
@@ -293,6 +301,7 @@ export default function InvoiceTable({
                             <ActionsMenu label={`More actions for ${bill.invoiceNumber}`} items={[
                               ...menuSteps.map((step) => ({ label: step.label, icon: ArrowRightCircle, tone: 'green', onClick: () => onConvert(bill, step) })),
                               { label: 'Duplicate', icon: Copy, onClick: () => onDuplicate(bill) },
+                              { label: einvoiceLocked(bill) ? 'E-invoice (IRN)' : 'E-invoice', icon: FileText, onClick: () => setEinvBill(bill), hidden: !einvoiceOn || !einvoiceEligible(bill) },
                               { label: 'Print', icon: Printer, onClick: () => onPrint(bill), hidden: readOnly },
                               { label: 'WhatsApp', icon: MessageCircle, tone: 'green', onClick: () => shareWhatsApp(bill), hidden: readOnly,
                                 title: 'Share via WhatsApp — PDF attaches on mobile Chrome/Safari. On desktop it sends the invoice as text only (browser can\'t attach files to WhatsApp Web — security limitation, not our app).' },
@@ -312,6 +321,7 @@ export default function InvoiceTable({
               </table>
             </div>
           )}
+          {einvBill && <EinvoiceDialog bill={einvBill} onClose={() => setEinvBill(null)} onSaved={() => onBillChanged?.()} />}
         </div>
   );
 }

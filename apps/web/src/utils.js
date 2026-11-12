@@ -1,7 +1,9 @@
 // Tax and invoice maths now lives in @ledgora/tax-engine (Phase 0). This file re-exports it so
 // every existing import of './utils' keeps working while features move to the new package.
 import { BUILTIN_UNITS, INDIAN_STATES, INVOICE_TYPES, amountDue, getFinancialYearStart, localToday, paymentStatusFor, toLocalIsoDate } from '@ledgora/tax-engine';
-export { BUILTIN_UNITS, DEFAULT_NUMBER_SETTINGS, DOC_TYPE_PREFIXES, GST_DOC_NUMBER, GST_PORTAL_RATES, INDIAN_STATES, INVOICE_TYPES, MAX_START_NUMBER, REMOVED_TCS_SECTIONS, SALES_INVOICE_TYPES, TCS_SECTIONS, TDS_SECTIONS, TDS_TCS_THRESHOLD, amountDue, appliedStock, b2clThreshold, businessKeyOf, calculateLineItemTax, calculateRoundOff, clientYearToDate, computeInvoiceTotals, counterKeyFor, countsAsSales, decodeGstin, formatDateGST, formatDocNumber, getFilingPeriod, getFinancialYearLabel, getFinancialYearStart, getStateCode, gstinChecksumOk, isCancelledBill, isCreditNote, isInterstateSupply, isUnionTerritoryWithoutLegislature, localToday, nextCounterValue, numberFormatProblem, numberSeriesFor, numberToWords, ownPrefixProblem, parseLocalDate, paymentStatusFor, placeOfSupplyLabel, printedSubtotal, resolveLineDiscount, roundQty, salesSign, setOffITC, splitLineTax, startFor, stateNameForCode, stockDelta, stockEffect, templateTotals, toLocalIsoDate } from '@ledgora/tax-engine';
+export { BUILTIN_UNITS, DEFAULT_NUMBER_SETTINGS, DOC_TYPE_PREFIXES, GST_DOC_NUMBER, GST_PORTAL_RATES, INDIAN_STATES, INVOICE_TYPES, MAX_START_NUMBER, REMOVED_TCS_SECTIONS, SALES_INVOICE_TYPES, TCS_SECTIONS, TDS_SECTIONS, TDS_TCS_THRESHOLD, amountDue, appliedStock, b2clThreshold, businessKeyOf, calculateLineItemTax, calculateRoundOff, clientYearToDate, computeInvoiceTotals, counterKeyFor, countsAsSales, decodeGstin, formatDocNumber, getFilingPeriod, getFinancialYearLabel, getFinancialYearStart, getStateCode, gstinChecksumOk, isCancelledBill, isCreditNote, isInterstateSupply, isUnionTerritoryWithoutLegislature, localToday, nextCounterValue, numberFormatProblem, numberSeriesFor, numberToWords, ownPrefixProblem, parseLocalDate, paymentStatusFor, placeOfSupplyLabel, printedSubtotal, resolveLineDiscount, roundQty, salesSign, setOffITC, splitLineTax, startFor, stateNameForCode, stockDelta, stockEffect, templateTotals, toLocalIsoDate } from '@ledgora/tax-engine';
+import { formatDateGST as engineFormatDate } from '@ledgora/tax-engine';
+import { getAppSetting } from './lib/appSettings';
 import {
   getUnitUQC as engineUnitUQC,
   hsnUqc as engineHsnUqc,
@@ -15,13 +17,24 @@ export const generateEWayBillJSON = (profile, client, details, items, totals, in
   engineEWayBillJSON(profile, client, details, items, totals, invoiceType, { customUnits: getCustomUnits(), ...opts });
 
 
+// Regional settings (Settings > General): the date layout, the currency symbol and the decimals on amounts. Foreign
+// currencies keep the browser's own format; the symbol and decimals settings are for the business's own money.
 export const formatCurrency = (amount, currency = 'INR') => {
-  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currency || 'INR',
-    minimumFractionDigits: 2
-  }).format(amount || 0);
+  if (currency && currency !== 'INR') {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 2 }).format(amount || 0);
+  }
+  const digits = getAppSetting('fmt.decimals');
+  const body = new Intl.NumberFormat('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Math.abs(amount || 0));
+  return `${(amount || 0) < 0 ? '-' : ''}${getAppSetting('fmt.currency')}${body}`;
+};
+
+/** A date for display. The stored value stays YYYY-MM-DD; only the layout follows the business's date format. */
+export const formatDateGST = (dateStr) => {
+  const base = engineFormatDate(dateStr); // dd-MM-yyyy, or '' when empty or invalid
+  if (!base) return base;
+  const [dd, mm, yyyy] = base.split('-');
+  const f = getAppSetting('fmt.date');
+  return f === 'dd/MM/yyyy' ? `${dd}/${mm}/${yyyy}` : f === 'MM-dd-yyyy' ? `${mm}-${dd}-${yyyy}` : base;
 };
 
 // v1.10.66 (#63) — CSV cells that start with = + - @ (or a tab / carriage

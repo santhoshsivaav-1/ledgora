@@ -31,6 +31,9 @@ import { chequesModule } from './modules/cheques.ts';
 import { loansModule } from './modules/loans.ts';
 import { ifscModule } from './modules/ifsc.ts';
 import { posModule } from './modules/pos.ts';
+import { settingsModule } from './modules/settings.ts';
+import { publicLinkEndpoints } from './publicLink.ts';
+import { messagingModule } from './modules/messaging.ts';
 import { utilitiesModule } from './modules/utilities.ts';
 import { backupsModule } from './modules/backups.ts';
 import { setupModule } from './modules/setup.ts';
@@ -102,6 +105,8 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     ifscModule,
     reportsModule,
     posModule,
+    settingsModule,
+    messagingModule,
     utilitiesModule,
     backupsModule,
     setupModule,
@@ -113,6 +118,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
   ])
     mod(reg);
   localFileEndpoints(app, deps);
+  publicLinkEndpoints(app, deps);
 
   app.get('/v1/openapi.json', (c) => c.json(buildOpenApi(reg.documented, pkg.version)));
   app.get('/v1/docs', (c) => c.html(docsHtml));

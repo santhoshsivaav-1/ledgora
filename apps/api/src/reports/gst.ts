@@ -7,6 +7,7 @@ import { schema, type Tx } from '@ledgora/db';
 import { SALE_TYPES } from '@ledgora/tax-engine';
 import { commonParams, defineReport } from './registry.ts';
 import { fyStartOf, r2, today } from './shared.ts';
+import { settingValue } from '../modules/settingsStore.ts';
 
 const { invoices, invoiceLines, purchases, purchaseLines, parties, payments, paymentAllocations } =
   schema;
@@ -481,6 +482,8 @@ export const form27eq = defineReport({
   params: commonParams,
   run: async (tx, p) => {
     const { from, to } = period(p);
+    // Settings > GST > Collector TAN, for the return's header ('' until the owner fills it in).
+    const collectorTan = await settingValue(tx, p.businessId, 'gst.tan');
     const tcsOf = sql<number>`coalesce((${invoices.data}->'totals'->>'tcsAmount')::float8, 0)`;
     const docs = await tx
       .select()
@@ -498,7 +501,7 @@ export const form27eq = defineReport({
       return {
         rows: [],
         totals: { received: 0, tcs: 0, missingPan: 0 },
-        meta: { from, to, beta: true },
+        meta: { from, to, beta: true, collectorTan },
       };
     const allocs = await tx
       .select({
@@ -576,7 +579,7 @@ export const form27eq = defineReport({
         tcs: sum(rows, 'tcs'),
         missingPan: rows.filter((r) => r.panMissing).length,
       },
-      meta: { from, to, beta: true },
+      meta: { from, to, beta: true, collectorTan },
     };
   },
 });

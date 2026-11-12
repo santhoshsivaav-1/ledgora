@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getAllBills, getAllProducts, getStockAlertSettings } from '../lib/data';
+import { getAllAppSettings } from '../lib/appSettings';
+import { lowStockLimit } from '../features/items/itemFields';
 import { getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate } from '../utils';
 
 // The bell's contents (moved out of App.jsx unchanged, Vyapar parity P0-S2, so both shells share it): overdue and
@@ -128,7 +130,7 @@ export default function useNotifications(currentView) {
         const lowStock =
           stockAlertCfg?.enabled === false
             ? []
-            : products.filter((p) => (p.stock ?? 999) <= stockThreshold);
+            : products.filter((p) => (p.stock ?? 999) <= lowStockLimit(p, getAllAppSettings(), stockThreshold));
         const filings = getUpcomingFilings().filter((f) => f.daysAway <= 10);
         // Recurring auto-fire breadcrumb — set by server.js processDueRecurring().
         // Only "fresh" (today's) auto-fires count as a notification; older ones

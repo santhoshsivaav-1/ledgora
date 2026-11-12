@@ -18,6 +18,10 @@ asks; the answer is written here before work continues.
 | D-10 | Backup hosting | snapshot export / server snapshots | _pending_ | | | P7 |
 | D-11 | Stock valuation | weighted average only / FIFO | **Weighted average only**; FIFO shown as "coming soon". Landed cost per unit is already stored on purchase lines (Phase 3) | Owner | 2026-11-10 | P4, P6, P8 |
 | D-12 | ITC 180-day date basis | bill-payment date / cheque clearance | **Payment date** (a cheque counts on its date). Cheque clearing is not tracked until Phase 5; revisit then (and with a CA) | Owner | 2026-11-10 | P10 |
+| D-12a | ITC 180-day, revisited after Phase 5 (cheque clearing now tracked) | payment date / clearance date | **Keep payment date** (no change to shipped behaviour) | Owner | 2026-11-12 | P10 |
+| D-13 | What is due to the supplier on a reverse-charge bill | total incl. RCM tax / total excl. RCM tax | **Exclude the RCM tax.** The tax is paid to the government through "Record RCM payment", which makes the ITC claimable in that month (3B 4(A)(3)) | Owner | 2026-11-12 | P3, P10 |
+| D-14 | GST on advances received (GSTR-1 Table 11) | every unallocated receipt / services only | **Services only** (Notification 66/2017-CT: no GST on advances for goods). The receipt asks "Advance for services?" with a rate and place of supply | Owner | 2026-11-12 | P10 |
+| D-15 | E-invoice (IRN) | offline JSON / provider API / skip | **Offline only**: build the INV-1 JSON, the user uploads it on the IRP and pastes back IRN, Ack no/date and signed QR; no credentials stored | Owner | 2026-11-12 | P8, P10 |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
@@ -432,3 +436,52 @@ cross-check; the rest of Phase 6 is next.
 4. **Stale closing entry is a Verify My Data check** (`fy_close_stale`): for each year closed with Close FY and not reopened, the profit moved at close is compared with the profit the books show now. The fix posts the closing entry again (the old one is reversed) and records the new profit; the year stays closed. A test overrides the lock as the owner, finds the check, fixes it and checks the year-end balances.
 5. **Backups.** (a) **Scheduled backups are encrypted** with a password derived from a server key (`BACKUP_ENCRYPTION_KEY`, else `AUTH_SECRET`) and the organization id; the history opens them without asking. A downloaded copy of one can only be opened on a server with the same key, which the screen says. Rotating the key makes older scheduled backups unreadable, so keep a manual, password-encrypted one if you rotate. (b) **Attachments are in the backup**: logos, signatures, stamps and bill files, up to 40 MB in all (a file past that is listed without bytes and comes back "pending"); backups and exports are not copied into backups. Restore stores them under new ids and the business, purchase and so on point at the new ones. (c) **Google Drive**: OAuth with the `drive.file` scope (the app sees only what it created, in a "Ledgora Backups" folder), the refresh token stored encrypted, a copy uploaded after each backup when connected (a Drive failure never fails the backup and is shown), the Drive copy deleted with the backup, disconnect revokes. It needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` with the Drive API enabled and `${API_URL}/v1/backups/drive/callback` as a redirect URI. **It was tested against a stand-in for Google, not Google**: connect it once with a real account and watch one backup land before relying on it.
 6. **Share with CA: the date range holds on every screen.** For a member with a range, any GET with `from`, `to` or `asOf` outside it is refused, rows of a list dated outside it are removed, and a single record dated outside it is refused (`middleware/range.ts`, applied by the route registrar). **Not recomputed:** figures the server totals across all rows (a party's balance, a dashboard card, the ledger's opening balance), so a CA given one year still sees balances that include other years. Reports are the exception: they run only inside the range.
+
+## Notes recorded during Phase 10, the remaining slices (2026-11-12)
+
+Decisions D-12a, D-13, D-14, D-15 above were taken by the owner before coding. ⚠️ marks money or tax treatment that a CA
+must review before the slice's Beta label (if any) is removed. Every number that changes has a before/after fixture in
+`apps/web/test/gstReturnTables.test.js`; the rules are pure functions in `packages/tax-engine` with their own tests
+(`advances`, `rcm`, `gstr3b`, `cashlimits`, `tds26as`, `einvoice`, `itr3`).
+
+1. ⚠️ **S1 advances (D-14).** A receipt not against an invoice can be marked "Advance for services" with a rate and place
+   of supply (tax included in the amount). Table 11A shows advances received in the period less what was adjusted in the
+   same period (an advance and its invoice in one month are reported only through the invoice); 11B shows adjustments
+   in the period of advances from earlier periods. **A refund of an advance is reported in 11B** like an adjustment; CA to
+   confirm. The advance's net (11A − 11B) is added to 3B 3.1(a). `ad_amt` in the JSON is the value excluding tax. "Adjust"
+   on a receipt sets it off against an invoice of the same customer and records the amount as a payment on that invoice,
+   dated the later of the receipt and the invoice. The receipts are the billing screens' workspace documents; typed
+   payments have no advance flag yet.
+2. ⚠️ **S2 reverse charge (D-13).** The supplier of an RCM bill is owed the bill less its tax: web `purchaseDue`, supplier
+   statement, 180-day aging, and the API's `dueOfPurchase` and supplier statement. The RCM tax stays in 3.1(d) of the bill
+   month (as before; the legal time of supply for services can be later, CA to confirm). **The credit (4(A)(3)) now comes
+   in the month "Record RCM payment" is dated**, not the bill month. RCM bills recorded before this have no payment record,
+   so their credit no longer appears in any period until a payment is recorded (back-dating is allowed). The typed API has
+   no "Record RCM payment" endpoint yet (the ledger already posts Cr RCM Payable).
+3. **S3, partial.** Supplies to an SEZ moved from 3.1(a) to 3.1(b) (IGST still payable, output tax unchanged); 3.2
+   (inter-state to unregistered, by state) added to the 3B screen and JSON; Table 5 filled from 0% purchase lines (a line
+   flagged `nonGst` goes to the non-GST row; no screen sets that flag yet). **Not done:** 4(A)(1)/(2) imports (no import
+   flag on purchases), 3.1(c) exempt lines inside tax invoices and 3.1(e) non-GST outward (no item tax category), the
+   "How is this calculated?" drill-downs, the 22-cell fixture set, and the ledger Duties & Taxes cross-check.
+4. ⚠️ **S5 TDS receivable.** Book TDS per customer = TDS on invoices + TDS kept on receipts, except a receipt against an
+   invoice that already declares TDS (one deduction counted once). 26AS is read in the browser (TRACES text or CSV;
+   deductor summary of Part A only) and never uploaded. Matching is by TAN when the book side has one (it never does today),
+   else by a normalised name ("Private Limited" = "Pvt Ltd"). Within ₹1 is a match.
+5. **S6 cash watch.** The report now lists §269ST (as before), §40A(3) (cash payments out and cash expenses, per payee per
+   day above ₹10,000; the ₹35,000 transporter limit is in the note, not applied), §269SS (loans received with no bank
+   account, ₹20,000 or more) and §43B(h) (bills of suppliers flagged MSME, unpaid past the agreed days, at most 45; 15
+   when there is no written agreement is the caller's choice). New party fields `msme`, `msme_agreed_days` (migration
+   0022, check 1–45). **No web screen sets the MSME flag yet** (typed parties have no edit screen); it is set through the API.
+6. **S7 e-invoice, offline (D-15).** INV-1 schema 1.1 JSON from a saved B2B invoice, credit or debit note; checked against
+   the IRP's field rules as published (GSTIN pattern, document number, PIN, HSN length, GST rate list, round-off range).
+   **It has not been validated against the IRP's official sample set or uploaded to the sandbox**; do one real upload
+   before relying on it. The IRN, Ack No/date and signed QR pasted back are stored on the bill; the bill then opens
+   read-only and prints the QR. "Mark IRN cancelled" is offered within 24 hours of the acknowledgement. No credentials
+   exist, so none can be logged or returned.
+7. **S8 ITR-3.** Part A-P&L rows from the ledger's profit-loss report, by account name (purchase / depreciation / interest);
+   a "not reconciled" warning when the rows do not add up to the net profit. The projected profit is the year's profit to
+   date × 365 / days gone, editable, and "Use as business income" feeds the regime calculator and so Advance Tax. Needs
+   the ledger; book depreciation is not Schedule DEP.
+8. **Settings made live:** `gst.rcm` (default changed to on, as the boxes always showed), `gst.einvoice.enabled`, `gst.tcs`
+   (new bills start with the TCS line on) and `gst.tan` (validated, shown in the Form 27EQ report's meta).
+

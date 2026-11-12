@@ -6,7 +6,7 @@
 // `split(item, bill)` is the app's per-line tax split ({ taxable, igst, cess, ... }); `isInter(bill)` and `fmtDate` come from
 // the page, so this file does not depend on them.
 
-import { billLinesWithCharges, debitNoteItcReversal, itcClaimable, itcSplit } from '@ledgora/tax-engine';
+import { billLinesWithCharges, debitNoteItcReversal, getStateCode, itcClaimable, itcSplit } from '@ledgora/tax-engine';
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -89,9 +89,28 @@ const bookTax = (p) => (p?.items || []).reduce((acc, it) => {
 export const isPurchaseBill = (p) => !p?.docType || p.docType === 'bill';
 export const isDebitNote = (p) => p?.docType === 'debit-note';
 
+/** The tax on a purchase bill by head, and the part not eligible as credit (zero for a bill without line flags). */
+export function purchaseItcHeads(p) {
+  const legacy = !p.charges?.length && (p.items || []).every(itcClaimable);
+  if (legacy) {
+    const book = bookTax(p);
+    return { all: { ...splitTax(p.totalTax || book.tax, !!p.interstate), cess: book.cess }, ineligible: heads0() };
+  }
+  const s = itcSplit(p.items || [], { interstate: !!p.interstate, charges: p.charges });
+  return { all: s.total, ineligible: s.ineligible };
+}
+
+/** Purchase bills as tax-engine's rcmItcForPeriod reads them (P10-S2): date, flag, tax heads and the RCM payment. */
+export const rcmBillsOf = (purchases = []) =>
+  purchases.filter(isPurchaseBill).map((p) => ({
+    id: p.id, date: p.date, reverseCharge: !!p.reverseCharge, heads: purchaseItcHeads(p).all, rcmPayment: p.rcmPayment || null,
+    number: p.invoiceNumber || p.number, supplier: p.supplierName, taxable: Number(p.taxableAmount) || 0,
+  }));
+
 /**
  * Table 4 of GSTR-3B from the period's purchase documents and expenses.
- *   4(A)(3) ISRC  credit on reverse-charge purchases (we paid the tax in 3.1(d), so we claim it here)
+ *   4(A)(3) ISRC  credit on reverse-charge purchases (we paid the tax in 3.1(d), so we claim it here); with `rcm`, in
+ *                 the period the RCM tax was paid (P10-S2), not the bill's
  *   4(A)(5) OTH   all other credit: purchases and expenses
  *   4(B)(1) RUL   credit reversed: §17(5), blocked, used for exempt supply (lines flagged on the bill) and expenses
  *                 marked not ITC-eligible. Per CBIC Circular 170/02/2022 such credit is shown in 4(A) and reversed here.
@@ -102,7 +121,7 @@ export const isDebitNote = (p) => p?.docType === 'debit-note';
  * A bill whose lines carry no flag and that has no charges is read exactly as before Phase 3 (its stored totalTax,
  * split the same way), so the return is unchanged for every purchase recorded before.
  */
-export function itcTable4({ purchases = [], expenses = [], itc180 = null } = {}) {
+export function itcTable4({ purchases = [], expenses = [], itc180 = null, rcm = null } = {}) {
   let fromExpenses = heads0();
   let fromPurchases = heads0();
   let isrc = heads0();
@@ -115,19 +134,14 @@ export function itcTable4({ purchases = [], expenses = [], itc180 = null } = {})
   }
   const bills = purchases.filter(isPurchaseBill);
   for (const p of bills) {
-    const legacy = !p.charges?.length && (p.items || []).every(itcClaimable);
-    let all;
-    if (legacy) {
-      const book = bookTax(p);
-      all = { ...splitTax(p.totalTax || book.tax, !!p.interstate), cess: book.cess };
-    } else {
-      const s = itcSplit(p.items || [], { interstate: !!p.interstate, charges: p.charges });
-      all = s.total;
-      rul = addHeads(rul, s.ineligible);
-    }
-    if (p.reverseCharge) isrc = addHeads(isrc, all);
+    const { all, ineligible } = purchaseItcHeads(p);
+    rul = addHeads(rul, ineligible);
+    // P10-S2: with `rcm` (rcmItcForPeriod) the credit on reverse charge is claimed in the period its tax was paid,
+    // below; without it, as before, in the bill's own period.
+    if (p.reverseCharge) { if (!rcm) isrc = addHeads(isrc, all); }
     else fromPurchases = addHeads(fromPurchases, all);
   }
+  if (rcm) isrc = addHeads(isrc, rcm.claim);
   for (const dn of purchases.filter(isDebitNote)) {
     const bill = bills.find((b) => b.id && b.id === dn.againstPurchaseId);
     const r = debitNoteItcReversal(dn.items || [], { billLines: bill?.items, interstate: !!(bill?.interstate ?? dn.interstate) });
@@ -200,4 +214,93 @@ export function incomeAsBills(incomes = [], profile = {}) {
     });
   }
   return out;
+}
+
+// ---- P10-S1: advances for services (D-14) ----------------------------------------------------------------------------
+
+/** Receipts saved as "Advance for services" (receipt.advance), in the shape tax-engine's table11 reads. Advances for goods carry no GST and are left out. */
+export const advanceReceiptsOf = (receipts = []) =>
+  receipts
+    .filter((r) => r?.advance?.services === true && Number(r.amount) > 0)
+    .map((r) => ({
+      id: r.id,
+      date: r.date,
+      amount: Number(r.amount),
+      rate: Number(r.advance.rate) || 0,
+      pos: String(r.advance.pos || ''),
+      adjustments: r.advance.adjustments || [],
+    }));
+
+const pad = (n) => String(n).padStart(2, '0');
+const lastDay = (y, m) => new Date(y, m + 1, 0).getDate(); // m is 0-based
+
+/** The first and last day of the return period picked on the screen (months are 0-based, like the screen's filters). */
+export function periodBounds(mode, o) {
+  if (mode === 'fy') return { from: o.from, to: o.to };
+  const months = mode === 'quarter' ? o.months : [o.month];
+  const first = Math.min(...months);
+  const last = Math.max(...months);
+  return { from: `${o.year}-${pad(first + 1)}-01`, to: `${o.year}-${pad(last + 1)}-${pad(lastDay(o.year, last))}` };
+}
+
+// ---- P10-S3: GSTR-3B 3.1(b) SEZ and 3.2 ------------------------------------------------------------------------------
+
+const taxableOf = (t) => t?.taxableAmount ?? ((t?.subtotal || 0) - (t?.totalDiscount || 0));
+
+/** Supplies to SEZ units and developers in the period (zero-rated, 3.1(b)), net of credit notes: taxable value, IGST and cess. */
+export function sezSupplies(bills = []) {
+  const out = { taxable: 0, igst: 0, cess: 0 };
+  for (const b of bills) {
+    if (!b.data?.client?.isSEZ) continue;
+    const sign = (b.invoiceType || 'tax-invoice') === 'credit-note' ? -1 : 1; // a credit note to an SEZ nets out of 3.1(b)
+    const t = b.data.totals || {};
+    out.taxable += sign * taxableOf(t);
+    out.igst += sign * (t.igst || 0);
+    out.cess += sign * (t.cess || 0);
+  }
+  return { taxable: round2(out.taxable), igst: round2(out.igst), cess: round2(out.cess) };
+}
+
+/**
+ * 3.2 rows: inter-state invoices and credit notes (negative) to buyers without a GSTIN, with their place of supply as a
+ * state code. Exports (no Indian place of supply) and SEZ units are not "unregistered persons" and are left out.
+ */
+export function unregisteredInterRows(bills = []) {
+  const rows = [];
+  for (const b of bills) {
+    const c = b.data?.client || {};
+    const t = b.data?.totals || {};
+    if (c.gstin || c.isSEZ || t.isInterstate !== true) continue;
+    const pos = getStateCode(String(b.data?.details?.placeOfSupply || c.state || '').trim());
+    if (!pos) continue;
+    const sign = (b.invoiceType || 'tax-invoice') === 'credit-note' ? -1 : 1;
+    rows.push({ pos, txval: sign * taxableOf(t), iamt: sign * (t.igst || 0) });
+  }
+  return rows;
+}
+
+// ---- P10-S5: TDS receivable ------------------------------------------------------------------------------------------
+
+/**
+ * TDS customers deducted, per customer, for the Form 26AS comparison: TDS declared on invoices, plus TDS kept on
+ * receipts (P2-S5) unless the receipt is against an invoice that already declares TDS (one deduction, counted once).
+ */
+export function tdsBookByCustomer(bills = [], receipts = []) {
+  const by = new Map();
+  const add = (name, v) => {
+    const k = String(name || '').trim();
+    if (!k || !(v > 0)) return;
+    by.set(k, round2((by.get(k) || 0) + v));
+  };
+  const declared = new Set();
+  for (const b of bills) {
+    const tds = Number(b.data?.totals?.tdsAmount) || 0;
+    if (tds > 0) declared.add(b.invoiceNumber);
+    add(b.data?.client?.name || b.clientName, tds);
+  }
+  for (const r of receipts) {
+    if (r.againstInvoice && declared.has(String(r.againstInvoice).trim())) continue;
+    add(r.clientName, Number(r.tds) || 0);
+  }
+  return [...by.entries()].map(([deductor, tds]) => ({ deductor, tds }));
 }

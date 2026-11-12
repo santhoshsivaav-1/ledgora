@@ -46,6 +46,13 @@ export function createRateLimiter(env: AppEnv, now: () => number = Date.now) {
       windowMs: 60_000,
       max: env.RATE_LIMIT_LOGIN_PER_MIN,
     },
+    // P9: a public share link (/s/:token) is anonymous, so it is limited per address and tighter than the signed-in API.
+    {
+      name: 'link',
+      match: (_m, p) => p.startsWith('/s/'),
+      windowMs: 60_000,
+      max: 30,
+    },
     {
       name: 'api',
       match: (_m, p) => p.startsWith('/v1/'),
@@ -134,6 +141,10 @@ const APP_CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+// P9 public share page: inline style only, no script, no framing, nothing loaded from anywhere.
+const SHARE_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
 const PAGE_CSP =
   "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'";
 
@@ -157,16 +168,18 @@ export function applySecurity(app: Hono, env: AppEnv) {
       'content-security-policy',
       api || p === '/health'
         ? "default-src 'none'; frame-ancestors 'none'"
-        : p === '/v1/docs' || p === '/v1/console'
-          ? PAGE_CSP
-          : APP_CSP,
+        : p.startsWith('/s/')
+          ? SHARE_CSP
+          : p === '/v1/docs' || p === '/v1/console'
+            ? PAGE_CSP
+            : APP_CSP,
     );
     // Hashed build files never change, so they may be kept for a year; everything else is checked every time.
     c.header(
       'cache-control',
       p.startsWith('/assets/')
         ? 'public, max-age=31536000, immutable'
-        : p.startsWith('/v1/') || p === '/health'
+        : p.startsWith('/v1/') || p === '/health' || p.startsWith('/s/')
           ? 'no-store'
           : 'no-cache',
     );
@@ -182,5 +195,6 @@ export function applySecurity(app: Hono, env: AppEnv) {
     }),
   );
   app.use('/v1/*', rateLimit(env));
+  app.use('/s/*', rateLimit(env));
   app.use('/v1/*', csrf(env));
 }

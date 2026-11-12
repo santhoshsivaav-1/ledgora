@@ -765,7 +765,10 @@ export function ledgerModule({ route }: Registrar) {
       'Freeze transactions on or before a date; choose whether a filed GST month locks the books',
     body: lockSettingsInput,
     response: lockSettings,
-    handler: async ({ tx, orgId, body }) => {
+    handler: async ({ tx, orgId, auth, body }) => {
+      // The same rule as PATCH /v1/settings: the lock date is the owner's to move.
+      if (auth.role !== 'owner')
+        throw new AppError('forbidden', 'Only the owner can change the lock date');
       await loadBusiness(tx, body.businessId);
       const [s] = await tx
         .select()

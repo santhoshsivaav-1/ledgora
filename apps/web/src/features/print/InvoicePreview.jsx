@@ -1,3 +1,4 @@
+import { getAppSetting } from '../../lib/appSettings';
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import DOMPurify from 'dompurify';
@@ -164,6 +165,16 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   };
 
   const [qrDataUrl, setQrDataUrl] = useState('');
+
+  // P10-S7: an invoice registered on the IRP prints its IRN, Ack No/date and the signed QR the IRP returned.
+  const einv = options.einvoice?.status === 'generated' && options.einvoice?.signedQr ? options.einvoice : null;
+  const [einvQr, setEinvQr] = useState('');
+  useEffect(() => {
+    if (!einv) { setEinvQr(''); return; }
+    QRCode.toDataURL(einv.signedQr, { width: 150, margin: 1, errorCorrectionLevel: 'L' })
+      .then(setEinvQr)
+      .catch(() => setEinvQr(''));
+  }, [einv?.signedQr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate UPI QR code. The VPA now comes from the selected payment account
   // (so switching account swaps both bank block + QR), with fallback to the
@@ -977,7 +988,11 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
   // above, so their numbers are the same as every other design's.
   const isGrid = pdfStyle === 'boxed' || pdfStyle === 'tally';
   const sanitizedTerms = customTerms ? splitNumberedTerms(DOMPurify.sanitize(customTerms)) : '';
-  const sanitizedNotes = customNotes ? splitNumberedTerms(DOMPurify.sanitize(customNotes)) : '';
+  // Settings > Print > Footer text is printed as the last line of the notes on every sheet design.
+  const footerLine = (getAppSetting('print.footer') || '').trim();
+  const sanitizedNotes = (customNotes || footerLine)
+    ? splitNumberedTerms(DOMPurify.sanitize(`${customNotes || ''}${footerLine ? `<p>${footerLine.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>` : ''}`))
+    : '';
   const taxedRates = [...new Set(items.map((it) => lineCalc(it)).filter((l) => l.tax > 0).map((l) => l.rate))];
   const gridSig = (() => {
     const sigImg = profile?.signature || (_ps.signatureShow !== false ? _ps.signatureImage : null);
@@ -1044,6 +1059,15 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       data-row-density={_ps_final.rowDensity || 'normal'}
       data-header-compact={_ps_final.headerCompact ? '1' : '0'}
       ref={ref} {...(previewOnly ? {} : { id: 'invoice-preview' })} style={finalContainerStyle}>
+      {einv && (
+        <div className="inv-einvoice" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #e5e7eb', fontSize: '0.72em' }}>
+          {einvQr && <img src={einvQr} alt="E-invoice signed QR" style={{ width: 90, height: 90 }} />}
+          <div style={{ wordBreak: 'break-all' }}>
+            <div><strong>IRN:</strong> {einv.irn}</div>
+            <div><strong>Ack No:</strong> {einv.ackNo} &nbsp; <strong>Ack Date:</strong> {einv.ackDt}</div>
+          </div>
+        </div>
+      )}
       {cancelled && (
         <div aria-hidden="true" style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

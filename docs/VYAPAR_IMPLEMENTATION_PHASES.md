@@ -4288,14 +4288,14 @@ Copy into the PR description or keep in this file; tick as slices merge.
 - [ ] P9-S7 Loyalty (optional)
 
 ### Phase 10
-- [ ] P10-S1 Table 11 advances
-- [ ] P10-S2 Reverse charge
-- [ ] P10-S3 GSTR-3B completion
-- [ ] P10-S4 ITC 180-day
-- [ ] P10-S5 TDS/TCS ledger
-- [ ] P10-S6 Cash-limit watch
-- [ ] P10-S7 E-invoice (optional)
-- [ ] P10-S8 ITR-3 map and advance tax from P&L
+- [x] P10-S1 Table 11 advances (services only, D-14; CA review pending)
+- [x] P10-S2 Reverse charge (D-13; CA review pending)
+- [ ] P10-S3 GSTR-3B completion (partial: SEZ in 3.1(b), 3.2, Table 5 done; imports 4(A)(1)/(2), 3.1(c)/(e) item flags, drill-downs and the ledger cross-check not done)
+- [x] P10-S4 ITC 180-day
+- [x] P10-S5 TDS/TCS ledger (payable earlier; receivable + 26AS comparison now; CA review pending)
+- [x] P10-S6 Cash-limit watch
+- [x] P10-S7 E-invoice (offline only, D-15)
+- [x] P10-S8 ITR-3 map and advance tax from P&L
 
 ### Phase 11
 - [ ] P11-S1 Old UI removal

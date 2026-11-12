@@ -11,6 +11,7 @@ import { EmptyState } from '../../components/ui/States';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction } from '../../components/ui/ConfirmModal';
 import { apiClient } from '../../lib/apiClient';
+import LocationCard from './LocationCard';
 import { formatCurrency, localToday } from '../../utils';
 import {
   createStaff,
@@ -118,6 +119,7 @@ export default function SalesmenView() {
           </Can>
         }
       />
+      <LocationCard />
       <DataTable
         id="salesmen"
         columns={columns}

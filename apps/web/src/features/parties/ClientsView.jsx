@@ -1,3 +1,5 @@
+import { getAppSetting } from '../../lib/appSettings';
+import { duplicatePhone } from './partyFields';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, FolderTree } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
@@ -715,6 +717,9 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
 
   const handleModalSave = async (formData) => {
     if (!formData.name.trim()) { toast('Client name is required', 'warning'); return; }
+    // Settings > Party > Duplicate phone warning
+    const twin = getAppSetting('party.dupPhone') ? duplicatePhone(clients, formData.phone, editingClientId) : null;
+    if (twin && !(await confirmAction({ title: 'Phone number already used', message: `${twin.name} already has ${formData.phone}. Save anyway?`, confirmLabel: 'Save anyway', tone: 'warning' }))) return;
     try {
       const data = { ...formData };
       if (editingClientId) data.id = editingClientId;

@@ -5,6 +5,7 @@ import { formatCurrency } from '../../utils';
 import { getPrintSettings } from '../print/printSettingsStore';
 import HelpButton from '../../components/ui/HelpButton';
 import LoanDeductions from './LoanDeductions';
+import BooksItr3Tab from './BooksItr3Tab';
 import { BANK_STATEMENT_TEMPLATE, downloadCsv } from '../import-export/bulkCsv';
 
 // v1.10.31 — Parse the user's chosen PDF accent (hex like "#1e40af") into
@@ -61,6 +62,7 @@ import { toast } from '../../components/ui/Toast';
 const TABS = [
   { key: 'calculator', label: 'Regime Calculator', icon: Calculator, help: 'Compare Old vs New (Section 115BAC) — auto-picks the cheaper regime' },
   { key: 'presumptive', label: 'Presumptive (§44AD/ADA)', icon: Briefcase, help: 'Skip full books — declare 6/8% (business) or 50% (professional) of turnover' },
+  { key: 'books',      label: 'Books (ITR-3)',     icon: Landmark, help: 'Business income from the ledger P&L, mapped to ITR-3, projected for the year' },
   { key: 'advance',    label: 'Advance Tax',       icon: Clock,    help: 'Four installment schedule with §234B/C interest calculation' },
   { key: 'bank',       label: 'Bank Statement Import', icon: Upload, help: 'Upload SBI / HDFC / ICICI / Axis / Kotak / PNB / Yes Bank CSV — auto-categorises' },
   { key: 'summary',    label: 'ITR Summary',    icon: FileText, help: 'Consolidated view + ITR-4 Filing Summary PDF' },
@@ -306,6 +308,16 @@ export default function IncomeTax() {
             }
             setTab('calculator');
             toast(`Presumptive income of ${formatCurrency(presumptive.presumptiveIncome)} pushed to calculator`, 'success');
+          }}
+        />
+      )}
+
+      {tab === 'books' && (
+        <BooksItr3Tab
+          onUseIncome={(amount) => {
+            setInputs(prev => ({ ...prev, businessIncome: Math.round(amount), _autofillHint: false }));
+            setAdvanceInputs(prev => ({ ...prev, mode: 'regular' }));
+            setTab('calculator');
           }}
         />
       )}

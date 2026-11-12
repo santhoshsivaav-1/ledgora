@@ -5,10 +5,21 @@ import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema, type Tx } from '@ledgora/db';
 import { uuid } from '@ledgora/contracts';
-import { cashWatch, salesmanPerformance, saleOrderProgress } from '@ledgora/tax-engine';
+import {
+  CASH_LIMIT_269SS,
+  CASH_LIMIT_40A3,
+  cashLoanWatch,
+  cashPaymentWatch,
+  cashWatch,
+  msmeOverdue,
+  rcmSupplierDue,
+  salesmanPerformance,
+  saleOrderProgress,
+} from '@ledgora/tax-engine';
 import { lineDiscount, partyNames, saleDocs, saleLines } from './documents.ts';
 import { commonParams, defineReport } from './registry.ts';
 import { fyStartOf, r2, today } from './shared.ts';
+import { settingValue } from '../modules/settingsStore.ts';
 
 const {
   expenses,
@@ -19,6 +30,9 @@ const {
   purchaseOrders,
   staff,
   ewayBills,
+  loans,
+  purchases,
+  parties,
 } = schema;
 const period = (p: { from?: string; to?: string }) => ({
   from: p.from ?? fyStartOf(p.to ?? today()),
@@ -504,48 +518,208 @@ export const salesmanReport = defineReport({
   },
 });
 
-// ---- Cash Watch (§269ST) ---------------------------------------------------------------------------------------------------
+// ---- Cash Watch (§269ST, §40A(3), §269SS, §43B(h)) ---------------------------------------------------------------------
 
 export const cashWatchReport = defineReport({
   id: 'cash-watch',
-  title: 'Cash Watch (§269ST)',
+  title: 'Cash Watch',
   group: 'incometax',
   description:
-    'Days on which one party paid you ₹2,00,000 or more in cash. Section 269ST bars receiving that much in cash from one person in a day.',
-  params: commonParams.extend({ limit: z.coerce.number().positive().default(200000) }),
+    'Cash and MSME limits of the Income-tax Act: ₹2,00,000 or more received in cash from one party in a day (§269ST), cash paid to one payee above ₹10,000 in a day (§40A(3), not deductible), loans of ₹20,000 or more taken in cash (§269SS), and dues to an MSME supplier past 45 days or the agreed period (§43B(h)). It only reports; nothing is blocked.',
+  params: commonParams.extend({
+    limit: z.coerce.number().positive().default(200000),
+    rule: z.enum(['', '269ST', '40A3', '269SS', '43Bh']).default(''),
+  }),
   run: async (tx, p) => {
     const { from, to } = period(p);
-    const receipts = await tx
-      .select({
-        partyId: payments.partyId,
-        date: payments.paymentDate,
-        amount: payments.amount,
-        mode: payments.mode,
-        direction: payments.direction,
-      })
-      .from(payments)
-      .where(
-        and(
-          eq(payments.businessId, p.businessId),
-          isNull(payments.deletedAt),
-          eq(payments.mode, 'cash'),
-          eq(payments.direction, 'in'),
-          gte(payments.paymentDate, from),
-          lte(payments.paymentDate, to),
-        ),
+    const want = (r: string) => !p.rule || p.rule === r;
+    type Row = {
+      id: string;
+      rule: string;
+      party: string;
+      date: string;
+      total: number;
+      over: number;
+      note: string;
+    };
+    const rows: Row[] = [];
+    const inRange = (col: Parameters<typeof gte>[0]) => [gte(col, from), lte(col, to)];
+
+    if (want('269ST') || want('40A3')) {
+      const cash = await tx
+        .select({
+          partyId: payments.partyId,
+          date: payments.paymentDate,
+          amount: payments.amount,
+          mode: payments.mode,
+          direction: payments.direction,
+        })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.businessId, p.businessId),
+            isNull(payments.deletedAt),
+            eq(payments.mode, 'cash'),
+            ...inRange(payments.paymentDate),
+          ),
+        );
+      const outExpenses = want('40A3')
+        ? await tx
+            .select({
+              partyId: expenses.payeePartyId,
+              vendor: expenses.vendor,
+              date: expenses.expenseDate,
+              amount: expenses.amount,
+              mode: expenses.paymentMode,
+            })
+            .from(expenses)
+            .where(
+              and(
+                eq(expenses.businessId, p.businessId),
+                isNull(expenses.deletedAt),
+                eq(expenses.kind, 'expense'),
+                eq(expenses.paymentMode, 'cash'),
+                ...inRange(expenses.expenseDate),
+              ),
+            )
+        : [];
+      const names = await partyNames(tx, [
+        ...cash.map((c) => c.partyId),
+        ...outExpenses.map((e) => e.partyId),
+      ]);
+      if (want('269ST'))
+        for (const h of cashWatch(
+          cash.filter((c) => c.direction === 'in'),
+          p.limit,
+        ))
+          rows.push({
+            id: `269ST|${h.partyId}|${h.date}`,
+            rule: '269ST',
+            party: names.get(h.partyId) ?? '',
+            date: h.date,
+            total: h.total,
+            over: r2(h.total - p.limit),
+            note: 'Penalty equal to the amount received (§271DA)',
+          });
+      if (want('40A3')) {
+        const payee = (id: string | null, fallback = '') =>
+          id ? (names.get(id) ?? fallback) : fallback;
+        const list = [
+          ...cash
+            .filter((c) => c.direction === 'out')
+            .map((c) => ({
+              payee: payee(c.partyId),
+              date: c.date,
+              amount: c.amount,
+              mode: 'cash',
+            })),
+          ...outExpenses.map((e) => ({
+            payee: payee(e.partyId, e.vendor),
+            date: e.date,
+            amount: e.amount,
+            mode: 'cash',
+          })),
+        ];
+        for (const h of cashPaymentWatch(list))
+          rows.push({
+            id: `40A3|${h.payee}|${h.date}`,
+            rule: '40A(3)',
+            party: h.payee,
+            date: h.date,
+            total: h.total,
+            over: r2(h.total - CASH_LIMIT_40A3),
+            note: `Not deductible: ${h.disallowed.toLocaleString('en-IN')} (pay by bank above ₹10,000; ₹35,000 for transporters)`,
+          });
+      }
+    }
+
+    if (want('269SS')) {
+      const ls = await tx
+        .select({
+          id: loans.id,
+          lender: loans.lender,
+          date: loans.receivedOn,
+          amount: loans.principal,
+          account: loans.receivedAccountId,
+        })
+        .from(loans)
+        .where(
+          and(
+            eq(loans.businessId, p.businessId),
+            isNull(loans.deletedAt),
+            ...inRange(loans.receivedOn),
+          ),
+        );
+      for (const l of cashLoanWatch(ls.map((x) => ({ ...x, cash: !x.account }))))
+        rows.push({
+          id: `269SS|${l.id}`,
+          rule: '269SS',
+          party: l.lender,
+          date: l.date,
+          total: l.amount,
+          over: r2(l.amount - CASH_LIMIT_269SS),
+          note: 'Loan or deposit taken in cash: penalty equal to the amount (§271D)',
+        });
+    }
+
+    if (want('43Bh')) {
+      const asOf = to < today() ? to : today();
+      const bills = await tx
+        .select({
+          id: purchases.id,
+          number: purchases.invoiceNumber,
+          date: purchases.purchaseDate,
+          total: purchases.total,
+          paid: purchases.paidAmount,
+          tds: purchases.tdsAmount,
+          reverseCharge: purchases.reverseCharge,
+          tax: sql<number>`(${purchases.cgst} + ${purchases.sgst} + ${purchases.igst})::float8`,
+          cess: purchases.cess,
+          supplier: parties.name,
+          agreedDays: parties.msmeAgreedDays,
+        })
+        .from(purchases)
+        .innerJoin(parties, eq(parties.id, purchases.supplierId))
+        .where(
+          and(
+            eq(purchases.businessId, p.businessId),
+            isNull(purchases.deletedAt),
+            eq(purchases.docType, 'bill'),
+            eq(parties.msme, true),
+            lte(purchases.purchaseDate, asOf),
+          ),
+        );
+      const due = msmeOverdue(
+        bills.map((b) => ({
+          id: b.id,
+          supplier: b.supplier,
+          date: b.date,
+          msme: true,
+          agreedDays: b.agreedDays ?? undefined,
+          pending:
+            rcmSupplierDue({
+              total: b.total,
+              reverseCharge: b.reverseCharge,
+              tax: b.tax,
+              cess: b.cess,
+              tds: b.tds,
+            }) - b.paid,
+        })),
+        asOf,
       );
-    const hits = cashWatch(receipts, p.limit);
-    const names = await partyNames(
-      tx,
-      hits.map((h) => h.partyId),
-    );
-    const rows = hits.map((h) => ({
-      id: `${h.partyId}|${h.date}`,
-      party: names.get(h.partyId) ?? '',
-      date: h.date,
-      total: h.total,
-      over: r2(h.total - p.limit),
-    }));
+      for (const d of due)
+        rows.push({
+          id: `43Bh|${d.id}`,
+          rule: '43B(h)',
+          party: d.supplier,
+          date: d.date,
+          total: d.pending,
+          over: d.daysOld,
+          note: `Unpaid ${d.daysOld} days (due by ${d.dueBy}): deductible only in the year it is paid`,
+        });
+    }
+
+    rows.sort((a, b) => b.date.localeCompare(a.date) || a.rule.localeCompare(b.rule));
     return {
       rows,
       totals: { total: sum(rows, 'total'), count: rows.length },
@@ -570,11 +744,13 @@ export const ewayRegister = defineReport({
   }),
   run: async (tx, p) => {
     const { from, to } = period(p);
+    // Settings > Transaction > E-way bill threshold; ₹50,000 until the owner changes it.
+    const limit = Number(await settingValue(tx, p.businessId, 'txn.ewayThreshold')) || EWAY_LIMIT;
     const docs = (await saleDocs(tx, p.businessId, from, to, { creditNotes: false })).filter(
-      (d) => d.status !== 'cancelled' && d.total >= EWAY_LIMIT,
+      (d) => d.status !== 'cancelled' && d.total >= limit,
     );
     if (!docs.length)
-      return { rows: [], totals: { value: 0, pending: 0 }, meta: { from, to, limit: EWAY_LIMIT } };
+      return { rows: [], totals: { value: 0, pending: 0 }, meta: { from, to, limit } };
     const lines = await saleLines(
       tx,
       docs.map((d) => d.id),
@@ -626,7 +802,7 @@ export const ewayRegister = defineReport({
         value: sum(rows, 'value'),
         pending: rows.filter((r) => r.status === 'pending').length,
       },
-      meta: { from, to, limit: EWAY_LIMIT },
+      meta: { from, to, limit },
     };
   },
 });

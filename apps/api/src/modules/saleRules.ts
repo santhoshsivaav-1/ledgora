@@ -15,6 +15,7 @@ import {
   STOCK_SIGN,
 } from '@ledgora/tax-engine';
 import { audit } from '../audit.ts';
+import { settingValue } from './settingsStore.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { OrgContext } from '../middleware/context.ts';
 
@@ -540,7 +541,11 @@ export async function runGuards(tx: Tx, orgId: string, auth: OrgContext, g: Guar
     throw periodLockedError(lock, settings);
 
   // Credit limit (sales only; what stays unpaid after the money received with the sale).
-  if (g.partyId && SALE_TYPES.includes(g.invoiceType)) {
+  if (
+    g.partyId &&
+    SALE_TYPES.includes(g.invoiceType) &&
+    (await settingValue(tx, g.businessId, 'party.credit'))
+  ) {
     const [p] = await tx
       .select({ name: parties.name, limit: parties.creditLimit, mode: parties.creditMode })
       .from(parties)

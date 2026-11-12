@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, ChevronRight, AlertTriangle, BookOpen, BarChart3 } from 'lucide-react';
 import { itc180ForPeriod } from '../purchases/purchaseExtras';
-import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getProfile } from '../../lib/data';
+import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getAllReceipts, getProfile, savePurchase } from '../../lib/data';
+import { promptAction } from '../../components/ui/ConfirmModal';
+import { exemptInward, interStateUnregistered, moveSezToZeroRated, rcmItcForPeriod, table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
-import { nilExemptSummary, exportSection, withChargeLines, itcTable4, incomeAsBills, isPurchaseBill, isDebitNote } from './gstReturnTables';
+import { nilExemptSummary, exportSection, withChargeLines, itcTable4, incomeAsBills, isPurchaseBill, isDebitNote, advanceReceiptsOf, periodBounds, rcmBillsOf, sezSupplies, unregisteredInterRows } from './gstReturnTables';
 import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
@@ -69,6 +71,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   const filingStatus = filingState.data;
   const setFilingStatus = (data) => setFilingState({ key: filingKey, data });
 
+  const [advanceReceipts, setAdvanceReceipts] = useState([]);
+  const [receipts, setReceipts] = useState([]); // P10-S5: TDS customers kept from receipts
   const fyOptions = getFYOptions();
   const currentYear = new Date().getFullYear();
   const yearOptions = [];
@@ -99,6 +103,12 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         setPurchases(docs.filter(isPurchaseBill));
         setDebitNotes(docs.filter(isDebitNote));
       } catch { /* ignore — older servers don't have this endpoint */ }
+      // P10-S1: receipts saved as an advance for services feed Table 11 and 3B 3.1(a).
+      try {
+        const recs = (await getAllReceipts() || []).filter(r => belongsToProfile(r, p));
+        setReceipts(recs);
+        setAdvanceReceipts(advanceReceiptsOf(recs));
+      } catch { setReceipts([]); setAdvanceReceipts([]); }
     } catch { toast('Failed to load data', 'error'); }
   };
 
@@ -367,11 +377,29 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // before, so the net below is what Table 4(A) showed until now.
   // P10-S4: bills whose supplier is still unpaid 180 days after the invoice reverse their credit here (4(B)(2)); credit
   // comes back as "Re-claimed ITC" in the period the supplier is paid. A period with neither is read exactly as before.
+  // P10-S1: tax on advances for services (D-14) received in the period, less what earlier advances settled now (Table 11).
+  // A period with no advance activity keeps grandTotals itself, so it reads exactly as before.
+  const currentPeriod = (() => {
+    if (filterMode === 'fy') {
+      const fy = fyOptions.find(f => f.value === fyFilter);
+      return fy ? periodBounds('fy', fy) : null;
+    }
+    if (filterMode === 'quarter') {
+      const q = QUARTERS.find(x => x.id === quarterFilter);
+      return q ? periodBounds('quarter', { year: parseInt(yearFilter), months: q.months }) : null;
+    }
+    return yearFilter && monthFilter !== '' ? periodBounds('month', { year: parseInt(yearFilter), month: parseInt(monthFilter) }) : null;
+  })();
+  const bizStateCode = getStateCode(profile.gstin || '') || getStateCode(profile.state || '');
   const itc180 = itc180ForPeriod(purchases, filterByPeriod);
+  // P10-S2: reverse charge. 3.1(d) carries the tax of RCM bills dated in the period; the credit (4(A)(3)) comes in the
+  // period the tax is paid ("Record RCM payment" below), whatever the bill's date (D-13).
+  const rcm = currentPeriod ? rcmItcForPeriod(rcmBillsOf(purchases), currentPeriod) : null;
   const table4 = itcTable4({
     purchases: [...filteredPurchases, ...filteredDebitNotes],
     expenses: filteredExpenses,
     itc180: itc180.reversals.length || itc180.reclaims.length ? itc180 : null,
+    rcm,
   });
   // Compensation cess paid on purchases is input tax credit too (GSTR-3B
   // Table 4(A) csamt); it was always reported as 0.
@@ -385,10 +413,19 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   };
   // Other income that is a supply (P3-S6) is already among the bills (incomeAsBills), so 3.1(a) and 3.1(c) are the
   // bills' figures.
-  const supplies31a = grandTotals;
+  const advances = currentPeriod
+    ? table11({ receipts: advanceReceipts, ...currentPeriod, bizState: bizStateCode })
+    : { at: [], txpd: [], net: { taxable: 0, iamt: 0, camt: 0, samt: 0, csamt: 0 } };
+  // P10-S3: supplies to an SEZ are zero-rated, so they move from 3.1(a) to 3.1(b) (their IGST is still payable). 3.2 lists
+  // inter-state sales to unregistered buyers by state; Table 5 the purchases that carry no GST.
+  const sez31 = moveSezToZeroRated(withAdvanceTax(grandTotals, advances), exportTotals, sezSupplies([...regularBills, ...creditNotes]));
+  const supplies31a = sez31.a;
+  const zeroRated31b = sez31.b;
+  const unreg32 = interStateUnregistered(unregisteredInterRows([...regularBills, ...creditNotes]));
+  const inward5 = exemptInward(filteredPurchases.filter(isPurchaseBill));
   const exempt31c = nilExempt.total;
   // Output tax: 3.1(a) (sales and taxable other income) plus the IGST on exports.
-  const outputTax = { cgst: supplies31a.cgst, sgst: supplies31a.sgst, igst: supplies31a.igst + exportTotals.igst };
+  const outputTax = { cgst: supplies31a.cgst, sgst: supplies31a.sgst, igst: supplies31a.igst + zeroRated31b.igst };
   // v1.10.76 (#81) - credit set off across heads in the legal order (see setOffITC).
   const setOff = setOffITC(outputTax, itcFromExpenses);
   const netTax = setOff.payable;
@@ -644,6 +681,22 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
     toast('GSTR-3B summary CSV downloaded', 'success');
   };
 
+  // P10-S2: "Record RCM payment": the RCM tax of a bill paid to the government in cash. Its credit is claimed in 4(A)(3)
+  // of the period of this date.
+  const recordRcmPayment = async (bill) => {
+    const doc = purchases.find(p => p.id === bill.id);
+    if (!doc) return;
+    const amount = round2(bill.heads.igst + bill.heads.cgst + bill.heads.sgst + bill.heads.cess);
+    const date = await promptAction({ title: `Record RCM payment for ${bill.number || 'bill'}`, message: `Date you paid ${formatCurrency(amount)} of reverse-charge tax through the electronic cash ledger (YYYY-MM-DD)`, defaultValue: new Date().toISOString().slice(0, 10), confirmLabel: 'Record' });
+    if (!date) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date).trim()) || String(date).trim() < (doc.date || '')) { toast('Enter a date on or after the bill date, as YYYY-MM-DD', 'warning'); return; }
+    try {
+      await savePurchase({ ...doc, rcmPayment: { date: String(date).trim(), amount } });
+      toast('RCM payment recorded', 'success');
+      loadData();
+    } catch { toast('Failed to save', 'error'); }
+  };
+
   // ========== GSTR-3B JSON Export (GSTN offline tool format, schema v1.7) ==========
   // Matches the schema accepted by https://services.gst.gov.in/services/auth/dashboard
   // Upload via: GST portal → Returns → GSTR-3B → Prepare Offline → Upload JSON
@@ -671,7 +724,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         csamt: round2(supplies31a.cess),
       },
       // v1.10.66 (#61) — exports, kept out of osup_det above.
-      osup_zero: { txval: round2(exportTotals.taxable), iamt: round2(exportTotals.igst), csamt: round2(exportTotals.cess) },
+      osup_zero: { txval: round2(zeroRated31b.taxable), iamt: round2(zeroRated31b.igst), csamt: round2(zeroRated31b.cess) },
       osup_nil_exmp: { txval: exempt31c },
       // v1.10.31 — GST-M10: RCM inward supplies populated from purchases
       // flagged as reverse-charge (was hardcoded 0 → self-remit RCM liability
@@ -725,12 +778,15 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       ],
     };
 
+    // P10-S3: Table 5 from purchases with no GST on them (was always zero).
     const inward_sup = {
       isup_details: [
-        { ty: 'GST',    inter: 0, intra: 0 },
-        { ty: 'NONGST', inter: 0, intra: 0 },
+        { ty: 'GST',    inter: round2(inward5.gst.inter), intra: round2(inward5.gst.intra) },
+        { ty: 'NONGST', inter: round2(inward5.nongst.inter), intra: round2(inward5.nongst.intra) },
       ],
     };
+    // P10-S3: 3.2, present only when there are inter-state sales to unregistered buyers.
+    const inter_sup = unreg32.length ? { inter_sup: { unreg_details: unreg32, comp_details: [], uin_details: [] } } : {};
 
     // v1.10.43 — GSTR-3B root schema fields required by the offline
     // utility. Same fix pattern as GSTR-1 above: version + hash gate
@@ -742,7 +798,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       gstin, ret_period,
       version: 'GST3.0.4',
       hash: 'hash',
-      sup_details, itc_elg, inward_sup,
+      sup_details, ...inter_sup, itc_elg, inward_sup,
     };
     const blob = new Blob([JSON.stringify(gstr3b, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1023,6 +1079,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       ...(nilExempt.inv.length > 0 ? { nil: { inv: nilExempt.inv } } : {}),
       hsn: { data: Object.values(hsnJsonMap).map((r, i) => ({ num: i + 1, ...r, qty: roundQty(r.qty, 2), txval: round2(r.txval), iamt: round2(r.iamt), camt: round2(r.camt), samt: round2(r.samt), csamt: round2(r.csamt) })) },
       doc_issue: { doc_det: docDet },
+      ...table11Json(advances), // P10-S1: at (11A) and txpd (11B), only when the period has advances
     };
 
     const blob = new Blob([JSON.stringify(gstr1, null, 2)], { type: 'application/json' });
@@ -1170,6 +1227,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       {/* ===================== GSTR-1 TAB ===================== */}
       <Gstr1Page
         activeTab={activeTab}
+        advances={advances}
         b2bRows={b2bRows}
         b2bTotals={b2bTotals}
         b2cBills={b2cBills}
@@ -1200,7 +1258,9 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         b2cBills={b2cBills}
         exportGSTR3B={exportGSTR3B}
         exportGSTR3BJSON={exportGSTR3BJSON}
-        exportTotals={exportTotals}
+        exportTotals={zeroRated31b}
+        unreg32={unreg32}
+        inward5={inward5}
         nilExempt={nilExempt}
         grandTotals={grandTotals}
         hasCarry={hasCarry}
@@ -1209,6 +1269,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         table4={table4}
         itc180={itc180}
         supplies31a={supplies31a}
+        rcm={rcm}
+        onRecordRcm={recordRcmPayment}
         exempt31c={exempt31c}
         markFiled={markFiled}
         netPayable={netPayable}
@@ -1235,6 +1297,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       <TdsPage
         activeTab={activeTab}
         filteredBills={filteredBills}
+        periodReceipts={receipts.filter(r => filterByPeriod(r.date))}
       />
 
       {/* ===================== FILING GUIDE TAB ===================== */}

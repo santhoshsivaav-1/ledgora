@@ -3,6 +3,7 @@ import {
   boolean,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -56,6 +57,11 @@ export const parties = pgTable(
     /** P2-S4 credit limit (the two P1-S2 fields Phase 2 needs). null = no limit; mode none | warn | block. */
     creditLimit: money('credit_limit'),
     creditMode: text('credit_mode').notNull().default('none'),
+    /** P9-S1 opt-out: no reminder, share or service message is ever queued for this party. */
+    doNotMessage: boolean('do_not_message').notNull().default(false),
+    /** P10-S6 §43B(h): a micro or small enterprise supplier, and the payment days agreed in writing (null = 45). */
+    msme: boolean('msme').notNull().default(false),
+    msmeAgreedDays: integer('msme_agreed_days'),
     extra: jsonb('extra').notNull().default({}),
   },
   (t) => [

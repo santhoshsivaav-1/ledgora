@@ -10,7 +10,7 @@ import { confirmAction, promptAction } from '../../../components/ui/ConfirmModal
 import PrintPreviewModal from '../../print/PrintPreviewModal';
 import DOMPurify from 'dompurify';
 import InvoicePreview from '../../print/InvoicePreview';
-import { getClientCredit, planCreditApplication } from '@ledgora/tax-engine';
+import { getClientCredit, planCreditApplication, syncInlinePayments } from '@ledgora/tax-engine';
 import HelpButton from '../../../components/ui/HelpButton';
 import ClientModal from '../../parties/ClientModal';
 import { toast } from '../../../components/ui/Toast';
@@ -23,6 +23,10 @@ import LineItemsGrid from './LineItemsGrid';
 import TermsPanel from './TermsPanel';
 import ExtraSectionsPanel from './ExtraSectionsPanel';
 import { DEFAULT_OPTIONS, ACCENT_PRESETS, PDF_STYLES, fitSpacersToOnePage } from './editorConstants';
+import { optionDefaultsFrom, termsHtmlFrom, estimatedProfit } from './settingsDefaults';
+import { useEntitlements } from '../../billing/useEntitlements';
+import { einvoiceLocked } from '../einvoice';
+import { getAllAppSettings, getAppSetting, useAppSettings } from '../../../lib/appSettings';
 import { useInvoiceTotals } from './hooks/useInvoiceTotals';
 import { useInvoiceDraft, loadDraft, clearDraft } from './hooks/useInvoiceDraft';
 import { copyFor } from '../../sales/salesFlow';
@@ -154,7 +158,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const [allBillsForCredit, setAllBillsForCredit] = useState([]);
   const [creditToApply, setCreditToApply] = useState(0);
   const [units, setUnits] = useState(getAllUnits());
-  const [taxInclusive, setTaxInclusive] = useState(draft?.taxInclusive || false);
+  const [taxInclusive, setTaxInclusive] = useState(draft?.taxInclusive ?? getAppSetting('tax.priceInclusive'));
 
   // v1.10.4 — totals is now a `useMemo` (was a `useState` fed by
   // `useEffect + setTotals` which forced a second full render on every
@@ -164,14 +168,15 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const [saving, setSaving] = useState(false);
   const [termsTemplates, setTermsTemplates] = useState([]);
   const [selectedTermsId, setSelectedTermsId] = useState(draft?.selectedTermsId || '');
-  const [customTerms, setCustomTerms] = useState(draft?.customTerms || '');
+  const [customTerms, setCustomTerms] = useState(draft?.customTerms || termsHtmlFrom(getAppSetting('txn.terms.text')));
   const [customNotes, setCustomNotes] = useState(draft?.customNotes || '');
   const [internalNote, setInternalNote] = useState(draft?.internalNote || '');
   const [extraSections, setExtraSections] = useState(draft?.extraSections || []);
   // Phase 2 state (only read when PHASE2 is on).
   const [charges, setCharges] = useState(draft?.charges || []);
   const [paymentRows, setPaymentRows] = useState(draft?.paymentRows || []);
-  const [saleType, setSaleType] = useState(draft?.saleType || 'credit');
+  // Settings > Transaction > Cash sale by default: a new bill starts as a cash sale.
+  const [saleType, setSaleType] = useState(draft?.saleType || (getAppSetting('txn.cashDefault') ? 'cash' : 'credit'));
   const [salesman, setSalesman] = useState(draft?.salesman || { salesmanId: '', salesmanName: '' });
   const [returnInfo, setReturnInfo] = useState(draft?.returnInfo || { returnReason: 'sales-return', restock: true, refundMode: 'adjust' });
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(draft?.expectedDeliveryDate || '');
@@ -190,6 +195,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const clientNameRef = useRef(null);
   const clientSuggestionsRef = useRef(null);
   const [products, setProducts] = useState([]);
+  const appSettings = useAppSettings();
+  const entRole = useEntitlements().role;
   const [productSearch, setProductSearch] = useState({ itemId: null, query: '' });
   const [invoiceOptions, setInvoiceOptions] = useState(() => {
     try {
@@ -201,7 +208,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
       // opening Invoice B doesn't pick up Invoice A's snapshot.
       delete persisted.paymentAccountSnapshot;
       // Persisted options are the user's defaults, draft can override for in-progress work
-      return { ...DEFAULT_OPTIONS, ...persisted, ...(draft?.invoiceOptions || {}) };
+      return { ...DEFAULT_OPTIONS, ...persisted, ...optionDefaultsFrom(getAllAppSettings()), ...(draft?.invoiceOptions || {}) };
     } catch { return draft?.invoiceOptions || { ...DEFAULT_OPTIONS }; }
   });
   const [showOptions, setShowOptions] = useState(false);
@@ -252,8 +259,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   // v1.10.77 (#86) - a cancelled document, or one already converted into an
   // invoice, opens read-only: nothing is saved (no auto-save, Save explains
   // why); Download and Print still work. Duplicate it to make a new one.
+  // P10-S7: an invoice with a live e-invoice IRN is read-only too (the IRP holds the registered copy).
   const [readOnlyDoc] = useState(() => !!editingBill && !editingBill._isDuplicate && !editingBill._convertToType
-    && (editingBill.status === 'cancelled' || !!editingBill.convertedTo));
+    && (editingBill.status === 'cancelled' || !!editingBill.convertedTo || einvoiceLocked(editingBill)));
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const autoSaveTimer = useRef(null);
   // v1.10.22 — reported: "if user click back without even changing anything
@@ -396,7 +404,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
         // v1.10.77 - a restored draft keeps its own choices (design, columns
         // ...); the saved defaults only fill what it does not set. They used
         // to replace the draft's options a moment after a page refresh.
-        const merged = { ...DEFAULT_OPTIONS, ...serverOpts, ...draftOptions.current };
+        const merged = { ...DEFAULT_OPTIONS, ...serverOpts, ...optionDefaultsFrom(getAllAppSettings()), ...draftOptions.current };
         setInvoiceOptions(prev => {
           // Only update if different to avoid unnecessary re-renders
           const changed = Object.keys(merged).some(k => merged[k] !== prev[k]);
@@ -870,6 +878,16 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
 
   const { totals } = useInvoiceTotals({ allBillsForCredit, client, details, editingBill, items, profile, showGST, taxInclusive, invoiceOptions, charges: PHASE2 ? charges : undefined });
   totalRef.current = totals.total;
+  // Settings > Transaction > Auto-fill received amount: until the person edits the Payment block, the received amount
+  // follows the bill total (a cash sale always does, as before).
+  const paymentsTouched = useRef(!!draft?.paymentRows?.length);
+  useEffect(() => {
+    if (!PHASE2 || editingBill || paymentsTouched.current || !takesPayment(invoiceType) || invoiceType === 'sales-order') return;
+    const auto = getAppSetting('txn.autofillReceived');
+    if (saleType !== 'cash' && !auto) return;
+    if (!(totals.total > 0)) return;
+    setPaymentRows((rows) => syncInlinePayments(rows.length || saleType === 'cash' ? rows : [{ mode: 'cash', amount: 0, reference: '', accountId: null, chequeDate: null }], { saleType: 'cash', total: totals.total, autofill: true }));
+  }, [totals.total, saleType, invoiceType, editingBill]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // v1.10.24 — Compute available client credit from prior overpayments.
   // Excludes the bill we're editing (that would double-count our own
@@ -1161,7 +1179,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     if (readOnlyDoc) {
       toast(editingBill.convertedTo
         ? `Already converted to ${editingBill.convertedTo}, so it is not changed. Use Duplicate to make a new one.`
-        : 'A cancelled invoice is not changed. Undo the cancel on the Dashboard, or use Duplicate.', 'warning');
+        : einvoiceLocked(editingBill)
+          ? 'This invoice has an e-invoice IRN, so it is not changed. Cancel the IRN within 24 hours, or issue a credit note.'
+          : 'A cancelled invoice is not changed. Undo the cancel on the Dashboard, or use Duplicate.', 'warning');
       return null;
     }
     // Lazy counter reservation: if this is a NEW bill (no editingBill) and
@@ -2881,6 +2901,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
   const filledLines = items.filter((item) => (item.name || '').trim()).length;
   const isExisting = !!editingBill && !editingBill._isDuplicate;
   // The rail's breakdown: only the lines that have something in them, so a plain bill shows two rows, not ten.
+  const profitNow = appSettings['txn.showProfit'] && entRole === 'owner' ? estimatedProfit(items, products) : null;
   const breakdown = [
     ['Subtotal', printedSubtotal(totals), true],
     ['Discount', -discountTotal, discountTotal > 0],
@@ -2889,6 +2910,8 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
     ['Cess', totals.cess, totals.cess > 0],
     ['TCS', totals.tcsAmount, totals.tcsAmount > 0],
     ['Round-off', totals.roundOff, !!totals.roundOff],
+    // Settings > Transaction > Show profit while billing (owner only)
+    ['Estimated profit', profitNow, profitNow !== null],
     ['Less TDS', -(totals.tdsAmount || 0), totals.tdsAmount > 0],
   ].filter(([, , show]) => show);
 
@@ -2958,7 +2981,9 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
         <div className="notice notice-info canvas-notice" role="status">
           {editingBill.convertedTo
             ? `Converted to ${editingBill.convertedTo}. This copy is read-only; you can still download or print it.`
-            : 'This invoice is cancelled and read-only; you can still download or print it. Undo the cancel on the Dashboard to change it.'}
+            : einvoiceLocked(editingBill)
+              ? 'This invoice is registered on the IRP (e-invoice IRN), so it is read-only; you can still download or print it.'
+              : 'This invoice is cancelled and read-only; you can still download or print it. Undo the cancel on the Dashboard to change it.'}
         </div>
       )}
 
@@ -3100,7 +3125,7 @@ export default function InvoiceEditorPage({ onBack, profile: profileProp, editin
               {PHASE2 && takesPayment(invoiceType) && (
                 <PaymentBlock
                   rows={paymentRows}
-                  onRowsChange={setPaymentRows}
+                  onRowsChange={(r) => { paymentsTouched.current = true; setPaymentRows(r); }}
                   saleType={saleType}
                   onSaleTypeChange={setSaleType}
                   total={totals.total}

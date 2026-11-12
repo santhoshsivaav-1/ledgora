@@ -231,3 +231,154 @@ describe('GSTR-3B Table 4 (P10-S4): the 180-day rule', () => {
     expect(pick(t4('2026-07', [b]).rev.oth)).toEqual({ igst: 1800, cgst: 0, sgst: 0 });
   });
 });
+
+// ---- P10-S1: advances for services (D-14) ----------------------------------------------------------------------------
+import { table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
+import { advanceReceiptsOf, periodBounds } from '../src/features/gst-returns/gstReturnTables';
+
+describe('P10-S1 GSTR-1 Table 11 and GSTR-3B 3.1(a) with advances', () => {
+  const profile = { gstin: '33ABCDE1234F1Z5', state: 'Tamil Nadu' };
+  const receipt = (o) => ({ id: 'R1', receiptNo: 'RCP/1', date: '2026-11-10', amount: 11800, ...o });
+  const invoices31a = { taxable: 50000, igst: 0, cgst: 4500, sgst: 4500, cess: 0, total: 59000 };
+
+  it('reads only receipts marked as an advance for services', () => {
+    const list = advanceReceiptsOf([
+      receipt({ advance: { services: true, rate: 18, pos: '33' } }),
+      receipt({ id: 'R2', advance: { services: false, rate: 18, pos: '33' } }), // goods: not taxed
+      receipt({ id: 'R3' }), // an ordinary receipt
+    ]);
+    expect(list).toEqual([{ id: 'R1', date: '2026-11-10', amount: 11800, rate: 18, pos: '33', adjustments: [] }]);
+  });
+
+  it('before: a month without advances leaves 3.1(a) and the GSTR-1 JSON exactly as they were', () => {
+    const t = table11({ receipts: [], ...periodBounds('month', { year: 2026, month: 10 }), bizState: '33' });
+    expect(withAdvanceTax(invoices31a, t)).toBe(invoices31a);
+    expect(table11Json(t)).toEqual({});
+  });
+
+  it('after: an ₹11,800 advance at 18% adds ₹10,000 taxable and ₹900 + ₹900 to 3.1(a), and appears in 11A', () => {
+    const receipts = advanceReceiptsOf([receipt({ advance: { services: true, rate: 18, pos: '33' } })]);
+    const t = table11({ receipts, ...periodBounds('month', { year: 2026, month: 10 }), bizState: '33' });
+    expect(withAdvanceTax(invoices31a, t)).toEqual({ taxable: 60000, igst: 0, cgst: 5400, sgst: 5400, cess: 0, total: 59000 });
+    expect(table11Json(t).at[0]).toEqual({ pos: '33', sply_ty: 'INTRA', itms: [{ rt: 18, ad_amt: 10000, iamt: 0, camt: 900, samt: 900, csamt: 0 }] });
+    expect(profile.gstin.slice(0, 2)).toBe('33');
+  });
+
+  it('after: when the advance is adjusted next month, 3.1(a) of that month is reduced by the same tax (11B)', () => {
+    const receipts = advanceReceiptsOf([receipt({
+      advance: { services: true, rate: 18, pos: '33', adjustments: [{ date: '2026-12-04', amount: 11800, kind: 'invoice', invoiceNumber: 'INV/9' }] },
+    })]);
+    const dec = table11({ receipts, ...periodBounds('month', { year: 2026, month: 11 }), bizState: '33' });
+    expect(withAdvanceTax(invoices31a, dec)).toMatchObject({ taxable: 40000, cgst: 3600, sgst: 3600 });
+    expect(table11Json(dec).txpd[0].itms[0]).toEqual({ rt: 18, ad_amt: 10000, iamt: 0, camt: 900, samt: 900, csamt: 0 });
+  });
+
+  it('period bounds for a month, a quarter and a financial year', () => {
+    expect(periodBounds('month', { year: 2026, month: 1 })).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+    expect(periodBounds('quarter', { year: 2026, months: [9, 10, 11] })).toEqual({ from: '2026-10-01', to: '2026-12-31' });
+    expect(periodBounds('fy', { from: '2026-04-01', to: '2027-03-31' })).toEqual({ from: '2026-04-01', to: '2027-03-31' });
+  });
+});
+
+// ---- P10-S2: reverse charge end to end (D-13) ------------------------------------------------------------------------
+import { rcmItcForPeriod } from '@ledgora/tax-engine';
+import { purchaseItcHeads, rcmBillsOf } from '../src/features/gst-returns/gstReturnTables';
+import { purchaseDue } from '../src/features/purchases/purchaseExtras';
+
+describe('P10-S2 GSTR-3B with reverse charge: credit in the month the RCM tax is paid', () => {
+  const NOV = { from: '2026-11-01', to: '2026-11-30' };
+  const DEC = { from: '2026-12-01', to: '2026-12-31' };
+  const pl2 = (amount, rate) => ({ quantity: 1, rate: amount, taxPercent: rate });
+  const gta = (o = {}) => ({ id: 'P17', date: '2026-11-08', reverseCharge: true, interstate: false, items: [pl2(10000, 5)], totalTax: 500, totalAmount: 10500, ...o });
+  const heads = (h) => ({ igst: h.igst, cgst: h.cgst, sgst: h.sgst });
+
+  it('the RCM tax of a bill is its own tax, split like any purchase', () => {
+    expect(heads(purchaseItcHeads(gta()).all)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+  });
+
+  it('before payment: liable in 3.1(d), nothing in 4(A)(3), the bill is on the unpaid list', () => {
+    const rcm = rcmItcForPeriod(rcmBillsOf([gta()]), NOV);
+    expect(heads(rcm.liability)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+    const t = itcTable4({ purchases: [gta()], rcm });
+    expect(pick(t.avl.isrc)).toEqual({ igst: 0, cgst: 0, sgst: 0 });
+    expect(pick(t.net)).toEqual({ igst: 0, cgst: 0, sgst: 0 });
+    expect(rcm.unpaid.map((b) => b.id)).toEqual(['P17']);
+  });
+
+  it('after payment in December: November keeps the liability only; December claims 4(A)(3)', () => {
+    const paid = gta({ rcmPayment: { date: '2026-12-05', amount: 500, mode: 'Bank Transfer' } });
+    const nov = itcTable4({ purchases: [paid], rcm: rcmItcForPeriod(rcmBillsOf([paid]), NOV) });
+    expect(pick(nov.avl.isrc)).toEqual({ igst: 0, cgst: 0, sgst: 0 });
+    const dec = itcTable4({ purchases: [], rcm: rcmItcForPeriod(rcmBillsOf([paid]), DEC) });
+    expect(pick(dec.avl.isrc)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+    expect(pick(dec.net)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+  });
+
+  it('no double count: an RCM bill never adds to 4(A)(5) and an ordinary bill never to 4(A)(3)', () => {
+    const ordinary = { id: 'P18', date: '2026-11-09', items: [pl2(1000, 18)], totalTax: 180 };
+    const paid = gta({ rcmPayment: { date: '2026-11-20', amount: 500 } });
+    const t = itcTable4({ purchases: [paid, ordinary], rcm: rcmItcForPeriod(rcmBillsOf([paid, ordinary]), NOV) });
+    expect(pick(t.avl.isrc)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+    expect(pick(t.avl.oth)).toEqual({ igst: 0, cgst: 90, sgst: 90 });
+  });
+
+  it('D-13: the supplier of an RCM bill is owed the bill without the tax (before: ₹10,500, after: ₹10,000)', () => {
+    expect(purchaseDue(gta())).toBe(10000);
+    expect(purchaseDue({ id: 'X', totalAmount: 11800, totalTax: 1800 })).toBe(11800);
+  });
+
+  it('without the rcm argument Table 4 reads exactly as before (in-period RCM bills in 4(A)(3))', () => {
+    expect(pick(itcTable4({ purchases: [gta()] }).avl.isrc)).toEqual({ igst: 0, cgst: 250, sgst: 250 });
+  });
+});
+
+// ---- P10-S3: GSTR-3B 3.1(b) SEZ, 3.2 and 5 ---------------------------------------------------------------------------
+import { exemptInward, interStateUnregistered, moveSezToZeroRated } from '@ledgora/tax-engine';
+import { sezSupplies, unregisteredInterRows } from '../src/features/gst-returns/gstReturnTables';
+
+describe('P10-S3 GSTR-3B cells: before → after', () => {
+  const inv = (o) => ({
+    invoiceType: 'tax-invoice', invoiceDate: '2026-11-05',
+    data: { client: { gstin: '', state: 'Karnataka' }, details: { placeOfSupply: 'Karnataka' }, totals: { taxableAmount: 10000, igst: 1800, cgst: 0, sgst: 0, cess: 0, total: 11800, isInterstate: true } },
+    ...o,
+  });
+  const sez = inv({ data: { client: { gstin: '29AAAAA0000A1Z5', isSEZ: true }, details: {}, totals: { taxableAmount: 50000, igst: 9000, cess: 0, total: 59000, isInterstate: true } } });
+  const local = inv({ data: { client: { gstin: '', state: 'Tamil Nadu' }, details: { placeOfSupply: 'Tamil Nadu' }, totals: { taxableAmount: 4000, cgst: 360, sgst: 360, igst: 0, cess: 0, total: 4720, isInterstate: false } } });
+
+  it('3.1(a)/(b): before, an SEZ invoice sat in 3.1(a); after, it is in 3.1(b) with the same IGST payable', () => {
+    const before31a = { taxable: 50000, igst: 9000, cgst: 0, sgst: 0, cess: 0, total: 59000 };
+    const r = moveSezToZeroRated(before31a, { taxable: 0, igst: 0, cess: 0 }, sezSupplies([sez, local]));
+    expect(r.a).toMatchObject({ taxable: 0, igst: 0 });
+    expect(r.b).toEqual({ taxable: 50000, igst: 9000, cess: 0 });
+    expect(r.a.igst + r.b.igst).toBe(before31a.igst); // output tax unchanged
+  });
+
+  it('3.2: before, not in the JSON at all; after, unregistered inter-state sales by place of supply', () => {
+    const cn = inv({ invoiceType: 'credit-note', data: { ...inv().data, totals: { taxableAmount: 1000, igst: 180, total: 1180, isInterstate: true } } });
+    const rows = unregisteredInterRows([inv(), inv(), local, sez, cn]);
+    expect(interStateUnregistered(rows)).toEqual([{ pos: '29', txval: 19000, iamt: 3420 }]);
+  });
+
+  it('5: before, zero-filled; after, 0% purchases by inter / intra', () => {
+    expect(exemptInward([{ interstate: false, items: [{ quantity: 1, rate: 2500, taxPercent: 0 }] }]).gst).toEqual({ inter: 0, intra: 2500 });
+  });
+});
+
+// ---- P10-S5: TDS receivable (customers deducted) for the 26AS comparison -----------------------------------------------
+import { tdsBookByCustomer } from '../src/features/gst-returns/gstReturnTables';
+
+describe('P10-S5 TDS receivable by customer', () => {
+  const bill = (no, client, tds) => ({ invoiceNumber: no, clientName: client, data: { client: { name: client }, totals: { tdsAmount: tds } } });
+  it('adds TDS on invoices and TDS kept on receipts, without counting one deduction twice', () => {
+    const bills = [bill('INV/1', 'Acme', 1000), bill('INV/2', 'Bala', 0)];
+    const receipts = [
+      { clientName: 'Acme', tds: 1000, againstInvoice: 'INV/1' }, // the same deduction as on INV/1
+      { clientName: 'Bala', tds: 200, againstInvoice: 'INV/2' },
+      { clientName: 'Bala', tds: 0 },
+    ];
+    expect(tdsBookByCustomer(bills, receipts)).toEqual([
+      { deductor: 'Acme', tds: 1000 },
+      { deductor: 'Bala', tds: 200 },
+    ]);
+  });
+});

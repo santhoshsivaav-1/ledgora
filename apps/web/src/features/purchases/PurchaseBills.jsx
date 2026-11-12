@@ -1,3 +1,4 @@
+import { getAppSetting } from '../../lib/appSettings';
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { ShoppingCart, Plus, Edit3, Trash2, Search, X, Save, Download, Wand2, FileText, Eye } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
@@ -1060,6 +1061,7 @@ export default function PurchaseBills() {
                   </span>
                 </label>
               </div>
+              {(getAppSetting('gst.rcm') || form.reverseCharge) && (
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!form.reverseCharge}
@@ -1068,11 +1070,12 @@ export default function PurchaseBills() {
                   <span>
                     <strong>Reverse charge (RCM)</strong> — you pay this GST to the government, not the supplier
                     <span style={{ color: '#94a3b8', fontSize: '0.72rem', display: 'block' }}>
-                      Reported in GSTR-3B 3.1(d); the credit is claimed in 4(A)(3) once the tax is paid.
+                      Reported in GSTR-3B 3.1(d); the supplier is owed the bill without this tax. Record the tax payment on the GSTR-3B page and the credit is claimed in 4(A)(3) of that month.
                     </span>
                   </span>
                 </label>
               </div>
+              )}
             </div>
 
             {/* Items */}

@@ -43,6 +43,7 @@ import { audit } from '../audit.ts';
 import { AppError, notFound } from '../errors.ts';
 import { listPage, stamps, type Registrar } from '../http.ts';
 import { loadBusiness } from './businesses.ts';
+import { settingValue } from './settingsStore.ts';
 import type { OrgContext } from '../middleware/context.ts';
 import {
   assertInScope,
@@ -217,6 +218,12 @@ async function allocateNumber(
 
 // ---- the shared build step ---------------------------------------------------------------------------------------------
 
+const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
 type BuildInput = InvoiceInput & { sourceOrderId?: string };
 
 async function build(tx: Tx, input: BuildInput) {
@@ -242,6 +249,11 @@ async function build(tx: Tx, input: BuildInput) {
   const tracked = new Set(restockOff ? [] : known.filter((k) => k.trackStock).map((k) => k.id));
 
   const cfg = INVOICE_TYPES[input.invoiceType];
+  // P8-S3 "Default payment terms": a sale saved without a due date is due the configured number of days after its date.
+  const termDays = SALES_INVOICE_TYPES.includes(input.invoiceType)
+    ? await settingValue(tx, input.businessId, 'txn.terms.days')
+    : 0;
+  const dueDate = input.dueDate ?? (termDays > 0 ? addDays(input.invoiceDate, termDays) : null);
   const t = computeInvoiceTotals({
     items: input.items,
     profile: { country: biz.country, state: biz.state, gstin: biz.gstin ?? '' },
@@ -288,7 +300,7 @@ async function build(tx: Tx, input: BuildInput) {
       partyId: input.partyId ?? null,
       invoiceType: input.invoiceType,
       invoiceDate: input.invoiceDate,
-      dueDate: input.dueDate ?? null,
+      dueDate,
       currency: input.options.currency ?? 'INR',
       placeOfSupply: input.placeOfSupply,
       subtotal: totals.subtotal,
@@ -324,6 +336,14 @@ async function build(tx: Tx, input: BuildInput) {
   };
 }
 
+async function challanStockOn(tx: Tx, invoiceId: string) {
+  const [inv] = await tx
+    .select({ businessId: invoices.businessId })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId));
+  return inv ? settingValue(tx, inv.businessId, 'txn.challanStock') : true;
+}
+
 /** Brings the stock movements of an invoice in line with what its type and status say it should have done. */
 async function syncStock(
   tx: Tx,
@@ -335,9 +355,11 @@ async function syncStock(
   tracked: Set<string>,
   reason: string,
 ) {
+  // P8-S3 "Auto-deduct stock on challan": off, a delivery challan moves no stock (the invoice made from it will).
+  const challanOff = invoiceType === 'delivery-challan' && !(await challanStockOn(tx, invoiceId));
   const want = stockEffect(
     lines
-      .filter((l) => l.itemId && tracked.has(l.itemId))
+      .filter((l) => l.itemId && !challanOff && tracked.has(l.itemId))
       .map((l) => ({ productId: l.itemId, quantity: l.quantity })),
     invoiceType,
     status,
@@ -641,6 +663,12 @@ export function invoicesModule({ route }: Registrar) {
         throw new AppError('unprocessable', 'A cancelled invoice can not be edited');
       if (raw.businessId !== before.businessId)
         throw new AppError('unprocessable', 'An invoice can not move to another business');
+      // P8-S3 "Allow editing after payment": off, an invoice with money recorded against it is read-only.
+      if (before.paidAmount > 0 && !(await settingValue(tx, before.businessId, 'txn.editAfterPay')))
+        throw new AppError(
+          'unprocessable',
+          `Invoice ${before.number} has payments recorded, and Settings > Transaction does not allow editing after payment`,
+        );
       if (raw.invoiceType !== before.invoiceType)
         throw new AppError(
           'unprocessable',

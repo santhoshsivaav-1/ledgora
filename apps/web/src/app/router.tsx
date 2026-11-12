@@ -1,3 +1,4 @@
+import { SETTINGS_TABS } from '@ledgora/contracts';
 import { isVyaparUi } from './uiMode';
 
 // The app's URLs (change 3.1). Each screen has a path, so refresh, back/forward and copied links all land where
@@ -47,6 +48,8 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'recurring', path: '/recurring', title: 'Recurring' },
   { id: 'receipts', path: '/receipts', title: 'Receipts', vyaparPath: '/sales/payment-in' },
   { id: 'salesman', path: '/grow/salesman', title: 'Salesman' },
+  // Vyapar parity Phase 9: payment and service reminders, the Messages log and templates.
+  { id: 'reminders', path: '/grow/reminders', title: 'Reminders' },
   { id: 'reports', path: '/reports', title: 'Reports' },
   // Vyapar parity Phase 5: Cash & Bank is one screen with tabs (/cash-bank/:tab), like the books.
   { id: 'cashbank', path: '/cash-bank', title: 'Cash & Bank' },
@@ -55,6 +58,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },
   { id: 'settings', path: '/settings', title: 'Settings' },
+  ...SETTINGS_TABS.map(({ id, label }) => ({ id: `settings-${id}`, path: `/settings/${id}`, title: `${label} settings` })),
   { id: 'settings-business', path: '/settings/business', title: 'Business settings' },
   { id: 'settings-documents', path: '/settings/documents', title: 'Invoice and print settings' },
   { id: 'settings-features', path: '/settings/features', title: 'Features and stock' },

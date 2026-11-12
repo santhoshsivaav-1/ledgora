@@ -6,6 +6,7 @@ import { withTenant, type Database, type Tx } from '@ledgora/db';
 import type { AppEnv } from './env.ts';
 import { AppError, validationError } from './errors.ts';
 import type { Storage } from './storage.ts';
+import type { Providers } from './messaging/providers.ts';
 import type { Auth } from './auth/auth.ts';
 import {
   requireFeature,
@@ -23,6 +24,8 @@ export interface Deps {
   env: AppEnv;
   storage: Storage;
   auth: Auth;
+  /** Message providers by channel (P9). Tests pass fakes; omitted = makeProviders(env). */
+  providers?: Providers;
 }
 
 export interface RouteSpec<

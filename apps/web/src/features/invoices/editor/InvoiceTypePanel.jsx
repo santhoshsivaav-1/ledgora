@@ -1,3 +1,4 @@
+import { getAppSetting } from '../../../lib/appSettings';
 import { Settings } from 'lucide-react';
 import { getRegionMode } from '../../../lib/data';
 import { INVOICE_TYPES, getCountriesForRegion, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, getActiveAccounts, getAccountById, PAPER_SIZES, getPaperSize, invoiceOptionOn, DEFAULT_DECLARATION, localToday, toLocalIsoDate, parseLocalDate } from '../../../utils';
@@ -387,9 +388,10 @@ export default function InvoiceTypePanel({
                     ['showHsnSummary', 'HSN/SAC tax summary table'],
                     ['showTaxInWords', 'Tax amount in words'],
                   ]},
-                  { group: 'Compliance flags (India)', items: [
+                  // Settings > GST > Reverse charge hides this flag; a bill that already has it keeps it visible.
+                  ...(getAppSetting('gst.rcm') || invoiceOptions.reverseCharge ? [{ group: 'Compliance flags (India)', items: [
                     ['reverseCharge', 'Reverse Charge applies (Section 9(3)/9(4)) — recipient pays GST'],
-                  ]},
+                  ]}] : []),
                   // Paper-size selector rendered outside the checkbox-grid pattern
                   // — see the block below the .map(). Adding a group marker here
                   // keeps the visual flow but the actual UI is a dropdown.

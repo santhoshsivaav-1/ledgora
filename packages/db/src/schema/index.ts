@@ -14,3 +14,4 @@ export * from './cashbank.ts';
 export * from './reports.ts';
 export * from './pos.ts';
 export * from './utilities.ts';
+export * from './messaging.ts';

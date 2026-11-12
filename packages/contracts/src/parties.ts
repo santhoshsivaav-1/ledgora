@@ -22,6 +22,11 @@ export const partyInput = z.object({
   /** P2-S4 credit limit. null = no limit; `warn` asks before an invoice goes over it, `block` refuses it. */
   creditLimit: z.number().min(0).nullish(),
   creditMode: z.enum(['none', 'warn', 'block']).default('none'),
+  /** P9-S1 opt-out: no reminder, share or service message is ever queued for this party. */
+  doNotMessage: z.boolean().default(false),
+  /** P10-S6 §43B(h): a micro or small enterprise supplier; dues past the agreed days (at most 45) show in Cash Watch. */
+  msme: z.boolean().default(false),
+  msmeAgreedDays: z.number().int().min(1).max(45).nullish(),
   extra: z.record(z.string(), z.unknown()).default({}),
 });
 export type PartyInput = z.infer<typeof partyInput>;

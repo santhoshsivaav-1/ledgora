@@ -87,3 +87,25 @@ export const paymentAccounts = pgTable(
     index('payment_accounts_business_idx').on(t.orgId, t.businessId),
   ],
 );
+
+/**
+ * Vyapar parity P8-S1: one row per business and setting key, for settings that have no older home in
+ * `business_settings.preferences`. The registry in packages/contracts/src/settings.ts says which keys exist and what
+ * each value must look like; a row is only written when a value differs from the default.
+ */
+export const settingValues = pgTable(
+  'setting_values',
+  {
+    ...base(),
+    businessId: uuid('business_id').notNull(),
+    key: text('key').notNull(),
+    value: jsonb('value').notNull(),
+  },
+  (t) => [
+    unique('setting_values_business_key').on(t.orgId, t.businessId, t.key),
+    foreignKey({
+      columns: [t.orgId, t.businessId],
+      foreignColumns: [businesses.orgId, businesses.id],
+    }),
+  ],
+);

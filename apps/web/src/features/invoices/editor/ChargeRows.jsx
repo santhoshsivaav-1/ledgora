@@ -1,5 +1,6 @@
 import { Plus, X } from 'lucide-react';
 import { DEFAULT_CHARGE_PRESETS } from '@ledgora/tax-engine';
+import { useAppSetting } from '../../../lib/appSettings';
 import { Field, MoneyInput, Select, TextInput } from '../../../components/ui/Field';
 import { formatCurrency, GST_PORTAL_RATES } from '../../../utils';
 
@@ -8,7 +9,10 @@ import { formatCurrency, GST_PORTAL_RATES } from '../../../utils';
 
 const rateOptions = (GST_PORTAL_RATES || [0, 0.25, 3, 5, 12, 18, 28]).map((r) => ({ value: String(r), label: `${r}%` }));
 
-export default function ChargeRows({ charges, onChange, presets = DEFAULT_CHARGE_PRESETS, totals, currency, showGST }) {
+export default function ChargeRows({ charges, onChange, presets: given, totals, currency, showGST }) {
+  // Settings > Transaction > Additional charges is the list of presets offered here.
+  const configured = useAppSetting('txn.charges');
+  const presets = given || (Array.isArray(configured) ? configured.map((c) => ({ name: c.name, gstRate: c.gst, hsn: c.sac })) : DEFAULT_CHARGE_PRESETS);
   const set = (i, patch) => onChange(charges.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   const add = () => {
     const unused = presets.find((p) => !charges.some((c) => c.name === p.name)) || presets[0] || { name: 'Charge', gstRate: 18, hsn: '' };

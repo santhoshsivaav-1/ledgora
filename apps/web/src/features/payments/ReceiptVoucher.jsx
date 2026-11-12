@@ -5,7 +5,8 @@ import { formatCurrency, numberToWords, belongsToProfile, isUnassignedToBusiness
 import UnassignedBanner from '../../app/UnassignedBanner';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction, promptAction } from '../../components/ui/ConfirmModal';
-import { cashLimitCheck } from '@ledgora/tax-engine';
+import { advanceBalance, advanceTax, cashLimitCheck } from '@ledgora/tax-engine';
+import { INDIAN_STATES, getStateCode } from '../../utils';
 import { FEATURES } from '../../config/featureFlags';
 import { dayCashFromBills } from '../invoices/editor/saleExtras';
 import HelpButton from '../../components/ui/HelpButton';
@@ -24,6 +25,10 @@ const emptyForm = {
   referenceNo: '',
   againstInvoice: '',
   note: '',
+  // P10-S1 (D-14): a receipt not against an invoice can be an advance for services; GST is due on it now.
+  advServices: false,
+  advRate: '18',
+  advPos: '',
 };
 // Vyapar parity P2-S5 (flag sale.inlinePayments): discount allowed, TDS the payer kept, and the cheque's date. The
 // invoice is settled by money + discount + TDS.
@@ -44,6 +49,7 @@ export default function ReceiptVoucher() {
   // v1.10.74 - the number previewed when the form opened, so save can tell
   // whether the user typed their own.
   const previewedNoRef = useRef('');
+  const bizStateCode = getStateCode(profile?.gstin || '') || getStateCode(profile?.state || '');
 
   const loadData = async () => {
     try {
@@ -112,6 +118,9 @@ export default function ReceiptVoucher() {
       referenceNo: rcp.referenceNo || '',
       againstInvoice: rcp.againstInvoice || '',
       note: rcp.note || '',
+      advServices: rcp.advance?.services === true,
+      advRate: String(rcp.advance?.rate ?? 18),
+      advPos: rcp.advance?.pos || '',
       ...(PHASE2 ? { discount: rcp.discount ? String(rcp.discount) : '', tds: rcp.tds ? String(rcp.tds) : '', chequeDate: rcp.chequeDate || '' } : {}),
     });
     setEditingId(rcp.id);
@@ -138,6 +147,11 @@ export default function ReceiptVoucher() {
     if (!form.clientName.trim()) { toast('Client name required', 'warning'); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast('Enter valid amount', 'warning'); return; }
     if (PHASE2 && form.paymentMode === 'Cheque' && !form.chequeDate) { toast('Enter the cheque date', 'warning'); return; }
+    if (form.advServices && !form.againstInvoice?.trim()) {
+      const adjusted = (receipts.find(r => r.id === editingId)?.advance?.adjustments || []).reduce((t, a) => t + num(a.amount), 0);
+      if (num(form.amount) < adjusted) { toast(`This advance already has ${formatCurrency(adjusted)} adjusted or refunded`, 'warning'); return; }
+      if (!(form.advPos || bizStateCode)) { toast('Pick the place of supply for the advance', 'warning'); return; }
+    }
     let cashAck = '';
     if (PHASE2 && form.paymentMode === 'Cash') {
       const sameDay = receipts.filter(r => r.id !== editingId && r.paymentMode === 'Cash' && r.date === form.date
@@ -176,9 +190,12 @@ export default function ReceiptVoucher() {
       // to" banner, never as a side effect of fixing a typo while some other
       // business happens to be selected.
       const existing = editingId ? receipts.find(r => r.id === editingId) : null;
-      const { discount, tds, chequeDate, ...base } = form;
+      const { discount, tds, chequeDate, advServices, advRate, advPos, ...base } = form;
+      const { advServices: _s, advRate: _r, advPos: _p, ...formNoAdv } = form;
+      const isAdvance = advServices && !form.againstInvoice?.trim();
       const receipt = {
-        ...(PHASE2 ? form : base),
+        ...(PHASE2 ? formNoAdv : base),
+        ...(isAdvance ? { advance: { services: true, rate: num(advRate), pos: advPos || bizStateCode, adjustments: existing?.advance?.adjustments || [] } } : {}),
         ...(PHASE2 ? { discount: num(discount), tds: num(tds), chequeDate: form.paymentMode === 'Cheque' ? chequeDate : '' } : {}),
         ...(cashAck ? { cashAcknowledgement: String(cashAck).trim() } : {}),
         receiptNo,
@@ -269,7 +286,46 @@ export default function ReceiptVoucher() {
     }
   };
 
+  // P10-S1: set an advance for services off against a tax invoice (GSTR-1 11B in the month it happens), or record a
+  // refund of it. The invoice gets the amount as a payment, like a receipt against it.
+  const adjustAdvance = async (rcp, kind) => {
+    const open = advanceBalance({ ...rcp.advance, amount: rcp.amount });
+    let bill = null;
+    if (kind === 'invoice') {
+      const ref = await promptAction({ title: 'Adjust advance', message: `Invoice number to set ${formatCurrency(open)} of ${rcp.receiptNo} against`, placeholder: 'INV/2026-27/0001', confirmLabel: 'Next' });
+      if (!ref || !String(ref).trim()) return;
+      bill = bills.find(b => b.invoiceNumber === String(ref).trim() && b.clientName?.trim().toLowerCase() === rcp.clientName?.trim().toLowerCase());
+      if (!bill) { toast(`No invoice ${String(ref).trim()} of ${rcp.clientName} was found`, 'warning'); return; }
+    }
+    const due = bill ? Math.max(0, Math.round((amountDue(bill) - (bill.paidAmount || 0)) * 100) / 100) : open;
+    const suggested = Math.min(open, due);
+    const typed = await promptAction({ title: kind === 'invoice' ? 'Amount to adjust' : 'Amount refunded', message: `Up to ${formatCurrency(suggested)}`, defaultValue: String(suggested), confirmLabel: 'Save' });
+    const amount = Math.round(num(typed) * 100) / 100;
+    if (!(amount > 0)) return;
+    if (amount > suggested + 0.005) { toast(`At most ${formatCurrency(suggested)}`, 'warning'); return; }
+    const date = bill && bill.invoiceDate > rcp.date ? bill.invoiceDate : (kind === 'refund' ? localToday() : rcp.date);
+    const adjustments = [...(rcp.advance.adjustments || []), { date, amount, kind, ...(bill ? { invoiceNumber: bill.invoiceNumber } : {}) }];
+    try {
+      await saveReceipt({ ...rcp, advance: { ...rcp.advance, adjustments } });
+      if (bill) {
+        const entry = {
+          id: `${rcp.id}:adj${adjustments.length}`, amount, date, mode: 'other',
+          note: `Advance ${rcp.receiptNo} adjusted`, recordedAt: new Date().toISOString(), receiptNo: `${rcp.receiptNo}/ADJ${adjustments.length}`,
+        };
+        const nextPayments = [...(bill.payments || []), entry];
+        const newTotal = nextPayments.reduce((t, x) => t + (Number(x.amount) || 0), 0);
+        await saveBill({ ...bill, paidAmount: newTotal, status: isCancelledBill(bill) ? 'cancelled' : paymentStatusFor(bill, newTotal), payments: nextPayments }, { overwrite: true });
+      }
+      toast(kind === 'invoice' ? `Adjusted against ${bill.invoiceNumber}` : 'Refund recorded', 'success');
+      loadData();
+    } catch { toast('Failed to save', 'error'); }
+  };
+
   const handleDelete = async (id) => {
+    if (receipts.find(r => r.id === id)?.advance?.adjustments?.length) {
+      toast('This advance is already adjusted or refunded in part; it can not be deleted', 'warning');
+      return;
+    }
     if (await confirmAction({
       title: 'Delete this receipt?',
       message: 'The receipt voucher is removed from your records. The underlying invoice payment (if this was linked to one) stays intact.',
@@ -458,6 +514,38 @@ export default function ReceiptVoucher() {
                 <label className="form-label">Against Invoice</label>
                 <input type="text" className="form-input" value={form.againstInvoice} onChange={e => updateField('againstInvoice', e.target.value)} placeholder="e.g. INV/2025-26/0001" />
               </div>
+              {!form.againstInvoice?.trim() && (
+                <div className="form-group" style={{ gridColumn: 'span 2', padding: '0.6rem 0.85rem', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                    <input type="checkbox" checked={form.advServices} onChange={e => updateField('advServices', e.target.checked)} />
+                    <span><strong>Advance for services</strong>: GST is due on it now (GSTR-1 Table 11). Advances for goods carry no GST; leave this off for them.</span>
+                  </label>
+                  {form.advServices && (() => {
+                    const pos = form.advPos || bizStateCode;
+                    const t = advanceTax({ amount: num(form.amount), rate: num(form.advRate), pos, bizState: bizStateCode });
+                    return (
+                      <div className="grid grid-cols-2 gap-3" style={{ marginTop: '0.5rem' }}>
+                        <div>
+                          <label className="form-label" htmlFor="rcp-adv-rate">GST rate</label>
+                          <select id="rcp-adv-rate" className="form-input" value={form.advRate} onChange={e => updateField('advRate', e.target.value)}>
+                            {['5', '12', '18', '28'].map(r => <option key={r} value={r}>{r}%</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label" htmlFor="rcp-adv-pos">Place of supply</label>
+                          <select id="rcp-adv-pos" className="form-input" value={pos} onChange={e => updateField('advPos', e.target.value)}>
+                            <option value="">Select state</option>
+                            {INDIAN_STATES.map(st => { const c = getStateCode(st); return c ? <option key={st} value={c}>{c} {st}</option> : null; })}
+                          </select>
+                        </div>
+                        <p className="type-desc" style={{ gridColumn: 'span 2', margin: 0 }}>
+                          Tax included: {formatCurrency(t.igst + t.cgst + t.sgst)} on taxable {formatCurrency(t.taxable)} ({t.inter ? 'IGST' : 'CGST + SGST'}).
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label className="form-label">Note (optional)</label>
                 <input type="text" className="form-input" value={form.note} onChange={e => updateField('note', e.target.value)} />
@@ -538,13 +626,19 @@ export default function ReceiptVoucher() {
                     <td className="text-muted">{rcp.date ? new Date(rcp.date).toLocaleDateString('en-IN') : ''}</td>
                     <td><span className="invoice-badge">{rcp.receiptNo}</span></td>
                     <td className="font-medium">{rcp.clientName}</td>
-                    <td className="text-muted">{rcp.againstInvoice || '-'}</td>
+                    <td className="text-muted">{rcp.againstInvoice || (rcp.advance?.services ? `Advance (${formatCurrency(advanceBalance({ ...rcp.advance, amount: rcp.amount }))} open)` : '-')}</td>
                     <td style={{ textAlign: 'right' }} className="font-bold">{formatCurrency(rcp.amount)}</td>
                     <td className="text-muted">{rcp.paymentMode}</td>
                     <td>
                       <div className="table-actions">
                         <button className="icon-btn icon-btn-blue" onClick={() => printReceipt(rcp)} title="Print"><Printer size={15} /></button>
                         <button className="icon-btn" onClick={() => openEdit(rcp)} title="Edit"><Pencil size={15} /></button>
+                        {rcp.advance?.services && advanceBalance(rcp.advance && { ...rcp.advance, amount: rcp.amount }) > 0 && (
+                          <>
+                            <button className="btn btn-ghost" style={{ fontSize: '0.75rem' }} onClick={() => adjustAdvance(rcp, 'invoice')} title="Set this advance off against an invoice">Adjust</button>
+                            <button className="btn btn-ghost" style={{ fontSize: '0.75rem' }} onClick={() => adjustAdvance(rcp, 'refund')} title="Record money paid back with no supply">Refund</button>
+                          </>
+                        )}
                         <button className="icon-btn icon-btn-red" onClick={() => handleDelete(rcp.id)} title="Delete"><Trash2 size={15} /></button>
                       </div>
                     </td>

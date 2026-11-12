@@ -1443,6 +1443,7 @@ export default function Dashboard({ mode = 'home', scope = null, onNew, onEdit, 
 
       <InvoiceTable
         scope={scope}
+        onBillChanged={loadBills}
         tracksPayments={tracksPayments}
         bills={bills}
         bulkBusy={bulkBusy}

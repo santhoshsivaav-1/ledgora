@@ -13,7 +13,7 @@ const EPS = 0.005;
 
 /**
  * What we owe on a bill before payments: the total, less the §194Q TDS we keep, less debit notes against it that are
- * settled by adjusting what we owe (a cash or bank refund comes back as money instead).
+ * settled by adjusting what we owe (a cash or bank refund comes back as money instead), less the RCM tax (D-13).
  */
 export async function dueOfPurchase(tx: Tx, bill: PurchaseRow) {
   const [dn] = await tx
@@ -27,7 +27,10 @@ export async function dueOfPurchase(tx: Tx, bill: PurchaseRow) {
         isNull(purchases.deletedAt),
       ),
     );
-  return r2(Math.max(0, bill.total - bill.tdsAmount - dn.v));
+  // D-13: on a reverse-charge bill the supplier is owed the value without the tax (the ledger's Cr Payable); the tax is
+  // Cr RCM Payable and is paid to the government.
+  const rcm = bill.reverseCharge ? bill.cgst + bill.sgst + bill.igst + bill.cess : 0;
+  return r2(Math.max(0, bill.total - rcm - bill.tdsAmount - dn.v));
 }
 
 /** Pending on a bill. `excludePaymentId` is the payment being edited: its own allocations count as not yet paid. */

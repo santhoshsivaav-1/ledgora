@@ -6,6 +6,7 @@ import { createDb } from '@ledgora/db';
 import { createApp } from '../src/app.ts';
 import { loadEnv } from '../src/env.ts';
 import { createStorage } from '../src/storage.ts';
+import type { Providers } from '../src/messaging/providers.ts';
 
 const url = () => {
   const u = process.env.TEST_DATABASE_URL;
@@ -15,6 +16,8 @@ const url = () => {
 
 export interface HarnessOptions {
   env?: Record<string, string>;
+  /** P9: fake message providers; the default is the real set, so a test that sends must pass its own. */
+  providers?: Providers;
 }
 
 export function makeHarness(opts: HarnessOptions = {}) {
@@ -29,7 +32,7 @@ export function makeHarness(opts: HarnessOptions = {}) {
     ...opts.env,
   });
   const { db, sql, close } = createDb(url(), { max: 12 });
-  const app = createApp({ db, env, storage: createStorage(env) });
+  const app = createApp({ db, env, storage: createStorage(env), providers: opts.providers });
 
   /** A caller bound to one session cookie. */
   const client =

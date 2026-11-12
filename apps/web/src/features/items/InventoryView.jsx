@@ -1,3 +1,5 @@
+import { useAppSettings } from '../../lib/appSettings';
+import { itemFieldVisibility, newItemDefaults, lowStockLimit } from './itemFields';
 import { useState, useEffect, useRef } from 'react';
 import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download } from 'lucide-react';
 import { getAllProducts, saveProduct, deleteProduct, getProfile, getStockAlertSettings } from '../../lib/data';
@@ -17,16 +19,20 @@ import { PRODUCT_TEMPLATE, downloadCsv, productCsvToRecords } from '../import-ex
 // dead state removed for clarity.
 const emptyForm = {
   name: '', hsn: '', purchasePrice: '', sellingPrice: '', taxPercent: '', unit: 'Pcs', stock: '', description: '',
+  itemType: '', category: '', minStock: '', customFields: {},
 };
 
 export default function InventoryView() {
+  const appSettings = useAppSettings();
+  const show = itemFieldVisibility(appSettings); // Settings > Item
+  const startForm = () => ({ ...emptyForm, ...newItemDefaults(appSettings) });
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   // v1.10.77 (#85) - edit many products at once (see ProductBulkEdit).
   const [bulkEdit, setBulkEdit] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ ...emptyForm });
+  const [form, setForm] = useState(() => ({ ...emptyForm }));
   const [units, setUnits] = useState(getAllUnits());
   const [profileCountry, setProfileCountry] = useState('India');
   const profileCurrency = getCountryConfig(profileCountry).currency;
@@ -61,7 +67,7 @@ export default function InventoryView() {
     : products;
 
   const openAdd = () => {
-    setForm({ ...emptyForm });
+    setForm(startForm());
     setEditingId(null);
     setShowForm(true);
   };
@@ -79,6 +85,10 @@ export default function InventoryView() {
       unit: product.unit || 'Nos',
       stock: product.stock ?? '', // v1.10.74 - was `|| ''`, which blanked a stock of 0
       description: product.description || '',
+      itemType: product.itemType || '',
+      category: product.category || '',
+      minStock: product.minStock ?? '',
+      customFields: product.customFields || {},
     });
     setEditingId(product.id);
     setShowForm(true);
@@ -120,6 +130,10 @@ export default function InventoryView() {
         unit: form.unit,
         stock: form.stock ? parseFloat(form.stock) : 0,
         description: form.description.trim(),
+        itemType: form.itemType || undefined,
+        category: form.category.trim() || undefined,
+        minStock: form.minStock === '' ? undefined : Math.max(0, Number(form.minStock) || 0),
+        customFields: Object.keys(form.customFields || {}).length ? form.customFields : undefined,
       };
       await saveProduct(product);
       toast(editingId ? 'Product updated' : 'Product added', 'success');
@@ -234,11 +248,29 @@ export default function InventoryView() {
                 <input type="text" className="form-input" value={form.name}
                   onChange={e => updateField('name', e.target.value)} placeholder="e.g. Web Development" />
               </div>
-              <div className="form-group">
-                <label className="form-label">HSN / SAC Code</label>
-                <input type="text" className="form-input" value={form.hsn}
-                  onChange={e => updateField('hsn', e.target.value)} placeholder="e.g. 998314" />
-              </div>
+              {show.type && (
+                <div className="form-group">
+                  <label className="form-label">Type</label>
+                  <select className="form-input" value={form.itemType || 'product'} onChange={e => updateField('itemType', e.target.value)}>
+                    <option value="product">Product</option>
+                    <option value="service">Service</option>
+                  </select>
+                </div>
+              )}
+              {show.category && (
+                <div className="form-group">
+                  <label className="form-label">Category</label>
+                  <input type="text" className="form-input" value={form.category} maxLength={60}
+                    onChange={e => updateField('category', e.target.value)} placeholder="e.g. Electronics" />
+                </div>
+              )}
+              {show.hsn && (
+                <div className="form-group">
+                  <label className="form-label">HSN / SAC Code</label>
+                  <input type="text" className="form-input" value={form.hsn}
+                    onChange={e => updateField('hsn', e.target.value)} placeholder="e.g. 998314" />
+                </div>
+              )}
               {/* v1.10.29 — Purchase price + selling price side by side.
                   Selling price seeds the invoice rate; purchase price seeds
                   the purchase-bill rate. Legacy `rate` field kept invisible
@@ -257,11 +289,13 @@ export default function InventoryView() {
                   placeholder="0.00" min="0" step="any"
                   title="What you charge the customer. Auto-fills on new Invoices." />
               </div>
-              <div className="form-group">
-                <label className="form-label">GST %</label>
-                <input type="number" className="form-input" value={form.taxPercent}
-                  onChange={e => updateField('taxPercent', e.target.value)} placeholder="18" min="0" max="100" />
-              </div>
+              {show.tax && (
+                <div className="form-group">
+                  <label className="form-label">GST %</label>
+                  <input type="number" className="form-input" value={form.taxPercent}
+                    onChange={e => updateField('taxPercent', e.target.value)} placeholder="18" min="0" max="100" />
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label">Unit</label>
                 <select className="form-input" value={form.unit}
@@ -272,16 +306,35 @@ export default function InventoryView() {
                   {units.map(u => <option key={u.label} value={u.label}>{u.label}{u.custom ? ' ★' : ''}</option>)}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Stock Quantity</label>
-                <input type="number" className="form-input" value={form.stock}
-                  onChange={e => updateField('stock', e.target.value)} placeholder="0" min="0" />
-              </div>
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label">Description (optional)</label>
-                <input type="text" className="form-input" value={form.description}
-                  onChange={e => updateField('description', e.target.value)} placeholder="Brief description..." />
-              </div>
+              {show.stock && (
+                <div className="form-group">
+                  <label className="form-label">Stock Quantity</label>
+                  <input type="number" className="form-input" value={form.stock}
+                    onChange={e => updateField('stock', e.target.value)} placeholder="0" min="0" />
+                </div>
+              )}
+              {show.minStock && (
+                <div className="form-group">
+                  <label className="form-label">Minimum stock</label>
+                  <input type="number" className="form-input" value={form.minStock} min="0"
+                    onChange={e => updateField('minStock', e.target.value)} placeholder="Alert at or below"
+                    title="This product shows as low at or below this level. Empty uses the shared alert level." />
+                </div>
+              )}
+              {show.description && (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Description (optional)</label>
+                  <input type="text" className="form-input" value={form.description}
+                    onChange={e => updateField('description', e.target.value)} placeholder="Brief description..." />
+                </div>
+              )}
+              {show.custom.map(f => (
+                <div className="form-group" key={f.label}>
+                  <label className="form-label">{f.label}</label>
+                  <input type="text" className="form-input" maxLength={200} value={form.customFields?.[f.label] || ''}
+                    onChange={e => setForm(prev => ({ ...prev, customFields: { ...prev.customFields, [f.label]: e.target.value } }))} />
+                </div>
+              ))}
             </div>
             <div className="flex gap-2 justify-end mt-4">
               <button className="btn btn-secondary" onClick={closeForm}>Cancel</button>
@@ -319,11 +372,11 @@ export default function InventoryView() {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>HSN/SAC</th>
+                  {show.hsn && <th>HSN/SAC</th>}
                   <th>Rate</th>
-                  <th>GST %</th>
+                  {show.tax && <th>GST %</th>}
                   <th>Unit</th>
-                  <th>Stock</th>
+                  {show.stock && <th>Stock</th>}
                   <th className="col-center">Actions</th>
                 </tr>
               </thead>
@@ -331,19 +384,19 @@ export default function InventoryView() {
                 {filtered.map(product => (
                   <tr key={product.id}>
                     <td className="font-medium" title={product.description || ''}>{product.name}</td>
-                    <td className="text-muted">{product.hsn || '-'}</td>
+                    {show.hsn && <td className="text-muted">{product.hsn || '-'}</td>}
                     <td className="font-bold">{product.rate ? formatCurrency(product.rate, profileCurrency) : '-'}</td>
-                    <td>{product.taxPercent ? `${product.taxPercent}%` : '-'}</td>
+                    {show.tax && <td>{product.taxPercent ? `${product.taxPercent}%` : '-'}</td>}
                     <td className="text-muted">{product.unit || 'Nos'}</td>
-                    <td>
+                    {show.stock && <td>
                       {(product.stock ?? 0) <= 0 ? (
                         <span style={{ color: '#dc2626', fontWeight: 600 }}>Out of Stock</span>
-                      ) : (stockAlerts.enabled !== false && (product.stock ?? 0) <= Number(stockAlerts.threshold ?? 5)) ? (
+                      ) : (stockAlerts.enabled !== false && (product.stock ?? 0) <= lowStockLimit(product, appSettings, Number(stockAlerts.threshold ?? 5))) ? (
                         <span style={{ color: '#d97706', fontWeight: 600 }}>{product.stock}</span>
                       ) : (
                         product.stock
                       )}
-                    </td>
+                    </td>}
                     <td>
                       <div className="table-actions">
                         <button className="icon-btn icon-btn-blue" onClick={() => openEdit(product)} title="Edit">

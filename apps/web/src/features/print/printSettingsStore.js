@@ -4,6 +4,9 @@
 // PrintSettings.jsx (as the UI form state).
 // ============================================================================
 
+import { getAllAppSettings } from '../../lib/appSettings';
+import { printOverlayFrom } from '../invoices/editor/settingsDefaults';
+
 export const DEFAULT_PRINT_SETTINGS = {
   // ==== Thermal-only ====
   // Typography
@@ -330,7 +333,7 @@ export async function loadPrintSettingsFor(businessKey) {
 }
 
 export function getPrintSettings() {
-  return { ...DEFAULT_PRINT_SETTINGS, ...(cache || {}) };
+  return { ...DEFAULT_PRINT_SETTINGS, ...(cache || {}), ...printOverlayFrom(getAllAppSettings()) };
 }
 
 function pushPrintSettings(keepalive = false) {

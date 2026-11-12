@@ -5,9 +5,13 @@ import { getRegionMode } from '../../lib/data';
 import { Field } from '../../components/ui/Field';
 import PartyGroupPicker from './PartyGroupPicker';
 import { FEATURES } from '../../config/featureFlags';
+import { useAppSettings } from '../../lib/appSettings';
+import { customPartyFields } from './partyFields';
 
 export default function ClientModal({ show, onClose, onSave, client, isEditing, defaultCountry }) {
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
+  const appSettings = useAppSettings(); // Settings > Party
+  const customFields = customPartyFields(appSettings);
   const fallbackCountry = defaultCountry || detectCountryFromBrowser();
   const emptyForm = {
     name: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
@@ -21,6 +25,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     preferredPaperSize: '',   // '' | 'a4' | 'a5' | 'thermal80' | ...
     preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
     autoPrint: false,          // per-client auto-print override
+    customFields: {},          // Settings > Party > Additional party fields, by label
   };
   const [form, setForm] = useState({ ...emptyForm });
   const [taxIdWarning, setTaxIdWarning] = useState('');
@@ -38,6 +43,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         preferredPaperSize: client.preferredPaperSize || '',
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
+        customFields: client.customFields || {},
       });
     } else if (show) {
       setForm({ ...emptyForm });
@@ -95,11 +101,13 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
             <label className="form-label">Client / Business Name *</label>
             <input type="text" className="form-input" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="e.g. Acme Corp" />
           </div>
-          <div className="form-group" style={{ gridColumn: 'span 2' }}>
-            <Field label="Party Group">
-              <PartyGroupPicker value={form.groupId} onChange={(groupId) => setForm(prev => ({ ...prev, groupId }))} />
-            </Field>
-          </div>
+          {appSettings['party.groups'] !== false && (
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <Field label="Party Group">
+                <PartyGroupPicker value={form.groupId} onChange={(groupId) => setForm(prev => ({ ...prev, groupId }))} />
+              </Field>
+            </div>
+          )}
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label">Address</label>
             <input type="text" className="form-input" value={form.address} onChange={e => setForm(prev => ({ ...prev, address: e.target.value }))} placeholder="Street address, locality" />
@@ -160,7 +168,12 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
               <div className="form-group">
                 <label className="form-label" htmlFor="client-credit-limit">Credit limit (₹)</label>
                 <input id="client-credit-limit" type="number" min="0" step="0.01" className="form-input" value={form.creditLimit}
-                  onChange={e => setForm(prev => ({ ...prev, creditLimit: e.target.value }))} placeholder="No limit" />
+                  onChange={e => setForm(prev => ({
+                    ...prev,
+                    creditLimit: e.target.value,
+                    // First time a limit is typed, "what to do when over it" starts at the business's default (Settings > Party).
+                    creditMode: prev.creditMode === 'none' && Number(e.target.value) > 0 ? (appSettings['party.creditMode'] || 'warn') : prev.creditMode,
+                  }))} placeholder="No limit" />
               </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="client-credit-mode">When over the limit</label>
@@ -176,6 +189,13 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
               </div>
             </>
           )}
+          {customFields.map(f => (
+            <div className="form-group" key={f.label}>
+              <label className="form-label">{f.label}</label>
+              <input type="text" className="form-input" maxLength={200} value={form.customFields?.[f.label] || ''}
+                onChange={e => setForm(prev => ({ ...prev, customFields: { ...prev.customFields, [f.label]: e.target.value } }))} />
+            </div>
+          ))}
           {form.country === 'India' && (
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>

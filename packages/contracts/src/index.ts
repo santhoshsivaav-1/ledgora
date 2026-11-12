@@ -15,3 +15,5 @@ export * from './staff.ts';
 export * from './cashbank.ts';
 export * from './pos.ts';
 export * from './utilities.ts';
+export * from './settings.ts';
+export * from './messaging.ts';

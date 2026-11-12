@@ -4,7 +4,7 @@ import { billIsInterstate, computeItemTaxSplit } from './gstHelpers';
 
 // GSTR-3B: the monthly summary return. One page of GST returns (change 3.17).
 export default function Gstr3bPage({
-  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, supplies31a = grandTotals, exempt31c = nilExempt.total,
+  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, rcm = null, onRecordRcm, unreg32 = [], inward5 = null, supplies31a = grandTotals, exempt31c = nilExempt.total,
 }) {
   return (
     <>
@@ -29,7 +29,7 @@ export default function Gstr3bPage({
                 <thead><tr><th>Nature of Supplies</th><th style={{ textAlign: 'right' }}>Taxable Value</th><th style={{ textAlign: 'right' }}>IGST</th><th style={{ textAlign: 'right' }}>CGST</th><th style={{ textAlign: 'right' }}>SGST</th></tr></thead>
                 <tbody>
                   <tr><td className="font-medium">(a) Outward taxable supplies (other than zero-rated, nil-rated and exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.cgst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(supplies31a.sgst)}</td></tr>
-                  <tr><td className="font-medium">(b) Zero-rated supplies</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td></tr>
+                  <tr><td className="font-medium">(b) Zero-rated supplies (exports, SEZ)</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.taxable)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(exportTotals.igst)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(0)}</td></tr>
                   <tr><td className="font-medium">(c) Other outward supplies (nil rated, exempted)</td><td style={{ textAlign: 'right' }}>{formatCurrency(exempt31c)}</td><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{exempt31c > nilExempt.total ? 'Bills of supply and exempt other income' : nilExempt.total > 0 ? 'Bills of supply' : 'N/A'}</td></tr>
                 </tbody>
               </table>
@@ -120,6 +120,63 @@ export default function Gstr3bPage({
               </div>
             );
           })()}
+
+          {/* P10-S3: 3.2 and 5 */}
+          {(unreg32.length > 0 || (inward5 && inward5.gst.inter + inward5.gst.intra + inward5.nongst.inter + inward5.nongst.intra > 0)) && (
+            <div className="glass-panel mb-4">
+              {unreg32.length > 0 && (
+                <>
+                  <div className="table-header"><h3>Table 3.2 — Inter-state supplies to unregistered persons</h3></div>
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead><tr><th>Place of supply</th><th style={{ textAlign: 'right' }}>Taxable value</th><th style={{ textAlign: 'right' }}>IGST</th></tr></thead>
+                      <tbody>{unreg32.map((r) => <tr key={r.pos}><td>{r.pos}</td><td style={{ textAlign: 'right' }}>{formatCurrency(r.txval)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(r.iamt)}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                  <p className="field-hint" style={{ padding: '0.5rem 1.25rem' }}>Already inside 3.1(a); the portal asks for this split by state. Composition and UIN holders are not tracked, so those rows stay empty.</p>
+                </>
+              )}
+              {inward5 && inward5.gst.inter + inward5.gst.intra + inward5.nongst.inter + inward5.nongst.intra > 0 && (
+                <>
+                  <div className="table-header"><h3>Table 5 — Exempt, nil-rated and non-GST inward supplies</h3></div>
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead><tr><th>Nature</th><th style={{ textAlign: 'right' }}>Inter-state</th><th style={{ textAlign: 'right' }}>Intra-state</th></tr></thead>
+                      <tbody>
+                        <tr><td>Composition, exempt and nil-rated (0% purchase lines)</td><td style={{ textAlign: 'right' }}>{formatCurrency(inward5.gst.inter)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(inward5.gst.intra)}</td></tr>
+                        <tr><td>Non-GST supply</td><td style={{ textAlign: 'right' }}>{formatCurrency(inward5.nongst.inter)}</td><td style={{ textAlign: 'right' }}>{formatCurrency(inward5.nongst.intra)}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* P10-S2: reverse charge. Tax on RCM bills is paid in cash (not from credit); its credit is claimed in 4(A)(3) of the month it is paid. */}
+          {rcm && rcm.unpaid.length > 0 && (
+            <div className="glass-panel mb-4">
+              <div className="table-header"><h3>Reverse charge (RCM) — tax not paid yet</h3></div>
+              <div className="table-scroll">
+                <table className="data-table" style={{ minWidth: '600px' }}>
+                  <thead><tr><th>Bill</th><th>Supplier</th><th>Date</th><th style={{ textAlign: 'right' }}>Taxable</th><th style={{ textAlign: 'right' }}>IGST / CGST / SGST</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {rcm.unpaid.map((b) => (
+                      <tr key={b.id}>
+                        <td>{b.number || '-'}</td><td>{b.supplier || '-'}</td><td>{b.date}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(b.taxable)}</td>
+                        <td style={{ textAlign: 'right' }}>{formatCurrency(b.heads.igst)} / {formatCurrency(b.heads.cgst)} / {formatCurrency(b.heads.sgst)}</td>
+                        <td>Unpaid {onRecordRcm && <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', marginLeft: 6 }} onClick={() => onRecordRcm(b)}>Record payment</button>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="field-hint" style={{ padding: '0.75rem 1.25rem' }}>
+                The tax is in 3.1(d) of the bill's month. Pay it through the cash ledger, record the payment here, and the credit appears in 4(A)(3) of that payment's month. The supplier is owed the bill without this tax.
+              </p>
+            </div>
+          )}
 
           {/* Table 6 — Tax Payment */}
           <div className="glass-panel mb-4">

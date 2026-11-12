@@ -2,10 +2,11 @@ import { Download } from 'lucide-react';
 import { formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import { downloadCSV } from './gstHelpers';
+import Tds26ASPanel from './Tds26ASPanel';
 
 // TDS and TCS reports (Form 26Q and 27EQ). One page of GST returns (change 3.17).
 export default function TdsPage({
-  activeTab, filteredBills,
+  activeTab, filteredBills, periodReceipts = [],
 }) {
   return (
     <>
@@ -204,6 +205,7 @@ export default function TdsPage({
                 </p>
               )}
             </div>
+            <Tds26ASPanel bills={filteredBills} receipts={periodReceipts} />
           </>
         );
       })()}

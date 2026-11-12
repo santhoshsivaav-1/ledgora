@@ -140,7 +140,7 @@ export const NAV: NavEntry[] = [
     label: 'Grow Your Business',
     icon: TrendingUp,
     children: [
-      { id: 'reminders', label: 'Payment Reminders', path: '/grow/reminders', planned: 'P9' },
+      { id: 'reminders', label: 'Payment Reminders', view: 'reminders', perm: 'message:read' },
       // The salesman master and its performance table (P2-S1) ship with the Phase 2 flag; visits/check-ins stay P9.
       {
         id: 'salesman',
@@ -218,7 +218,7 @@ export const NAV: NavEntry[] = [
       { id: 'user-guide', label: 'User Guide', href: DOCS_URL, icon: HelpCircle },
     ],
   },
-  { id: 'settings', label: 'Settings', icon: Settings, view: 'settings-business', match: '/settings' },
+  { id: 'settings', label: 'Settings', icon: Settings, view: 'settings-general', match: '/settings' },
   { id: 'plans', label: 'Plans & Pricing', icon: Award, path: '/plans', planned: 'P8' },
 ];
 

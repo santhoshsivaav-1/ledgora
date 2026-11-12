@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router';
+import { SETTINGS_TABS as NEW_TABS } from '@ledgora/contracts';
 import { SETTINGS_TABS } from './tabs';
 import { useEntitlements } from '../billing/useEntitlements';
 
@@ -8,6 +9,12 @@ export default function SettingsLayout({ children }) {
   return (
     <div>
       <nav className="settings-tabs" aria-label="Settings pages">
+        {NEW_TABS.map(({ id, label, hint }) => (
+          <NavLink key={id} to={`/settings/${id}`} title={hint} className={({ isActive }) => (isActive ? 'active' : '')}>{label}</NavLink>
+        ))}
+      </nav>
+      {/* The four pages from before Phase 8 stay until Phase 11, so a rollback has somewhere to land. */}
+      <nav className="settings-tabs" aria-label="Earlier settings pages">
         {SETTINGS_TABS.map(([id, label, hint]) => (
           <NavLink key={id} to={`/settings/${id}`} title={hint} className={({ isActive }) => (isActive ? 'active' : '')}>{label}</NavLink>
         ))}

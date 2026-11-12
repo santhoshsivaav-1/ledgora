@@ -74,7 +74,7 @@ describe('P3-S1 purchase bill upgrades', () => {
     expect(got.charges[0].name).toBe('Freight');
   });
 
-  it('records RCM and §194Q TDS; what we owe is the total less the TDS', async () => {
+  it('records RCM and §194Q TDS; what we owe is the total less the RCM tax (D-13) and the TDS', async () => {
     const s = await supplier(t);
     const res = await bill(t, {
       supplierId: s,
@@ -90,8 +90,17 @@ describe('P3-S1 purchase bill upgrades', () => {
       total: 118000,
       tdsAmount: 100,
     });
+    // Before D-13 the supplier was shown as owed ₹1,17,900 (the ₹18,000 RCM tax included); after, ₹99,900.
     const st = (await t.call('GET', `/v1/suppliers/${s}/statement`)).body;
-    expect(st).toEqual({ documents: 117900, settled: 0, returns: 0, balance: 117900 });
+    expect(st).toEqual({ documents: 99900, settled: 0, returns: 0, balance: 99900 });
+    const pay = await payOut(t, {
+      partyId: s,
+      amount: 99900,
+      allocations: [{ purchaseId: res.body.id, amount: 99900 }],
+    });
+    expect(pay.status, pay.text).toBe(201);
+    const after = (await t.call('GET', `/v1/purchases/${res.body.id}`)).body;
+    expect(after.paymentStatus).toBe('Paid');
   });
 
   it('pays at the time of purchase: rows become Payment Out vouchers allocated to the bill', async () => {

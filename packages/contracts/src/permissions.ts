@@ -39,6 +39,9 @@ export const PERMISSIONS = [
   // Vyapar parity Phase 5: Cash & Bank (bank accounts, cash, transfers, cheques, loans, reconciliation).
   'cashbank:read',
   'cashbank:write',
+  // Vyapar parity Phase 9: the message log, payment and service reminders; sending a document or a reminder.
+  'message:read',
+  'message:write',
   'business:read',
   'business:write',
   'settings:write',
@@ -98,6 +101,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'verify:run',
     'cashbank:write',
     'report:profit',
+    'message:write',
   ],
   // P7-S6 Share with CA: sees the books, reports and exports; can not create, edit or delete anything.
   ca: [...bookReads, 'audit:read', 'data:export', 'report:profit'],
@@ -109,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'item:read',
     'payment:read',
     'payment:write',
+    'message:write',
     // To pick themselves on an invoice; what they see of invoices is scoped to their own (P2-S1).
     'staff:read',
     'template:read',
@@ -118,6 +123,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'business:read',
   ],
   biller: [
+    'message:write',
     'invoice:read',
     'invoice:write',
     'party:read',
@@ -202,6 +208,14 @@ export function permissionFor(method: string, path: string): Permission | null {
   if (/^\/v1\/cashbank\/settings/.test(path)) return read ? 'cashbank:read' : 'accounting:manage';
   if (/^\/v1\/(cashbank|bank-accounts|cash|transfers|cheques|loans)(\/|$)/.test(path))
     return read ? 'cashbank:read' : 'cashbank:write';
+  // Phase 8: the registry-driven settings. Reading is business data; changing is a setting (owner-only keys are enforced
+  // again in the handler).
+  if (/^\/v1\/settings(\/|$)/.test(path)) return read ? 'business:read' : 'settings:write';
+  // Phase 9: the message log and reminders are read with message:read; sending, sharing, queueing and the service list
+  // are message:write. A salesman's own consent and check-ins are open to any member (the handler needs a linked staff row).
+  if (/^\/v1\/visits(\/|$)/.test(path)) return null;
+  if (/^\/v1\/(messaging|messages|document-links|reminders|service-reminders)(\/|$)/.test(path))
+    return read ? 'message:read' : 'message:write';
   // Phase 12 (POS): its settings are a setting; the counter's lookups and bills are invoices.
   if (/^\/v1\/pos\/settings/.test(path)) return read ? 'invoice:read' : 'settings:write';
   // Phase 7: barcodes edit items; Tally is an export; Close FY is an accounting decision; backups are exports, restoring
