@@ -11,9 +11,6 @@ const pub = async (slug: string) => {
   const r = await h.app.request(`/v1/public/catalog/${slug}`);
   return { status: r.status, body: (await r.json()) as any };
 };
-h.app
-  .request(`/v1/public/catalog/${slug}`)
-  .then(async (r) => ({ status: r.status, body: await r.json() }));
 
 describe('online catalog', () => {
   it('lists only the items marked for it, without costs; off or unknown answers 404; addresses are unique', async () => {
