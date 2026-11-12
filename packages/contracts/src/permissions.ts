@@ -245,3 +245,141 @@ export function permissionFor(method: string, path: string): Permission | null {
   for (const [re, r] of table) if (re.test(path)) return resource(r);
   return null;
 }
+
+/** The matrix on the Account Access screen: every permission under the part of the product it belongs to. */
+export const PERMISSION_GROUPS: readonly {
+  id: string;
+  label: string;
+  permissions: readonly { key: Permission; label: string }[];
+}[] = [
+  {
+    id: 'sale',
+    label: 'Sale',
+    permissions: [
+      { key: 'invoice:read', label: 'View invoices, quotations, orders, POS bills' },
+      { key: 'invoice:write', label: 'Create, edit and delete them' },
+      { key: 'invoice:cancel', label: 'Cancel an invoice' },
+      { key: 'payment:read', label: 'View payments in and out' },
+      { key: 'payment:write', label: 'Record, edit and delete payments' },
+    ],
+  },
+  {
+    id: 'parties',
+    label: 'Parties',
+    permissions: [
+      { key: 'party:read', label: 'View customers and suppliers' },
+      { key: 'party:write', label: 'Add, edit and delete them' },
+      { key: 'staff:read', label: 'View salesmen' },
+      { key: 'staff:write', label: 'Manage salesmen, targets and visits' },
+    ],
+  },
+  {
+    id: 'items',
+    label: 'Items and stock',
+    permissions: [
+      { key: 'item:read', label: 'View items' },
+      { key: 'item:write', label: 'Add, edit and delete items' },
+      { key: 'stock:adjust', label: 'Adjust stock' },
+    ],
+  },
+  {
+    id: 'purchase',
+    label: 'Purchase and expenses',
+    permissions: [
+      { key: 'purchase:read', label: 'View purchases and orders' },
+      { key: 'purchase:write', label: 'Create, edit and delete them' },
+      { key: 'expense:read', label: 'View expenses and other income' },
+      { key: 'expense:write', label: 'Add, edit and delete them' },
+    ],
+  },
+  {
+    id: 'cashbank',
+    label: 'Cash & Bank',
+    permissions: [
+      { key: 'cashbank:read', label: 'View bank accounts, cheques, loans' },
+      { key: 'cashbank:write', label: 'Add and change them, reconcile' },
+    ],
+  },
+  {
+    id: 'accounting',
+    label: 'Accounting',
+    permissions: [
+      { key: 'ledger:read', label: 'View the ledger and trial balance' },
+      { key: 'journal:write', label: 'Post manual journals' },
+      { key: 'verify:run', label: 'Run Verify My Data' },
+      { key: 'accounting:manage', label: 'Switch the ledger on, lock periods, close a year' },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    permissions: [
+      { key: 'report:read', label: 'View reports' },
+      { key: 'report:profit', label: 'View profit reports (P&L, balance sheet)' },
+      { key: 'data:export', label: 'Export reports and data' },
+    ],
+  },
+  {
+    id: 'grow',
+    label: 'Messages and reminders',
+    permissions: [
+      { key: 'message:read', label: 'View the message log and reminders' },
+      { key: 'message:write', label: 'Send documents and reminders' },
+    ],
+  },
+  {
+    id: 'other',
+    label: 'Templates, files and recurring',
+    permissions: [
+      { key: 'template:read', label: 'View terms templates' },
+      { key: 'template:write', label: 'Edit them' },
+      { key: 'recurring:read', label: 'View recurring invoices' },
+      { key: 'recurring:write', label: 'Create and change them' },
+      { key: 'file:read', label: 'View attachments' },
+      { key: 'file:write', label: 'Upload attachments' },
+    ],
+  },
+  {
+    id: 'settings',
+    label: 'Settings and utilities',
+    permissions: [
+      { key: 'business:read', label: 'View business details' },
+      { key: 'business:write', label: 'Edit business details and banks' },
+      { key: 'settings:write', label: 'Change settings, backups, number series' },
+      { key: 'data:import', label: 'Import data' },
+      { key: 'trash:manage', label: 'Restore or delete from Trash' },
+      { key: 'audit:read', label: 'View the audit log' },
+    ],
+  },
+  {
+    id: 'team',
+    label: 'Team',
+    permissions: [
+      { key: 'team:read', label: 'View team members' },
+      { key: 'team:manage', label: 'Invite, change and remove members' },
+    ],
+  },
+];
+
+/**
+ * A role's permission list as saved: unknown keys dropped, and a "write" always brings its "read" (a screen that can
+ * change something has to be able to open it). `billing:manage` is the owner's alone.
+ */
+export function normalizePermissions(list: readonly string[]): Permission[] {
+  const set = new Set<string>(list.filter((p) => (PERMISSIONS as readonly string[]).includes(p)));
+  set.delete('billing:manage');
+  for (const p of [...set]) {
+    if (p.endsWith(':write')) set.add(p.replace(':write', ':read'));
+  }
+  // These two writes have no matching read of their own.
+  if (set.has('journal:write')) set.add('ledger:read');
+  if (set.has('accounting:manage')) set.add('ledger:read');
+  if (set.has('stock:adjust')) set.add('item:read');
+  if (set.has('invoice:cancel')) set.add('invoice:read');
+  if (set.has('report:profit')) set.add('report:read');
+  return PERMISSIONS.filter((p) => set.has(p));
+}
+
+export const rolePermissionsBody = z.object({
+  permissions: z.array(z.string()).max(PERMISSIONS.length),
+});

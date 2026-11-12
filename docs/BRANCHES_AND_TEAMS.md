@@ -18,7 +18,7 @@ One account can belong to many **organizations**, and one organization can have 
 ## What the user does
 
 1. **Sign up** → an organization ("Name's Business"), an owner membership, the first
-   branch and a 14-day trial are created automatically; the first-run form fills the
+   branch and a pending subscription are created automatically (the 7-day trial starts when the owner presses Start free trial); the first-run form fills the
    branch's details (GSTIN decides CGST/SGST vs IGST).
 2. **Add a branch** → sidebar switcher → "Add branch…" (Owner/Admin, checked against
    the `business:write` permission), or Settings → Business Profiles → Organization

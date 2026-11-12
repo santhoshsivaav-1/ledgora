@@ -35,6 +35,7 @@ import { settingsModule } from './modules/settings.ts';
 import { publicLinkEndpoints } from './publicLink.ts';
 import { messagingModule } from './modules/messaging.ts';
 import { billingModule, billingWebhook } from './modules/billing.ts';
+import { rolesModule } from './modules/roles.ts';
 import { utilitiesModule } from './modules/utilities.ts';
 import { backupsModule } from './modules/backups.ts';
 import { setupModule } from './modules/setup.ts';
@@ -109,6 +110,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     settingsModule,
     messagingModule,
     billingModule,
+    rolesModule,
     utilitiesModule,
     backupsModule,
     setupModule,

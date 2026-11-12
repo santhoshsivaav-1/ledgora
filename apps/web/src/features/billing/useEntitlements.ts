@@ -21,7 +21,11 @@ export function useEntitlements() {
     role,
     plan: me?.subscription?.plan ?? null,
     planStatus: me?.subscription?.status ?? null,
-    can: (permission: Permission) => roleCan(role, permission),
+    // The server's list for this role (the organization may have changed it on Account Access); the built-in table is the fallback.
+    can: (permission: Permission) => {
+      const granted = (me as { permissions?: string[] } | null)?.permissions;
+      return granted ? granted.includes(permission) : roleCan(role, permission);
+    },
     // SaaS plans: the server's entitlements decide (a live trial has everything). Older servers send none: the add-on rule.
     hasFeature: (feature: string) => {
       const ent = (me as { entitlements?: { features: string[] } } | null)?.entitlements;

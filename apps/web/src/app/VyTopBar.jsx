@@ -1,3 +1,4 @@
+import PlanChip from '../features/billing/PlanChip';
 import { Bell, LayoutTemplate, LogOut, Menu as MenuIcon, Moon, Plus, Settings, ShieldCheck, Sun, Users } from 'lucide-react';
 import BusinessNameField from './BusinessNameField';
 import FYSwitcher from './FYSwitcher';
@@ -66,6 +67,7 @@ export default function VyTopBar({
         </div>
       )}
       <div className="vy-topbar-right">
+        <PlanChip />
         <FYSwitcher />
         {canWrite && (
           <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" onClick={onNew} title={`${newLabel} (Alt+N)`}>

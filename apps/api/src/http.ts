@@ -146,7 +146,7 @@ export function createRegistrar(app: Hono, deps: Deps) {
         } else {
           const ctx = await requireOrg(c, deps.db, session);
           // The real path, not the route pattern: a pattern like /v1/workspace/collections/:collection says nothing about which collection.
-          requirePermission(ctx, spec.method, c.req.path, spec.permission);
+          await requirePermission(deps.db, ctx, spec.method, c.req.path, spec.permission);
           await requireFeature(deps.db, ctx, spec.method, c.req.path, {
             explicit: spec.feature,
             overwrite: c.req.query('overwrite'),

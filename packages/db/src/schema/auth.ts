@@ -179,12 +179,14 @@ export const memberBusinesses = pgTable(
   ],
 );
 
-/** The plan an organization is on. Phase 2 only creates the 14-day trial; Razorpay billing is Phase 4. */
+/** The plan an organization is on. A new organization starts 'pending'; the owner starts the 7-day trial or chooses Free; Razorpay moves it to 'active'. */
 export const subscriptions = pgTable('subscriptions', {
   ...base(),
   plan: text('plan').notNull().default('trial'),
-  status: text('status').notNull().default('trialing'), // trialing | active | past_due | canceled
+  status: text('status').notNull().default('trialing'), // pending | trialing | active | past_due | canceled
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+  /** When the trial or the paid plan began (what the plan card calls "activated on"). */
+  startedAt: timestamp('started_at', { withTimezone: true }),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
   /** SaaS billing: 'razorpay' once a checkout starts; its subscription id; 'month' | 'year'. */
   provider: text('provider'),

@@ -8,13 +8,13 @@ import {
   okBody,
   page,
   pageQuery,
-  ROLE_PERMISSIONS,
   sessionRow,
   type Role,
 } from '@ledgora/contracts';
 import { AppError, notFound } from '../errors.ts';
 import { deviceLabel } from '../auth/device.ts';
 import { listPage, type Registrar } from '../http.ts';
+import { permissionsOfRole } from '../middleware/permission.ts';
 
 const { member, organizations, session, memberBusinesses, subscriptions, auditLog } = schema;
 
@@ -59,7 +59,7 @@ export function accountModule({ route }: Registrar) {
         },
         organization: { id: current.id, name: current.name },
         role,
-        permissions: [...ROLE_PERMISSIONS[role]],
+        permissions: [...(await permissionsOfRole(deps.db, current.id, role))],
         businessIds: role !== 'owner' && limits.length ? limits.map((l) => l.b) : null,
         organizations: rows.map((r) => ({ id: r.id, name: r.name, role: r.role as Role })),
         // SaaS plans: what the screens may offer (reads are never gated; writes to a missing feature answer 402).
@@ -72,6 +72,12 @@ export function accountModule({ route }: Registrar) {
             trialDaysLeft: eff.trialDaysLeft,
             graceDaysLeft: eff.graceDaysLeft,
             expired: eff.expired,
+            needsPlan: eff.needsPlan,
+            status: eff.status,
+            startedAt: sub?.startedAt?.toISOString() ?? sub?.createdAt?.toISOString() ?? null,
+            trialEndsAt: sub?.trialEndsAt?.toISOString() ?? null,
+            currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+            interval: sub?.billingInterval ?? null,
             features: [...planById(eff.plan).features],
           };
         })(),

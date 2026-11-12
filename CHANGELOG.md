@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A complete sign-up flow, a visible plan, and role permissions you can edit.** Sign-up now leads to a plans page
+  (every plan, what it has and what it lacks, "Start 7-day free trial" at the bottom, or use Free), then a four-step
+  business setup, then a guide to the first invoice. The trial is 7 days and starts only when the owner starts it, once.
+  The plan shows in the header ("Trial · 5 days left") with when it began, when it ends or renews and an Upgrade button;
+  an owner whose plan has ended sees the plans at sign-in. **Settings › Account Access** lets the owner change what each
+  role may do, applying on the person's next click. See `docs/DECISIONS.md` (D-21 to D-23).
+
 - **Settings that were "Coming soon" now work (38 keys), and follow the plan.** Batch, serial and expiry tracking, MRP,
   wholesale price, a secondary unit, item picture and barcode (with a scan box on the bill), party-wise item rates, TDS /
   TCS flags and a mandatory opening balance on parties, billing name, quick entry, financial-year start month, quantity

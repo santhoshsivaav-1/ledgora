@@ -27,6 +27,9 @@ asks; the answer is written here before work continues.
 | D-18 | "Enable accounting ledger" in Settings | plain switch / mirror of the real flag | **Mirror.** Shown from the real flag, changed only on the Accounting screen, which compares party balances first. Settings refuses the write | Claude (default, needs owner sign-off) | 2026-11-12 | P4, P8 |
 | D-19 | Multi currency | exchange-rate table / per-bill rate | **Per-bill rate stays** (it already existed). "Enable" defaults to on so no existing business loses the boxes; "Show both amounts" prints the INR total. No rate table | Claude (default, needs owner sign-off) | 2026-11-12 | P8 |
 | D-20 | Financial-year start month | change everything / books and reports only | **Year switchers of Dashboard, Reports and Expenses only.** GST returns, purchases (ITC), income tax and invoice numbering stay April to March, which the law fixes | Claude (default, needs owner sign-off) | 2026-11-12 | P8 |
+| D-21 | When the free trial starts | at sign-up / when the owner asks | **When the owner presses "Start 7-day free trial"** on the plans page after sign-up (or chooses Free). One trial per organization, never repeated. Was automatic 14 days | Owner (request) | 2026-11-12 | SaaS |
+| D-22 | Order of the first-run flow | login, setup, plans / login, plans, setup | **Sign-up, plans, business setup (4 steps), first-invoice guide, app.** At each later sign-in an owner whose plan has ended sees the plans once | Owner (request) | 2026-11-12 | SaaS |
+| D-23 | Custom role names | fixed presets only / any new role | **Presets only, each editable by the owner** (Account Access). A new role name needs the member and invitation tables to accept free text; not built | Claude (default, needs owner sign-off) | 2026-11-12 | P8-S13 |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
@@ -563,3 +566,34 @@ the "Still not done" lines of the notes above. Full suites at the end: tax-engin
 | P11 Hardening | Partial | performance budget and migration rehearsal done; **P11-S6 i18n catalogue not built**; accessibility audit and the external security review need a person; old UI removal not done |
 | P12 POS | Done | batches and serials are ignored at the counter (item 5) |
 | SaaS | Done | see the manual list in the hand-over: Razorpay account and keys, GST on subscriptions, terms and privacy pages |
+
+## Notes recorded during the SaaS front door and Account Access (2026-11-12)
+
+1. **Sign-up creates a `pending` subscription**, not a trial (migration `0024`, new `started_at`). `POST /v1/billing/trial`
+   `{choice: 'trial' | 'free'}` is owner-only and answers 409 for a second trial. A pending organization is on Free until
+   then (50 sale documents a month), so nothing paid is open to someone who never chose. Tests use the trial in their
+   helper, so the existing 392 API tests still cover the paid features.
+2. **Screens.** Sign-in and create-account have a pitch beside the form. After sign-up: the plans page (every plan, its limits
+   and each feature with a tick or a dash, monthly or yearly, "Start 7-day free trial" at the bottom, "Skip the trial and use
+   Free" under it). Then business setup in four steps (business and GST registration; address and contact; bank, UPI and
+   year; invoice defaults), which writes real settings and the print profile. Then the first-invoice guide (add a
+   customer, add an item, open the invoice screen); each step can be skipped. The guide is remembered in this browser until
+   finished, so a refresh does not lose it.
+3. **Header plan chip** ("Trial · 5 days left", "Silver", "Free · plan ended") with a card: plan, activated on, trial ends on
+   or renews on, days left, Upgrade and Plan details. The same card is at the top of Settings › Plan & billing, which now
+   shows the plan comparison as well.
+4. **Plan guards were already server-side** (402 on a write to a missing feature or past a limit, reads never blocked). What
+   is new is the timeline check at sign-in and the pending state. Downgrade keeps data; paid settings read as off (D-17).
+5. **Account Access (P8-S13).** Table `role_permissions` (migration `0025`, row-level security). `GET /v1/roles`,
+   `PUT /v1/roles/:role`, `DELETE /v1/roles/:role` (owner only; the owner role is fixed; `billing:manage` can never be
+   handed out; a change to "edit" brings "view"). The check reads the organization's list when it has one, else the preset,
+   cached 30 seconds and dropped at once on a change on the same server (**on several servers a change can take up to
+   30 seconds**). `/v1/me` and the web's `can()` use the same list, so buttons follow it. Screen: Settings › Account Access.
+6. **Not in the matrix:** the "own transactions only" and "hide purchase price" toggles of the wireframe. A salesman's
+   invoices are already limited to their own (P2-S1); hiding a price field would need every items response filtered and was
+   not built, so it is not offered rather than offered and not enforced.
+7. ⚠️ **Not done, still open from the audit:** tax rate masters, number-series table, print designer table and default
+   accounts (Settings "Coming soon" cards); online catalog and loyalty offers (P9-S6, S7); 3B imports and 3.1(e); the i18n
+   catalogue (P11-S6); batch and serial at the POS counter and in the typed API; posting workspace documents to the ledger;
+   `biz.type`, `biz.category`, `ui.lang`, `gst.exemptLabel`, `party.defaultKind`. The suites do not drive a real browser:
+   run the sign-up to first-invoice flow by hand once.

@@ -46,13 +46,59 @@ const webhook = (body: unknown, secret = SECRET) => {
 const item = (who: Tenant) => who.call('POST', '/v1/items', { name: `I ${Math.random()}` });
 
 describe('trial and plans', () => {
-  it('a new organization is on a 14-day trial with every feature', async () => {
+  it('a new account must choose first: nothing is on trial until the owner starts it', async () => {
+    const { cookie } = await h.signUp();
+    const call = h.client(cookie);
+    const me = (await call('GET', '/v1/me')).body;
+    expect(me.entitlements).toMatchObject({
+      plan: 'free',
+      needsPlan: true,
+      trial: false,
+      status: 'pending',
+    });
+    const go = await call('POST', '/v1/billing/trial', { choice: 'trial' });
+    expect(go.status, go.text).toBe(200);
+    const after = (await call('GET', '/v1/me')).body.entitlements;
+    expect(after).toMatchObject({
+      plan: 'gold',
+      trial: true,
+      trialDaysLeft: 7,
+      needsPlan: false,
+      status: 'trialing',
+    });
+    expect(after.startedAt).toBeTruthy();
+    expect(after.trialEndsAt).toBeTruthy();
+    // pressing it again changes nothing; a second trial is never given
+    expect((await call('POST', '/v1/billing/trial', { choice: 'trial' })).status).toBe(200);
+    expect((await call('GET', '/v1/me')).body.entitlements.trialDaysLeft).toBe(7);
+  });
+
+  it('Free can be chosen instead, and then the trial is gone for good', async () => {
+    const { cookie } = await h.signUp();
+    const call = h.client(cookie);
+    expect((await call('POST', '/v1/billing/trial', { choice: 'free' })).status).toBe(200);
+    expect((await call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      plan: 'free',
+      needsPlan: false,
+      trial: false,
+    });
+    const again = await call('POST', '/v1/billing/trial', { choice: 'trial' });
+    expect(again.status).toBe(409);
+  });
+
+  it('only the owner can start it', async () => {
+    const w = await h.newTenant();
+    const viewer = await h.addMember(w, 'viewer');
+    expect((await viewer.call('POST', '/v1/billing/trial', { choice: 'trial' })).status).toBe(403);
+  });
+
+  it('a new organization is on a 7-day trial with every feature once started', async () => {
     const me = (await t.call('GET', '/v1/me')).body;
     expect(me.entitlements).toMatchObject({
       plan: 'gold',
       label: 'Trial',
       trial: true,
-      trialDaysLeft: 14,
+      trialDaysLeft: 7,
     });
     const b = (await t.call('GET', '/v1/billing')).body;
     expect(b.plans.map((p: any) => p.id)).toEqual(['free', 'silver', 'gold']);

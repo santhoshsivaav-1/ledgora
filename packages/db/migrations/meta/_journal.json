@@ -169,6 +169,20 @@
       "when": 1794479586707,
       "tag": "0023_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794483444118,
+      "tag": "0024_subscription_started_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794494967292,
+      "tag": "0025_role_permissions",
+      "breakpoints": true
     }
   ]
 }

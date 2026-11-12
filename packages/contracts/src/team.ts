@@ -27,6 +27,13 @@ export const me = z.object({
       trialDaysLeft: z.number(),
       graceDaysLeft: z.number(),
       expired: z.boolean(),
+      /** Signed up but has not chosen the trial or Free yet: show the plans page first. */
+      needsPlan: z.boolean().optional(),
+      status: z.string().optional(),
+      startedAt: z.string().nullable().optional(),
+      trialEndsAt: z.string().nullable().optional(),
+      currentPeriodEnd: z.string().nullable().optional(),
+      interval: z.string().nullable().optional(),
       features: z.array(z.string()),
     })
     .optional(),

@@ -64,6 +64,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'settings-features', path: '/settings/features', title: 'Features and stock' },
   { id: 'settings-data', path: '/settings/data', title: 'Data' },
   { id: 'team', path: '/settings/team', title: 'Team' },
+  { id: 'roles', path: '/settings/roles', title: 'Account Access' },
   { id: 'billing', path: '/settings/billing', title: 'Plan & billing' },
   { id: 'security', path: '/settings/security', title: 'Security' },
   { id: 'accept-invite', path: '/accept-invite/:id', title: 'Invitation' },

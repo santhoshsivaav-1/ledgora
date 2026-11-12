@@ -97,7 +97,7 @@ export const SETTING_FEATURE: Readonly<Record<string, Feature>> = {
   'gst.einvoice.enabled': 'einvoice',
   'acct.autoPostExpense': 'accounting',
 };
-export const TRIAL_DAYS = 14;
+export const TRIAL_DAYS = 7;
 export const GRACE_DAYS = 7;
 
 export const planById = (id: string) => PLANS.find((p) => p.id === id) ?? PLANS[0]!;
@@ -109,6 +109,7 @@ export interface SubscriptionRow {
   status: string;
   trialEndsAt?: Date | null;
   currentPeriodEnd?: Date | null;
+  startedAt?: Date | null;
 }
 const DAY = 86_400_000;
 
@@ -119,9 +120,13 @@ export function effectivePlan(sub: SubscriptionRow | null | undefined, now = new
     trialDaysLeft: 0,
     graceDaysLeft: 0,
     expired: false,
+    /** Signed up but has not yet chosen the trial or Free: the web app shows the plans page first. */
+    needsPlan: false,
     status: sub?.status ?? 'none',
   };
   if (!sub) return { ...base, plan: 'free' as PlanId, label: 'Free', expired: true };
+  if (sub.status === 'pending')
+    return { ...base, plan: 'free' as PlanId, label: 'Free', needsPlan: true };
   if (sub.status === 'trialing') {
     const left = sub.trialEndsAt ? (sub.trialEndsAt.getTime() - now.getTime()) / DAY : -1;
     if (left > 0)

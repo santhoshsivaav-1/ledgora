@@ -79,6 +79,7 @@ const SettingsTabPage = lazy(() => import('./features/settings/registry/Settings
 const BillingPage = lazy(() => import('./features/billing/BillingPage'));
 import PlanBanner from './features/billing/PlanBanner';
 const TeamPage = lazy(() => import('./features/settings/team/TeamPage'));
+const RolesPage = lazy(() => import('./features/settings/team/RolesPage'));
 const SecurityPage = lazy(() => import('./features/settings/security/SecurityPage'));
 const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
 const ClientsView = lazy(() => import('./features/parties/ClientsView'));
@@ -1040,6 +1041,14 @@ function App() {
                   element={
                     <SettingsLayout>
                       <TeamPage />
+                    </SettingsLayout>
+                  }
+                />
+                <Route
+                  path="/settings/roles"
+                  element={
+                    <SettingsLayout>
+                      <RolesPage />
                     </SettingsLayout>
                   }
                 />

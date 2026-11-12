@@ -53,3 +53,64 @@
 .org-switcher:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 /* Add-branch modal: full-screen dim with the form centred, scrolls on short phones. */
 .branch-modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.45); display: flex; overflow-y: auto; padding: 1.25rem; }
+
+/* Plans page (after sign-up, and when a plan has ended) and the plan comparison used in Settings. */
+.plans-shell { min-height: 100vh; padding: 2rem 1rem 3rem; background: var(--bg-primary); color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
+.plans-head { text-align: center; max-width: 720px; }
+.plans-head h1 { font-size: 1.75rem; margin: 0 0 0.35rem; }
+.plans-interval { display: inline-flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; justify-content: center; }
+.plans-foot { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center; max-width: 560px; }
+.plans-cta { font-size: 1.05rem; padding: 0.75rem 1.75rem; display: inline-flex; align-items: center; gap: 0.5rem; }
+.plan-matrix-wrap { width: 100%; max-width: 980px; overflow-x: auto; }
+.plan-matrix { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; font-size: 0.9rem; }
+.plan-matrix th, .plan-matrix td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); text-align: center; vertical-align: top; }
+.plan-matrix tbody th { text-align: left; font-weight: 500; }
+.plan-matrix thead th { background: var(--bg-tertiary); }
+.plan-matrix thead th.is-current { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pm-name { font-weight: 700; font-size: 1.1rem; }
+.pm-price { font-size: 1.4rem; margin: 0.2rem 0; }
+.pm-price small { font-size: 0.7rem; color: var(--text-secondary); }
+.pm-blurb { font-size: 0.75rem; color: var(--text-secondary); font-weight: 400; margin-bottom: 0.5rem; }
+.pm-badge { margin-left: 0.4rem; font-size: 0.65rem; padding: 1px 7px; border-radius: 999px; background: var(--primary); color: #fff; vertical-align: middle; }
+.pm-yes { color: var(--success); }
+.pm-no { color: var(--text-secondary); opacity: 0.6; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The plan in the header. */
+.plan-chip-wrap { position: relative; }
+.plan-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem; border-radius: 999px; border: 1px solid var(--border); font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
+.plan-chip-trial { background: var(--success-light); color: var(--success); border-color: transparent; }
+.plan-chip-paid { background: var(--primary); color: #fff; border-color: transparent; }
+.plan-chip-warn { background: var(--danger-light); color: var(--danger); border-color: transparent; }
+.plan-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 290px; padding: 0.9rem 1rem; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); }
+.plan-pop-title { font-weight: 700; margin-bottom: 0.4rem; }
+.plan-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin: 0 0 0.5rem; font-size: 0.85rem; }
+.plan-pop dt { color: var(--text-secondary); }
+.plan-pop dd { margin: 0; text-align: right; font-weight: 600; }
+.plan-details { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1.25rem; margin: 0.5rem 0; font-size: 0.9rem; }
+.plan-details dt { color: var(--text-secondary); }
+.plan-details dd { margin: 0; font-weight: 600; }
+
+/* Business setup steps. */
+.setup-steps { list-style: none; display: flex; gap: 0.5rem; padding: 0; margin: 0 0 1.25rem; flex-wrap: wrap; }
+.setup-steps li { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary); }
+.setup-steps li span { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-tertiary); font-size: 0.7rem; font-weight: 700; }
+.setup-steps li.on { color: var(--text); font-weight: 600; }
+.setup-steps li.on span { background: var(--primary); color: #fff; }
+.setup-steps li.done span { background: var(--success); color: #fff; }
+
+/* Sign-in and create-account: a short pitch beside the form on wide screens. */
+.auth-split { gap: 3rem; flex-wrap: wrap; }
+.auth-hero { max-width: 420px; padding: 1rem; }
+.auth-hero h2 { font-size: 1.9rem; line-height: 1.2; margin: 0.5rem 0 1rem; }
+.auth-hero ul { list-style: none; padding: 0; margin: 0 0 1.25rem; display: grid; gap: 0.7rem; }
+.auth-hero li { display: flex; gap: 0.6rem; align-items: flex-start; color: var(--text-secondary); }
+.auth-hero li svg { color: var(--success); flex: none; margin-top: 2px; }
+.auth-hero-brand { font-size: 1.4rem; }
+.auth-hero-note { font-weight: 600; color: var(--primary); }
+.auth-card-brand { display: none; }
+@media (max-width: 860px) {
+  .auth-split { gap: 1rem; }
+  .auth-hero { display: none; }
+  .auth-card-brand { display: block; }
+}

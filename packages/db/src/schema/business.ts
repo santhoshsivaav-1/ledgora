@@ -109,3 +109,17 @@ export const settingValues = pgTable(
     }),
   ],
 );
+
+/**
+ * Account Access matrix (P8-S13): an organization's own permission list for a role, replacing the built-in preset for
+ * that role. No row = the preset. The owner role is never stored (it always has everything).
+ */
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    ...base(),
+    role: text('role').notNull(),
+    permissions: jsonb('permissions').notNull().$type<string[]>(),
+  },
+  (t) => [unique('role_permissions_org_role').on(t.orgId, t.role)],
+);

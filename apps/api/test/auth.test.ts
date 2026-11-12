@@ -65,15 +65,15 @@ const newPhone = () => `+9198${String(Math.floor(Math.random() * 1e8)).padStart(
 // ---- 2.6 sign-up creates a workspace -------------------------------------------------------------------------------------
 
 describe('sign-up (2.1, 2.4, 2.6)', () => {
-  it('creates organization, owner membership, first business and a 14-day trial together', async () => {
+  it('creates organization, owner membership, first business and a 7-day trial (once started) together', async () => {
     const t = await h.newTenant();
     const me = (await t.call('GET', '/v1/me')).body;
     expect(me.role).toBe('owner');
     expect(me.organizations).toHaveLength(1);
     expect(me.subscription.status).toBe('trialing');
     const days = (Date.parse(me.subscription.trialEndsAt) - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(13.9);
-    expect(days).toBeLessThan(14.1);
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
     expect(me.permissions).toEqual([...ROLE_PERMISSIONS.owner]);
     const biz = (await t.call('GET', '/v1/businesses')).body.data;
     expect(biz).toHaveLength(1);
@@ -82,7 +82,9 @@ describe('sign-up (2.1, 2.4, 2.6)', () => {
     expect((await t.call('GET', '/v1/units')).body.data.length).toBeGreaterThan(3);
     expect((await t.call('GET', '/v1/templates')).body.data).toHaveLength(1);
     const audit = (await t.call('GET', '/v1/audit')).body.data.map((a: any) => a.action);
-    expect(audit).toEqual(expect.arrayContaining(['org.create', 'subscription.trial']));
+    expect(audit).toEqual(
+      expect.arrayContaining(['org.create', 'subscription.pending', 'subscription.trial']),
+    );
   });
 
   it('two sign-ups never share data', async () => {
@@ -157,7 +159,7 @@ describe('phone OTP login (2.2)', () => {
     const me = (await h.client(cookie)('GET', '/v1/me')).body;
     expect(me.user.phoneNumber).toBe(phone);
     expect(me.role).toBe('owner');
-    expect(me.subscription.status).toBe('trialing');
+    expect(me.subscription.status).toBe('pending');
   });
 
   it('a wrong code is refused, and the same number can sign in again', async () => {

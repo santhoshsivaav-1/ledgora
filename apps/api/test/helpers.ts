@@ -101,6 +101,8 @@ export function makeHarness(opts: HarnessOptions = {}) {
     const businessId = (await call('GET', '/v1/businesses')).body.data[0].id as string;
     // Tax splits need the seller's state; the sign-up business starts blank until the setup wizard fills it.
     await call('PATCH', `/v1/businesses/${businessId}`, { state: 'Tamil Nadu' });
+    // A new account begins on the plans page; most tests want every feature, so they take the free trial first.
+    await call('POST', '/v1/billing/trial', { choice: 'trial' });
     return {
       orgId: me.organization.id as string,
       businessId,

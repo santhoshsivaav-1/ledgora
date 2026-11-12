@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { LoadingState, ErrorState } from '../../components/ui/States';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction } from '../../components/ui/ConfirmModal';
 import { cancelPlan, getBilling, startCheckout } from '../../lib/data/billing';
 import { useEntitlements } from './useEntitlements';
+import PlanMatrix from './PlanMatrix';
+import { planSummary, fmtDate } from './planFormat';
 
 // Settings > Plan & billing: the plan in force, the trial, usage against the limits, and upgrade / cancel (owner only).
 // Payment happens on Razorpay's page; the plan changes when Razorpay's webhook confirms it.
-
-const inr = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
 
 export default function BillingPage() {
   const { role } = useEntitlements();
@@ -25,6 +24,7 @@ export default function BillingPage() {
   if (error) return <ErrorState message={error.message} onRetry={() => { setError(null); load(); }} />;
   if (!data) return <LoadingState label="Opening your plan…" />;
   const { current, usage, plans, features, checkoutAvailable } = data;
+  const summary = planSummary({ ...current, features: [...(current.features || [])] });
 
   const upgrade = async (plan) => {
     setBusy(plan);
@@ -57,6 +57,12 @@ export default function BillingPage() {
         {current.graceDaysLeft > 0 && <p className="ui-error">The last payment failed. {current.graceDaysLeft} days to fix it before the business moves to Free.</p>}
         {current.expired && <p className="ui-help">Your trial or paid period has ended. Your data is safe and readable; paid features need a plan.</p>}
         {current.currentPeriodEnd && !current.trial && <p className="ui-help">Paid until {new Date(current.currentPeriodEnd).toLocaleDateString('en-IN')}{current.status === 'canceled' ? ' (cancelled, will not renew)' : ''}.</p>}
+        <dl className="plan-details">
+          <dt>Plan</dt><dd>{current.label}</dd>
+          {(current.startedAt) && <><dt>Activated on</dt><dd>{fmtDate(current.startedAt)}</dd></>}
+          {summary?.endsOn && <><dt>{summary.endLabel}</dt><dd>{summary.endsOn}{summary.daysLeft != null ? ` (${summary.daysLeft} day${summary.daysLeft === 1 ? '' : 's'} left)` : ''}</dd></>}
+          {current.interval && <><dt>Billing</dt><dd>{current.interval === 'year' ? 'Yearly' : 'Monthly'}</dd></>}
+        </dl>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 8 }}>
           {meter('Sale documents this month', usage.docsThisMonth, current.limits.docsPerMonth)}
           {meter('Businesses', usage.businesses, current.limits.businesses)}
@@ -70,29 +76,9 @@ export default function BillingPage() {
           <button key={v} type="button" role="radio" aria-checked={interval === v} className={`btn ${interval === v ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setInterval(v)}>{l}</button>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-        {plans.map((p) => {
-          const isCurrent = !current.trial && current.plan === p.id;
-          const price = interval === 'year' ? p.priceYearly : p.priceMonthly;
-          return (
-            <div key={p.id} className="glass-panel p-6" style={isCurrent ? { outline: '2px solid var(--link)' } : undefined}>
-              <h3 style={{ margin: 0 }}>{p.name}</h3>
-              <p style={{ fontSize: '1.5rem', margin: '6px 0' }}>{price ? `${inr(price)}` : '₹0'}<span className="ui-help"> {price ? `/ ${interval} + GST` : 'forever'}</span></p>
-              <p className="ui-help">{p.blurb}</p>
-              <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.85rem' }}>
-                <li><Check size={13} /> {p.limits.businesses} business{p.limits.businesses === 1 ? '' : 'es'}, {p.limits.users} user{p.limits.users === 1 ? '' : 's'}</li>
-                <li><Check size={13} /> {p.limits.docsPerMonth === null ? 'Unlimited invoices' : `${p.limits.docsPerMonth} sale documents a month`}</li>
-                {features.filter((f) => p.features.includes(f.id)).map((f) => <li key={f.id}><Check size={13} /> {f.label}</li>)}
-              </ul>
-              {p.id !== 'free' && (isCurrent
-                ? <span className="ui-help">Current plan</span>
-                : owner
-                  ? <button type="button" className="btn btn-primary" disabled={!!busy || !checkoutAvailable} onClick={() => upgrade(p.id)}>{busy === p.id ? 'Opening payment…' : `Choose ${p.name}`}</button>
-                  : <span className="ui-help">Ask the owner to upgrade</span>)}
-            </div>
-          );
-        })}
-      </div>
+      <PlanMatrix plans={plans} features={features} interval={interval} currentPlan={current.trial ? null : current.plan}
+        onChoose={owner ? upgrade : null} busy={busy} choosable={checkoutAvailable} />
+      {!owner && <p className="ui-help" style={{ marginTop: 12 }}>Ask the owner to change the plan.</p>}
       {!checkoutAvailable && <p className="ui-help" style={{ marginTop: 12 }}>Online payment is not set up on this server yet. Contact support to upgrade.</p>}
     </div>
   );

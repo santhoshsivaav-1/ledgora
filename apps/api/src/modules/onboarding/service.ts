@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { schema, seedOrgDefaults, type Database } from '@ledgora/db';
-
-const TRIAL_DAYS = 14;
+import { TRIAL_DAYS } from '@ledgora/contracts';
 
 /**
- * Sign-up (change 2.6): a new user gets an organization, an owner membership, a first business and a 14-day trial,
+ * Sign-up (change 2.6): a new user gets an organization, an owner membership, a first business and a pending subscription (the 7-day trial starts when the owner asks),
  * all in one transaction, so a crash can never leave a user without a workspace (or a workspace without an owner).
  * Organizations and memberships are identity tables, written on the owner connection first; the rest is tenant data,
  * written after dropping to app_user with the new organization set, exactly as a request would.
@@ -13,7 +12,6 @@ const TRIAL_DAYS = 14;
 export async function onboardNewUser(
   db: Database,
   user: { id: string; name: string; email: string },
-  now = new Date(),
 ) {
   const orgId = randomUUID();
   const businessId = randomUUID();
@@ -35,9 +33,10 @@ export async function onboardNewUser(
     await seedOrgDefaults(tx, orgId);
     await tx.insert(schema.subscriptions).values({
       orgId,
-      plan: 'trial',
-      status: 'trialing',
-      trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86_400_000),
+      // The trial starts when the owner presses "Start free trial" on the plans page (POST /v1/billing/trial), not at
+      // sign-up, so the 7 days are spent using the product.
+      plan: 'free',
+      status: 'pending',
     });
     await tx.insert(schema.auditLog).values([
       {
@@ -51,10 +50,10 @@ export async function onboardNewUser(
       {
         orgId,
         actorId: user.id,
-        action: 'subscription.trial',
+        action: 'subscription.pending',
         entityType: 'subscription',
         entityId: null,
-        after: { days: TRIAL_DAYS },
+        after: { trialDays: TRIAL_DAYS },
       },
     ]);
   });

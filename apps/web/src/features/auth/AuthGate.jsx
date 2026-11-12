@@ -4,17 +4,26 @@ import { configureApiClient } from '../../lib/apiClient';
 import { flushPrintSettings } from '../print/printSettingsStore';
 import { clearMirroredPrefs, flushMirroredPrefs, restorePrefs, startMirroring } from '../../utils/prefsMirror';
 import LoginScreen from './LoginScreen';
-import OnboardingScreen from './OnboardingScreen';
+import BusinessSetup from './BusinessSetup';
+import PlansScreen from './PlansScreen';
+import FirstInvoiceGuide from '../onboarding/FirstInvoiceGuide';
 import { SessionContext } from './SessionContext';
 import './auth.css';
 
-// Everything behind sign-in. Decides, on every load, which of four screens to show:
+// Everything behind sign-in. Decides, on every load, which screen to show, in this order:
 //   loading     asking the server who we are
 //   login       nobody is signed in (also where Log out lands)
-//   onboarding  signed in, but the first-run business form is not filled in yet
+//   plans       a new owner who has not yet started the trial or chosen Free
+//   onboarding  the business setup is not finished yet
+//   guide       just finished setup: add a customer and an item, then the first invoice
+//   ended       (owner, once per sign-in) the trial or paid plan has ended: plans again, or carry on with Free
 //   the app     signed in and set up
+const GUIDE_KEY = 'ledgora_first_invoice_guide';
+const ENDED_KEY = 'ledgora_plan_ended_seen';
+const flag = (k) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
+const seen = (k) => { try { return sessionStorage.getItem(k) === '1'; } catch { return false; } };
 export default function AuthGate({ children }) {
-  const [phase, setPhase] = useState('loading'); // loading | error | out | onboarding | in
+  const [phase, setPhase] = useState('loading'); // loading | error | out | plans | onboarding | guide | ended | in
   const [me, setMe] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
   const [problem, setProblem] = useState('');
@@ -28,7 +37,14 @@ export default function AuthGate({ children }) {
       if (ob.complete) startMirroring(await restorePrefs());
       setMe(who);
       setOnboarding(ob);
-      setPhase(ob.complete ? 'in' : 'onboarding');
+      const ent = who.entitlements;
+      const owner = who.role === 'owner';
+      if (owner && ent?.needsPlan) setPhase('plans');
+      else if (!ob.complete) setPhase('onboarding');
+      else if (flag(GUIDE_KEY)) setPhase('guide');
+      // The timeline check at sign-in: an owner whose trial or plan has run out sees the plans once before the app.
+      else if (owner && ent?.expired && !seen(ENDED_KEY)) setPhase('ended');
+      else setPhase('in');
     } catch (e) {
       setProblem(e.message);
       setPhase('error');
@@ -72,10 +88,31 @@ export default function AuthGate({ children }) {
     );
   }
   if (phase === 'out') return <LoginScreen onSignedIn={refresh} />;
+  if (phase === 'plans' || phase === 'ended') {
+    return (
+      <SessionContext.Provider value={value}>
+        <PlansScreen mode={phase === 'ended' ? 'ended' : 'start'} owner={me?.role === 'owner'}
+          onDone={() => { if (phase === 'ended') { try { sessionStorage.setItem(ENDED_KEY, '1'); } catch { /* private window */ } } refresh(); }}
+          onSignOut={signOut} />
+      </SessionContext.Provider>
+    );
+  }
   if (phase === 'onboarding') {
     return (
       <SessionContext.Provider value={value}>
-        <OnboardingScreen me={me} business={onboarding.business} onDone={refresh} onSignOut={signOut} />
+        <BusinessSetup me={me} business={onboarding.business}
+          onDone={() => { try { localStorage.setItem(GUIDE_KEY, '1'); } catch { /* private window */ } refresh(); }} onSignOut={signOut} />
+      </SessionContext.Provider>
+    );
+  }
+  if (phase === 'guide') {
+    return (
+      <SessionContext.Provider value={value}>
+        <FirstInvoiceGuide onFinish={(create) => {
+          try { localStorage.removeItem(GUIDE_KEY); } catch { /* private window */ }
+          if (create) window.history.replaceState({}, '', '/invoices/new');
+          refresh();
+        }} />
       </SessionContext.Provider>
     );
   }
