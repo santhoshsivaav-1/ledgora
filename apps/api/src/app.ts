@@ -46,6 +46,8 @@ import { recurringModule } from './modules/recurring.ts';
 import { templatesModule } from './modules/templates.ts';
 import { trashModule } from './modules/trash.ts';
 import { transferModule } from './modules/transfer.ts';
+import { filingModule } from './modules/filing.ts';
+import { editLogModule } from './modules/editLog.ts';
 
 const startedAt = Date.now();
 
@@ -123,6 +125,8 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     filesModule,
     trashModule,
     transferModule,
+    filingModule,
+    editLogModule,
   ])
     mod(reg);
   localFileEndpoints(app, deps);

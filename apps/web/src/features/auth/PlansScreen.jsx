@@ -3,7 +3,7 @@ import { LogOut, ShieldCheck } from 'lucide-react';
 import { LoadingState, ErrorState } from '../../components/ui/States';
 import { toast } from '../../components/ui/Toast';
 import PlanMatrix from '../billing/PlanMatrix';
-import { getBilling, startCheckout, startTrial } from '../../lib/data/billing';
+import { chooseFree, getBilling, startCheckout, startTrial } from '../../lib/data/billing';
 import { TRIAL_DAYS } from '@ledgora/contracts';
 import { useT } from '../../i18n';
 
@@ -25,6 +25,10 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
     setBusy(choice);
     try { await startTrial(choice); onDone(); } catch (e) { toast(e?.message || 'Could not continue', 'error'); setBusy(''); }
   };
+  const stayFree = async () => {
+    setBusy('free');
+    try { await chooseFree(); onDone(); } catch (e) { toast(e?.message || 'Could not continue', 'error'); setBusy(''); }
+  };
   const pay = async (plan) => {
     setBusy(plan);
     try { const { checkoutUrl } = await startCheckout(plan, interval); window.location.assign(checkoutUrl); }
@@ -38,7 +42,7 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
         <h1>{ended ? tr('plans.ended', 'Your plan has ended') : tr('plans.choose', 'Choose how to start')}</h1>
         <p className="auth-muted">
           {ended
-            ? 'Your data is safe and you can still open everything. Pick a plan to use the paid features again, or carry on with Free.'
+            ? 'Your data is safe and stays readable, but the account is read-only until you choose. Pick a plan, or carry on with Free (1 business, 1 user, 50 documents a month).'
             : `Try every feature free for ${TRIAL_DAYS} days. No card needed. After that you pick a plan, or stay on Free.`}
         </p>
         <div role="radiogroup" aria-label="Billing period" className="plans-interval">
@@ -60,9 +64,10 @@ export default function PlansScreen({ mode = 'start', owner, onDone, onSignOut }
                 <ShieldCheck size={18} /> {busy === 'trial' ? 'Starting…' : tr('plans.startTrial', `Start ${TRIAL_DAYS}-day free trial`)}
               </button>
             )}
-            <button type="button" className={ended ? 'btn btn-primary plans-cta' : 'auth-link'} disabled={!!busy} onClick={() => (ended ? onDone() : choose('free'))}>
-              {ended ? tr('plans.continueFree', 'Continue on Free') : tr('plans.useFree', 'Skip the trial and use Free')}
+            <button type="button" className={ended ? 'btn btn-primary plans-cta' : 'auth-link'} disabled={!!busy} onClick={() => (ended ? stayFree() : choose('free'))}>
+              {ended ? (busy === 'free' ? 'Switching…' : tr('plans.continueFree', 'Continue on Free')) : tr('plans.useFree', 'Skip the trial and use Free')}
             </button>
+            {ended && <button type="button" className="auth-link" disabled={!!busy} onClick={onDone}>Look at my data first (read-only)</button>}
             {!ended && <p className="auth-muted">Every feature for {TRIAL_DAYS} days, then Free unless you choose a plan. Cancel nothing, there is nothing to cancel.</p>}
           </>
         ) : (

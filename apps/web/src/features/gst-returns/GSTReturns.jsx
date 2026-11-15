@@ -5,21 +5,28 @@ import { itc180ForPeriod } from '../purchases/purchaseExtras';
 import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getAllReceipts, getProfile, savePurchase } from '../../lib/data';
 import { promptAction } from '../../components/ui/ConfirmModal';
 import { useAppSettings } from '../../lib/appSettings';
-import { compositionTax, exemptInward, interStateUnregistered, moveSezToZeroRated, rcmItcForPeriod, table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
+import { compositionTax, exemptInward, imsActions, imsPack, interStateUnregistered, moveSezToZeroRated, rcmItcForPeriod, table11, table11Json, withAdvanceTax } from '@ledgora/tax-engine';
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, getFilingPeriod, hsnUqc, getFYOptions, belongsToProfile, isCancelledBill, b2clThreshold, GST_PORTAL_RATES, gstinChecksumOk, setOffITC, roundQty, placeOfSupplyLabel, countsAsSales, parseLocalDate } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
 import { nilExemptSummary, exportSection, withChargeLines, itcTable4, incomeAsBills, isPurchaseBill, isDebitNote, advanceReceiptsOf, periodBounds, rcmBillsOf, sezSupplies, unregisteredInterRows } from './gstReturnTables';
-import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
+import { GST_TYPES, DOC_ISSUE_NATURE, DOC_NATURE_LABEL, MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, purchaseBookTotals, billIsInterstate, buildReconciliation, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
 import Gstr2bPage from './Gstr2bPage';
 import TdsPage from './TdsPage';
 import FilingGuidePage from './FilingGuidePage';
+import { Link, useNavigate } from 'react-router';
+import { listBusinesses } from '../../lib/data/accounting';
+import { buildGstr1a, savePack } from '../../lib/data/filing';
+import { useEntitlements } from '../billing/useEntitlements';
 
 // ========== Main Component ==========
 // `tab` is the page (change 3.17): /gst-returns/gstr1, /gstr3b, /gstr2b, /tds and /guide each have their own address.
 export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
+  const navigate = useNavigate();
+  const { can } = useEntitlements();
+  const [savingPack, setSavingPack] = useState(false);
   const [bills, setBills] = useState([]);
   // v1.10.74 - cancelled invoices, kept apart so they reach only the Table 13
   // document count (the portal wants them in "Cancelled"), never the tax tables.
@@ -710,7 +717,9 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // ========== GSTR-3B JSON Export (GSTN offline tool format, schema v1.7) ==========
   // Matches the schema accepted by https://services.gst.gov.in/services/auth/dashboard
   // Upload via: GST portal → Returns → GSTR-3B → Prepare Offline → Upload JSON
-  const exportGSTR3BJSON = () => {
+  // File-ready returns: with { asPack: true } the same builder returns the file instead of downloading it, so the
+  // filing pack holds byte-for-byte what the JSON button gives.
+  const exportGSTR3BJSON = (opts = {}) => {
     if (filteredBills.length === 0 && filteredExpenses.length === 0 && nilExempt.total === 0 && exempt31c === 0 && supplies31a.taxable === 0) {
       toast('No data to export for this period', 'warning');
       return;
@@ -811,6 +820,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       hash: 'hash',
       sup_details, ...inter_sup, itc_elg, inward_sup,
     };
+    if (opts.asPack) return gstr3b;
     const blob = new Blob([JSON.stringify(gstr3b, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `GSTR3B_${gstin || 'export'}_${ret_period}.json`; a.click();
@@ -900,7 +910,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   };
 
   // ========== GSTR-1 JSON Export ==========
-  const exportGSTR1JSON = () => {
+  const exportGSTR1JSON = (opts = {}) => {
     if (filteredBills.length === 0 && nilExempt.total === 0) { toast('No invoices to export', 'warning'); return; }
 
     // v1.10.43 — Pre-flight validation. Abort with a clear message if
@@ -1092,6 +1102,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       doc_issue: { doc_det: docDet },
       ...table11Json(advances), // P10-S1: at (11A) and txpd (11B), only when the period has advances
     };
+    if (opts.asPack) return gstr1;
 
     const blob = new Blob([JSON.stringify(gstr1, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1112,6 +1123,45 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
     }
   };
 
+  // ========== FILING PACKS (file-ready returns) ==========
+  // Saves the period's return as a filing pack: the server checks it again, keeps it versioned, and it can go to a
+  // CA for review before someone uploads it on the portal and records the ARN (Return Register).
+  const canPack = can('filing:prepare') && (filterMode === 'month' || filterMode === 'quarter');
+  const saveFilingPack = async (kind) => {
+    if (!canPack) { toast('Pick a month or a quarter: a return is filed for one period', 'warning'); return; }
+    let payload = null;
+    let itc2b = null;
+    if (kind === 'gstr1' || kind === 'gstr1a') payload = exportGSTR1JSON({ asPack: true });
+    else if (kind === 'gstr3b') {
+      payload = exportGSTR3BJSON({ asPack: true });
+      if (gstr2bData) {
+        // What 2B makes available, for the "ITC claimed above 2B" check.
+        const rows = buildReconciliation(gstr2bData, purchases, filteredPurchases).filter((r) => r.status !== 'book_only' && r.itcAvailable);
+        itc2b = rows.reduce((a, r) => ({ iamt: a.iamt + r.twoBIgst, camt: a.camt + r.twoBCgst, samt: a.samt + r.twoBSgst }), { iamt: 0, camt: 0, samt: 0 });
+      }
+    } else if (kind === 'ims') {
+      if (!gstr2bData) { toast('Import the GSTR-2B JSON first', 'warning'); return; }
+      const rows = imsActions(buildReconciliation(gstr2bData, purchases, filteredPurchases));
+      payload = imsPack(profile.gstin || '', getReturnPeriod(), rows);
+    }
+    if (!payload) return;
+    setSavingPack(true);
+    try {
+      const list = await listBusinesses();
+      const biz = list.find((b) => b.gstin && profile.gstin && b.gstin.toUpperCase() === String(profile.gstin).toUpperCase()) || list.find((b) => b.isDefault) || list[0];
+      if (!biz) throw new Error('No business found');
+      // GSTR-1A: the server compares today's GSTR-1 with the filed one (and refuses outside the 1A window).
+      if (kind === 'gstr1a') payload = (await buildGstr1a(biz.id, getReturnPeriod(), payload)).payload;
+      const pack = await savePack({ businessId: biz.id, kind, period: getReturnPeriod(), quarterly: filterMode === 'quarter', payload, itc2b });
+      toast(pack.unchanged ? 'Same file as the saved pack; nothing changed' : `Saved as version ${pack.version}`, 'success');
+      navigate(`/filing/${pack.id}`);
+    } catch (e) {
+      toast(e?.message || 'Could not save the filing pack', 'error');
+    } finally {
+      setSavingPack(false);
+    }
+  };
+
   // ========== RENDER ==========
   const totalTax = grandTotals.cgst + grandTotals.sgst + grandTotals.igst;
   const netPayable = netTax.igst + netTax.cgst + netTax.sgst;
@@ -1121,6 +1171,11 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       {/* Header row: title + period selector + portal link */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
         <h1 className="page-title" style={{ margin: 0 }}>GST Returns</h1>
+        {can('filing:read') && (
+          <Link className="btn btn-secondary" to="/filing" style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }} title="Every return of the year: packs, CA review, ARNs">
+            Return Register
+          </Link>
+        )}
         <HelpButton title="GST Returns — how to use" doc="gst-returns">
           <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
             <li><strong>Pick a period</strong> — Monthly / Quarterly (QRMP) / Full Year, then the specific month + year.</li>
@@ -1261,6 +1316,9 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         exportCDNR={exportCDNR}
         exportDocSummary={exportDocSummary}
         exportGSTR1JSON={exportGSTR1JSON}
+        onSavePack={canPack ? () => saveFilingPack('gstr1') : null}
+        onSaveAmend={canPack ? () => saveFilingPack('gstr1a') : null}
+        savingPack={savingPack}
         exportHSN={exportHSN}
         grandTotals={grandTotals}
         hsnRows={hsnRows}
@@ -1276,6 +1334,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         b2cBills={b2cBills}
         exportGSTR3B={exportGSTR3B}
         exportGSTR3BJSON={exportGSTR3BJSON}
+        onSavePack={canPack ? () => saveFilingPack('gstr3b') : null}
+        savingPack={savingPack}
         exportTotals={zeroRated31b}
         unreg32={unreg32}
         inward5={inward5}
@@ -1310,6 +1370,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
         purchases={purchases}
         setGstr2bData={setGstr2bData}
         setGstr2bFilter={setGstr2bFilter}
+        onSaveIms={canPack ? () => saveFilingPack('ims') : null}
+        savingPack={savingPack}
       />
 
       {/* ===================== TDS / TCS REPORT TAB ===================== */}

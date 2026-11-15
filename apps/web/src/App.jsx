@@ -56,6 +56,7 @@ import { buildPaletteActions } from './app/paletteActions';
 import { toast } from './components/ui/Toast';
 import { useEntitlements } from './features/billing/useEntitlements';
 import LockedFeature from './components/ui/LockedFeature';
+import FeatureGuard from './components/ui/FeatureGuard';
 import { LoadingState } from './components/ui/States';
 import ScreenBoundary from './app/ScreenBoundary';
 import ConfirmModalContainer from './components/ui/ConfirmModal';
@@ -97,6 +98,10 @@ const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoi
 const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
 const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
 const RemindersPage = lazy(() => import('./features/grow/RemindersPage'));
+const ReturnRegister = lazy(() => import('./features/filing/ReturnRegister'));
+const FilingPackPage = lazy(() => import('./features/filing/FilingPackPage'));
+const PracticePage = lazy(() => import('./features/filing/PracticePage'));
+const EditLogPage = lazy(() => import('./features/filing/EditLogPage'));
 const CatalogSettingsPage = lazy(() => import('./features/catalog/CatalogSettingsPage'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
 const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
@@ -598,9 +603,11 @@ function App() {
   }, [currentView, JSON.stringify(enabledModules)]);
 
   // The classic menu; the new shell's comes from app/navigation.ts (NAV), filtered by role and modules.
-  const navItems = buildClassicNav({ showIfModule, openDocs });
+  // A CA in at least one client organization gets the CA Dashboard, whichever organization is open.
+  const isCa = !!me?.organizations?.some((o) => o.role === 'ca');
+  const navItems = buildClassicNav({ showIfModule, openDocs, isCa });
   const vyNav = useMemo(
-    () => (vyapar ? visibleNav(NAV, { can: (p) => (me ? can(p) : true), moduleOn: showIfModule }) : []),
+    () => (vyapar ? visibleNav(NAV, { can: (p) => (me ? can(p) : true), moduleOn: showIfModule, isCa }) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [vyapar, me, JSON.stringify(enabledModules)],
   );
@@ -877,6 +884,7 @@ function App() {
             <ViewLoading />
           ) : (
             <ScreenBoundary resetKey={location.pathname}>
+              <FeatureGuard>
               <Routes>
                 <Route
                   path="/"
@@ -998,6 +1006,11 @@ function App() {
                   <Route path={pathForView('salesman')} element={<SalesmenView key={businessKey} />} />
                 )}
                 <Route path={pathForView('reminders')} element={<RemindersPage key={businessKey} />} />
+                <Route path={pathForView('returns')} element={<ReturnRegister key={businessKey} />} />
+                <Route path="/filing/:id" element={<FilingPackPage key={businessKey} />} />
+                <Route path={pathForView('practice')} element={<PracticePage />} />
+                <Route path={pathForView('edit-log')} element={<EditLogPage key={businessKey} />} />
+                <Route path="/practice" element={<Navigate to={pathForView('practice')} replace />} />
                 <Route path={pathForView('catalog')} element={<CatalogSettingsPage key={businessKey} />} />
                 <Route path="/reports" element={<ReportsHub key={businessKey} />} />
                 <Route path="/reports/classic" element={<ReportsView key={businessKey} />} />
@@ -1011,7 +1024,7 @@ function App() {
                     hasFeature('income-tax') ? (
                       <IncomeTax key={businessKey} />
                     ) : (
-                      <LockedFeature name="Income tax" />
+                      <LockedFeature name="Income tax" feature="income-tax" />
                     )
                   }
                 />
@@ -1084,6 +1097,7 @@ function App() {
                 {UiGallery && <Route path="/dev/ui" element={<UiGallery />} />}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              </FeatureGuard>
             </ScreenBoundary>
           )}
         </Suspense>

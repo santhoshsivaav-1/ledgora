@@ -102,11 +102,15 @@ export const SETTING_FEATURE: Readonly<Record<string, Feature>> = {
   'offer.coupons': 'catalog_offers',
 };
 export const TRIAL_DAYS = 7;
-export const GRACE_DAYS = 7;
+/** Days a paid plan keeps working after its period ends or a payment fails, before the account locks. */
+export const GRACE_DAYS = 5;
 
 export const planById = (id: string) => PLANS.find((p) => p.id === id) ?? PLANS[0]!;
 export const planAllows = (plan: string, feature: Feature) =>
   planById(plan).features.includes(feature);
+/** The cheapest plan that includes a feature, for "available on Silver" messages. */
+export const minPlanFor = (feature: Feature): Plan =>
+  PLANS.find((p) => p.features.includes(feature)) ?? PLANS[PLANS.length - 1]!;
 
 export interface SubscriptionRow {
   plan: string;
@@ -117,20 +121,33 @@ export interface SubscriptionRow {
 }
 const DAY = 86_400_000;
 
-/** The plan in force now. Trial = Gold while it lasts; past_due keeps the plan for GRACE_DAYS; canceled runs to period end. */
+export type LockReason = 'trial_ended' | 'plan_ended';
+export type GraceReason = 'payment_failed' | 'period_ended';
+
+/**
+ * The plan in force now.
+ *  - A trial is Gold while it lasts. When it ends without a plan being chosen the account is LOCKED (read-only).
+ *  - A paid plan runs to the end of its period and then for GRACE_DAYS more (a failed payment, a cancelled plan or a
+ *    renewal webhook that has not arrived all look the same from here). After that the account is LOCKED.
+ *  - Free (chosen on purpose) is never locked; it has its own limits.
+ * A locked account can read, export and back up everything; the API refuses its writes (middleware/feature.ts).
+ */
 export function effectivePlan(sub: SubscriptionRow | null | undefined, now = new Date()) {
   const base = {
     trial: false,
     trialDaysLeft: 0,
     graceDaysLeft: 0,
+    graceReason: null as GraceReason | null,
     expired: false,
+    locked: false,
+    lockReason: null as LockReason | null,
     /** Signed up but has not yet chosen the trial or Free: the web app shows the plans page first. */
     needsPlan: false,
     status: sub?.status ?? 'none',
   };
-  if (!sub) return { ...base, plan: 'free' as PlanId, label: 'Free', expired: true };
-  if (sub.status === 'pending')
-    return { ...base, plan: 'free' as PlanId, label: 'Free', needsPlan: true };
+  const free = { ...base, plan: 'free' as PlanId, label: 'Free' };
+  if (!sub) return { ...free, expired: true };
+  if (sub.status === 'pending') return { ...free, needsPlan: true };
   if (sub.status === 'trialing') {
     const left = sub.trialEndsAt ? (sub.trialEndsAt.getTime() - now.getTime()) / DAY : -1;
     if (left > 0)
@@ -141,21 +158,66 @@ export function effectivePlan(sub: SubscriptionRow | null | undefined, now = new
         trial: true,
         trialDaysLeft: Math.ceil(left),
       };
-    return { ...base, plan: 'free' as PlanId, label: 'Free', expired: true };
+    return { ...free, expired: true, locked: true, lockReason: 'trial_ended' as LockReason };
   }
   const paid = (PLANS.some((p) => p.id === sub.plan) ? sub.plan : 'free') as PlanId;
+  if (paid === 'free') return sub.status === 'active' ? free : { ...free, expired: true };
+  const named = { ...base, plan: paid, label: planById(paid).name };
   const end = sub.currentPeriodEnd?.getTime() ?? 0;
-  if (sub.status === 'active') return { ...base, plan: paid, label: planById(paid).name };
-  if (sub.status === 'past_due') {
+  if (sub.status === 'active' || sub.status === 'past_due' || sub.status === 'canceled') {
+    // An active plan with no recorded end (never seen a renewal) is trusted; every other state is judged by its end.
+    if (sub.status === 'active' && (!end || end > now.getTime())) return named;
+    if (sub.status === 'canceled' && end > now.getTime()) return named;
+    if (sub.status === 'past_due' && !end)
+      return { ...free, expired: true, locked: true, lockReason: 'plan_ended' as LockReason };
     const grace = (end + GRACE_DAYS * DAY - now.getTime()) / DAY;
     if (grace > 0)
-      return { ...base, plan: paid, label: planById(paid).name, graceDaysLeft: Math.ceil(grace) };
+      return {
+        ...named,
+        graceDaysLeft: Math.min(GRACE_DAYS, Math.ceil(grace)),
+        graceReason: (sub.status === 'past_due' ? 'payment_failed' : 'period_ended') as GraceReason,
+      };
+    return { ...free, expired: true, locked: true, lockReason: 'plan_ended' as LockReason };
   }
-  if (sub.status === 'canceled' && end > now.getTime())
-    return { ...base, plan: paid, label: planById(paid).name };
-  return { ...base, plan: 'free' as PlanId, label: 'Free', expired: true };
+  return { ...free, expired: true };
 }
 export type Effective = ReturnType<typeof effectivePlan>;
+
+/**
+ * Writes a locked account may still make: choosing or paying for a plan, taking its data out, finishing sign-up and its
+ * own sessions. Everything else is refused with 402 until a plan is chosen.
+ */
+export const LOCK_EXEMPT_WRITES: readonly RegExp[] = [
+  /^\/v1\/billing(\/|$)/,
+  /^\/v1\/export(\/|$)/,
+  /^\/v1\/backups(\/|$)/,
+  /^\/v1\/onboarding(\/|$)/,
+  /^\/v1\/me(\/|$)/,
+  /^\/v1\/sessions(\/|$)/,
+  /^\/v1\/setup\/dismiss$/,
+  /^\/v1\/invitations\/[^/]+\/accept$/,
+  /^\/v1\/reports\/prefs(\/|$)/,
+  /^\/v1\/workspace\/(local-prefs|profile)(\/|$)/,
+  /^\/v1\/messaging\/preview$/,
+];
+export const isLockExempt = (path: string) => LOCK_EXEMPT_WRITES.some((re) => re.test(path));
+
+/** The screen (web address) behind each paid feature, so the sidebar and a route guard read one table. */
+export const WEB_FEATURE_ROUTES: readonly [string, Feature][] = [
+  ['/pos', 'pos'],
+  ['/utilities/barcode', 'barcode'],
+  ['/utilities/tally', 'tally'],
+  ['/utilities/close-fy', 'accounting'],
+  ['/utilities/backup', 'cloud_backup'],
+  ['/grow/salesman', 'staff'],
+  ['/grow/reminders', 'messaging'],
+  ['/grow/catalog', 'catalog_offers'],
+  ['/cash-bank', 'cashbank'],
+  ['/accounting', 'accounting'],
+  ['/income-tax', 'income-tax'],
+];
+export const featureForWebPath = (pathname: string): Feature | null =>
+  WEB_FEATURE_ROUTES.find(([p]) => pathname === p || pathname.startsWith(`${p}/`))?.[1] ?? null;
 
 /** The paid feature a request needs. Reads (GET) are never gated. null = every plan. */
 export function featureForRoute(method: string, path: string): Feature | null {
@@ -172,6 +234,7 @@ export function featureForRoute(method: string, path: string): Feature | null {
     [/^\/v1\/(cashbank|bank-accounts|cash|transfers|cheques|loans)(\/|$)/, 'cashbank'],
     [/^\/v1\/utilities\/tally/, 'tally'],
     [/^\/v1\/catalog(\/|$)/, 'catalog_offers'],
+    [/^\/v1\/items\/[^/]+\/lots(\/|$)/, 'inventory_pro'],
   ];
   return table.find(([re]) => re.test(path))?.[1] ?? null;
 }

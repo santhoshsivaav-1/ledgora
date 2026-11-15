@@ -38,6 +38,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   // Vyapar parity Phase 4: the books. /accounting/:tab is one screen with tabs; viewFromPath maps every tab to it.
   { id: 'accounting', path: '/accounting', title: 'Accounting' },
   { id: 'verify', path: '/utilities/verify', title: 'Verify My Data' },
+  { id: 'edit-log', path: '/utilities/edit-log', title: 'Edit Log' },
   // Vyapar parity Phase 7: the utilities.
   { id: 'barcode', path: '/utilities/barcode', title: 'Barcode Generator' },
   { id: 'tally', path: '/utilities/tally', title: 'Export to Tally' },
@@ -58,6 +59,9 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'pos', path: '/pos', title: 'POS' },
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },
+  // File-ready returns: the Return Register (and each pack at /filing/:id) and the CA's practice view.
+  { id: 'returns', path: '/filing', title: 'Return register' },
+  { id: 'practice', path: '/ca', title: 'CA Dashboard' },
   { id: 'settings', path: '/settings', title: 'Settings' },
   ...SETTINGS_TABS.map(({ id, label }) => ({ id: `settings-${id}`, path: `/settings/${id}`, title: `${label} settings` })),
   { id: 'settings-business', path: '/settings/business', title: 'Business settings' },
@@ -84,6 +88,7 @@ export function viewFromPath(pathname: string) {
   const clean = pathname.replace(/\/+$/, '') || '/';
   if (clean.startsWith('/gst-returns')) return 'filing'; // GST returns has one address per page
   if (clean.startsWith('/accounting')) return 'accounting'; // the books have one address per tab
+  if (clean === '/filing' || clean.startsWith('/filing/')) return 'returns'; // the register and each pack
   if (clean === '/cash-bank' || clean.startsWith('/cash-bank/')) return 'cashbank'; // one address per tab
   if (clean === '/reports' || clean.startsWith('/reports/')) return 'reports'; // the hub and every /reports/:id
   for (const r of VIEW_ROUTES) {

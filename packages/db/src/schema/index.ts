@@ -15,3 +15,5 @@ export * from './reports.ts';
 export * from './pos.ts';
 export * from './utilities.ts';
 export * from './messaging.ts';
+export * from './filing.ts';
+export * from './editLog.ts';

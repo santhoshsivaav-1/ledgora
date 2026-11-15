@@ -32,6 +32,8 @@ export function useEntitlements() {
       if (ent) return !PAID_FEATURES.has(feature) || ent.features.includes(feature);
       return !ADD_ONS.has(feature) || ADD_ON_STATUSES.has(me?.subscription?.status ?? 'trialing');
     },
+    /** Trial over or plan ended past its grace days and no plan chosen: the server refuses writes. */
+    locked: !!(me as { entitlements?: { locked?: boolean } } | null)?.entitlements?.locked,
     entitlements: (me as { entitlements?: unknown } | null)?.entitlements ?? null,
     /** Account Access rules of this member's role: only their own documents; never shown purchase prices. */
     restrictions: (me as { restrictions?: { ownOnly: boolean; hideCost: boolean } } | null)?.restrictions ?? { ownOnly: false, hideCost: false },

@@ -1,4 +1,4 @@
-import { Download, Upload, CheckCircle } from 'lucide-react';
+import { ClipboardCheck, Download, Upload, CheckCircle } from 'lucide-react';
 import { formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import { buildReconciliation, downloadCSV } from './gstHelpers';
@@ -6,7 +6,7 @@ import { downloadJSON, GSTR2B_SAMPLE } from './gstr2bSample';
 
 // GSTR-2B reconciliation against your purchase bills. One page of GST returns (change 3.17).
 export default function Gstr2bPage({
-  activeTab, filteredPurchases, gstr2bData, gstr2bFilter, gstr2bInputRef, handleImport2B, purchases, setGstr2bData, setGstr2bFilter,
+  activeTab, filteredPurchases, gstr2bData, gstr2bFilter, gstr2bInputRef, handleImport2B, purchases, setGstr2bData, setGstr2bFilter, onSaveIms = null, savingPack = false,
 }) {
   return (
     <>
@@ -68,6 +68,11 @@ export default function Gstr2bPage({
               </button>
               {gstr2bData && (
                 <>
+                  {onSaveIms && (
+                    <button className="btn btn-primary" onClick={onSaveIms} disabled={savingPack} title="What to accept, reject or keep pending in IMS, from this reconciliation" style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>
+                      <ClipboardCheck size={13} /> {savingPack ? 'Saving…' : 'IMS action list'}
+                    </button>
+                  )}
                   <button className="btn btn-secondary" onClick={exportReconCSV} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>
                     <Download size={13} /> Export reconciliation CSV
                   </button>

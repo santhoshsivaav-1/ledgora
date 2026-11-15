@@ -23,7 +23,7 @@ export class ApiError extends Error {
 
 export interface ApiHandlers {
   onUnauthorized: () => void;
-  onUpgrade: (info: { message: string; feature?: string }) => void;
+  onUpgrade: (info: { message: string; feature?: string; locked?: boolean }) => void;
   onForbidden: (message: string) => void;
 }
 
@@ -81,7 +81,7 @@ export async function request<T = unknown>(method: string, path: string, body?: 
   const message =
     json?.error?.message ?? json?.message ?? (res.status >= 500 ? 'Cannot reach the Ledgora server. Try again in a moment.' : `Request failed (${res.status})`);
   if (res.status === 401) handlers.onUnauthorized();
-  else if (res.status === 402) handlers.onUpgrade({ message, feature: (json?.error?.details as { feature?: string } | undefined)?.feature });
+  else if (res.status === 402) handlers.onUpgrade({ message, ...(json?.error?.details as { feature?: string; locked?: boolean } | undefined) });
   else if (res.status === 403 && !opts.quietForbidden) handlers.onForbidden(message);
   throw new ApiError(message, res.status, code, json?.error?.details ?? null);
 }

@@ -3,6 +3,7 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  Briefcase,
   Calculator,
   ClipboardList,
   FileClock,
@@ -56,6 +57,8 @@ export interface NavLeaf {
   /** Also lit for any address under this prefix (Settings for every /settings/... tab). */
   match?: string;
   planned?: string;
+  /** 'ca': shown only to someone who is a CA in at least one client organization (the CA Dashboard). */
+  when?: 'ca';
   quickAdd?: string;
 }
 
@@ -191,6 +194,8 @@ export const NAV: NavEntry[] = [
       { id: 'gst-returns', label: 'GST Returns', view: 'filing', icon: BookOpen, module: 'gstReturns', perm: 'report:read' },
       { id: 'tds-tcs', label: 'TDS / TCS', path: '/gst-returns/tds', module: 'gstReturns', perm: 'report:read' },
       { id: 'income-tax', label: 'Income Tax', view: 'incometax', module: 'incomeTax', perm: 'report:read' },
+      { id: 'return-register', label: 'Return Register', view: 'returns', icon: ClipboardList, perm: 'filing:read' },
+      { id: 'practice', label: 'CA Dashboard', view: 'practice', icon: Briefcase, when: 'ca' },
     ],
   },
   {
@@ -211,6 +216,7 @@ export const NAV: NavEntry[] = [
       { id: 'bulk-update', label: 'Bulk Update', path: '/utilities/bulk-update', planned: 'P7' },
       { id: 'barcode', label: 'Barcode Generator', view: 'barcode', module: 'inventory', perm: 'item:read' },
       { id: 'verify', label: 'Verify My Data', view: 'verify', perm: 'verify:run' },
+      { id: 'edit-log', label: 'Edit Log', view: 'edit-log', perm: 'audit:read' },
       { id: 'tally', label: 'Export to Tally', view: 'tally', perm: 'data:export' },
       { id: 'close-fy', label: 'Close Financial Year', view: 'close-fy', perm: 'accounting:manage' },
       { id: 'setup', label: 'Setup My Business', view: 'setup', perm: 'business:read' },
@@ -228,10 +234,15 @@ export const leafPath = (leaf: NavLeaf) => leaf.path ?? (leaf.view ? pathForView
 interface VisibleOptions {
   can: (p: Permission) => boolean;
   moduleOn: (moduleId: string) => boolean;
+  /** This person is a CA in at least one client organization. */
+  isCa?: boolean;
 }
 
-const leafVisible = (leaf: NavLeaf | NavGroup, { can, moduleOn }: VisibleOptions) =>
-  !leaf.planned && (!leaf.perm || can(leaf.perm)) && (!leaf.module || moduleOn(leaf.module));
+const leafVisible = (leaf: NavLeaf | NavGroup, { can, moduleOn, isCa = false }: VisibleOptions) =>
+  !leaf.planned &&
+  (!leaf.perm || can(leaf.perm)) &&
+  (!leaf.module || moduleOn(leaf.module)) &&
+  (!(leaf as NavLeaf).when || isCa);
 
 /**
  * The menu this member sees: planned screens, entries their role may not open and switched-off modules removed. A
@@ -308,10 +319,12 @@ export function navScreens(nav: NavEntry[]) {
 interface ClassicNavOptions {
   showIfModule: (moduleId: string) => boolean;
   openDocs: () => void;
+  /** Adds the CA Dashboard for someone who is a CA in a client organization. */
+  isCa?: boolean;
 }
 
 /** The sidebar of the classic look, item for item what App.jsx built before. */
-export function buildClassicNav({ showIfModule, openDocs }: ClassicNavOptions) {
+export function buildClassicNav({ showIfModule, openDocs, isCa = false }: ClassicNavOptions) {
   // Sell is one menu with a page per stage of the sales flow (change: sales modules). Recurring and Receipts sit
   // with it because they are the later steps of a sale.
   const salesChildren = [
@@ -335,6 +348,9 @@ export function buildClassicNav({ showIfModule, openDocs }: ClassicNavOptions) {
     { id: 'reports', icon: BarChart3, label: 'Reports', module: 'reports' },
     { id: 'filing', icon: BookOpen, label: 'GST Returns', module: 'gstReturns' },
     { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
+    // File-ready returns (D-27): the register for everyone who files, the CA Dashboard for a CA.
+    { id: 'returns', icon: ClipboardList, label: 'Return Register', module: 'gstReturns' },
+    ...(isCa ? [{ id: 'practice', icon: Briefcase, label: 'CA Dashboard', module: 'dashboard' }] : []),
     // v1.10.75 - opens the online documentation, which covers every screen
     // and stays current; the old built-in guide had fallen far behind.
     { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available

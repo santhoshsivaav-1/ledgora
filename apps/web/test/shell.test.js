@@ -104,8 +104,13 @@ describe('navigation (one source for the new menu)', () => {
       'reports',
       'filing',
       'incometax',
+      'returns',
       'guide',
     ]);
+    // D-27: the Return Register for everyone; the CA Dashboard only for a CA of a client organization.
+    expect(
+      buildClassicNav({ showIfModule: () => true, openDocs: () => {}, isCa: true }).map((i) => i.id),
+    ).toContain('practice');
     expect(classic[1].children.map((c) => c.id)).toEqual([
       'sales',
       'sales-quotes',

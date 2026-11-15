@@ -259,12 +259,22 @@ describe('roles and permissions (2.7, 2.8)', () => {
       'viewer',
     ]);
     expect(ROLE_PERMISSIONS.viewer.every((p) => p.endsWith(':read'))).toBe(true);
-    // Share with CA: reads and exports, nothing that writes
+    // Share with CA: reads and exports, nothing that writes to the books. File-ready returns (D-24): the CA also
+    // prepares returns, approves those others prepared and records the ARN when it files them itself.
     expect(
       ROLE_PERMISSIONS.ca.every(
-        (p) => p.endsWith(':read') || ['data:export', 'report:profit'].includes(p),
+        (p) =>
+          p.endsWith(':read') ||
+          [
+            'data:export',
+            'report:profit',
+            'filing:prepare',
+            'filing:approve',
+            'filing:record',
+          ].includes(p),
       ),
     ).toBe(true);
+    expect(ROLE_PERMISSIONS.ca.filter((p) => /:(write|manage|adjust|cancel)$/.test(p))).toEqual([]);
     expect(can('admin', 'billing:manage')).toBe(false);
     expect(can('owner', 'billing:manage')).toBe(true);
     expect(permissionFor('POST', '/v1/invoices/abc/cancel')).toBe('invoice:cancel');

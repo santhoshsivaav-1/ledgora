@@ -10,10 +10,12 @@ import {
   member as memberOut,
   memberPatch,
   okBody,
+  planById,
   type Role,
 } from '@ledgora/contracts';
 import { audit } from '../audit.ts';
 import { roleExists } from './roles.ts';
+import { FREE_SEAT_ROLE, planOf, usageOf } from '../middleware/feature.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { Registrar } from '../http.ts';
 import { sendMail, sendSms } from '../mail/index.ts';
@@ -91,6 +93,17 @@ export function membersModule({ route, documented: _d }: Registrar) {
           .where(and(eq(member.organizationId, orgId), eq(member.role, 'owner')));
         if (owners.length <= 1)
           throw new AppError('unprocessable', 'An organization needs at least one owner');
+      }
+      // A CA seat is free (D-25); turning one into any other role takes a user seat, so the plan's limit applies.
+      if (body.role && target.role === FREE_SEAT_ROLE && body.role !== FREE_SEAT_ROLE) {
+        const eff = await planOf(deps.db, orgId);
+        const cap = planById(eff.plan).limits.users;
+        if ((await usageOf(deps.db, orgId)).users >= cap)
+          throw new AppError(
+            'payment_required',
+            `Your ${eff.label} plan allows ${cap} user${cap === 1 ? '' : 's'} besides your CA. Upgrade for more.`,
+            { limit: 'users', cap, plan: eff.plan },
+          );
       }
       if (body.role)
         await deps.db.update(member).set({ role: body.role }).where(eq(member.id, target.id));

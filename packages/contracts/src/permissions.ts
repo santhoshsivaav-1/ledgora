@@ -52,6 +52,12 @@ export const PERMISSIONS = [
   'team:manage',
   'audit:read',
   'billing:manage',
+  // File-ready returns (docs/FILE_READY_PLAN.md): see filing packs, prepare and save them, approve them as the reviewing
+  // CA, and record that a pack was filed on the portal (ARN).
+  'filing:read',
+  'filing:prepare',
+  'filing:approve',
+  'filing:record',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -87,7 +93,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   owner: 'Owner',
   admin: 'Admin',
   accountant: 'Accountant',
-  ca: 'CA (read-only)',
+  ca: 'CA (review and approve)',
   salesman: 'Salesman',
   biller: 'Biller',
   stock_keeper: 'Stock keeper',
@@ -117,9 +123,21 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'cashbank:write',
     'report:profit',
     'message:write',
+    'filing:prepare',
+    'filing:record',
   ],
-  // P7-S6 Share with CA: sees the books, reports and exports; can not create, edit or delete anything.
-  ca: [...bookReads, 'audit:read', 'data:export', 'report:profit'],
+  // P7-S6 Share with CA: sees the books, reports and exports; can not create, edit or delete anything in them.
+  // File-ready returns (D-24): prepares packs (the CA usually does the return), approves or sends back packs others
+  // prepared (never its own), and records the ARN when it files them itself.
+  ca: [
+    ...bookReads,
+    'audit:read',
+    'data:export',
+    'report:profit',
+    'filing:prepare',
+    'filing:approve',
+    'filing:record',
+  ],
   salesman: [
     'invoice:read',
     'invoice:write',
@@ -244,6 +262,9 @@ export function permissionFor(method: string, path: string): Permission | null {
   if (/^\/v1\/backups/.test(path)) return m === 'delete' ? 'settings:write' : 'data:export';
   if (/^\/v1\/setup/.test(path)) return read ? 'business:read' : 'business:write';
   if (/^\/v1\/tds/.test(path)) return read ? 'payment:read' : 'payment:write';
+  // File-ready returns: each route names its own permission; this is the default for the family.
+  if (/^\/v1\/filing(-packs|-calendar)?(\/|$)/.test(path))
+    return read ? 'filing:read' : 'filing:prepare';
   const table: [RegExp, string][] = [
     [/^\/v1\/(invoices|pos)/, 'invoice'],
     [/^\/v1\/(parties|party-groups)/, 'party'],
@@ -335,6 +356,16 @@ export const PERMISSION_GROUPS: readonly {
     ],
   },
   {
+    id: 'filing',
+    label: 'Returns filing',
+    permissions: [
+      { key: 'filing:read', label: 'View filing packs and the return register' },
+      { key: 'filing:prepare', label: 'Prepare packs and send them for review' },
+      { key: 'filing:approve', label: 'Approve or send back packs (the reviewing CA)' },
+      { key: 'filing:record', label: 'Record a pack as filed (ARN), reopen it' },
+    ],
+  },
+  {
     id: 'grow',
     label: 'Messages and reminders',
     permissions: [
@@ -392,6 +423,8 @@ export function normalizePermissions(list: readonly string[]): Permission[] {
   if (set.has('stock:adjust')) set.add('item:read');
   if (set.has('invoice:cancel')) set.add('invoice:read');
   if (set.has('report:profit')) set.add('report:read');
+  if (set.has('filing:prepare') || set.has('filing:approve') || set.has('filing:record'))
+    set.add('filing:read');
   return PERMISSIONS.filter((p) => set.has(p));
 }
 

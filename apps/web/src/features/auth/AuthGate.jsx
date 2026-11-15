@@ -47,7 +47,7 @@ export default function AuthGate({ children }) {
       else if (!ob.complete) setPhase('onboarding');
       else if (flag(GUIDE_KEY)) setPhase('guide');
       // The timeline check at sign-in: an owner whose trial or plan has run out sees the plans once before the app.
-      else if (owner && ent?.expired && !seen(ENDED_KEY)) setPhase('ended');
+      else if (owner && (ent?.locked || ent?.expired) && !seen(ENDED_KEY)) setPhase('ended');
       else setPhase('in');
     } catch (e) {
       setProblem(e.message);

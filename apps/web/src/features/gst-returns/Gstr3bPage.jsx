@@ -1,10 +1,10 @@
-import { Download, Upload, CheckCircle } from 'lucide-react';
+import { ClipboardCheck, Download, Upload, CheckCircle } from 'lucide-react';
 import { formatCurrency, getStateCode } from '../../utils';
 import { billIsInterstate, computeItemTaxSplit } from './gstHelpers';
 
 // GSTR-3B: the monthly summary return. One page of GST returns (change 3.17).
 export default function Gstr3bPage({
-  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, rcm = null, onRecordRcm, unreg32 = [], inward5 = null, supplies31a = grandTotals, exempt31c = nilExempt.total, nonGst31e = 0,
+  activeTab, b2cBills, exportGSTR3B, exportGSTR3BJSON, onSavePack = null, savingPack = false, exportTotals, nilExempt, grandTotals, hasCarry, itcCarry, itcFromExpenses, markFiled, netPayable, netTax, outputTax, periodFiling, setOff, table4, itc180, rcm = null, onRecordRcm, unreg32 = [], inward5 = null, supplies31a = grandTotals, exempt31c = nilExempt.total, nonGst31e = 0,
 }) {
   return (
     <>
@@ -14,6 +14,9 @@ export default function Gstr3bPage({
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', alignItems: 'center' }}>
             <button className="btn btn-secondary" onClick={exportGSTR3B} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Download size={13} /> 3B CSV</button>
             <button className="btn btn-primary" onClick={exportGSTR3BJSON} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Upload size={13} /> 3B JSON</button>
+            {onSavePack && (
+              <button className="btn btn-primary" onClick={onSavePack} disabled={savingPack} title="Check the return and keep it for review and filing (Return Register)" style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><ClipboardCheck size={13} /> {savingPack ? 'Saving…' : 'Save filing pack'}</button>
+            )}
             {!periodFiling.gstr3b && (
               <button className="btn btn-secondary" onClick={() => markFiled('gstr3b')} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem', marginLeft: 'auto', color: '#059669', borderColor: '#bbf7d0' }}>
                 <CheckCircle size={13} /> Mark Filed

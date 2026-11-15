@@ -150,6 +150,7 @@ export function createRegistrar(app: Hono, deps: Deps) {
           await requireFeature(deps.db, ctx, spec.method, c.req.path, {
             explicit: spec.feature,
             overwrite: c.req.query('overwrite'),
+            inviteRole: (body as { role?: unknown } | undefined)?.role as string | undefined,
           });
           // P7-S6: a member limited to a date range sees only that range (queries outside it are refused, rows cut).
           const limited = spec.method === 'get' && hasRange(ctx);

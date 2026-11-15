@@ -37,6 +37,7 @@ describe('plan-gated settings', () => {
     const t = await h.newTenant();
     await patch(t, { 'item.batch': true });
     await setSub(t.orgId, `trial_ends_at = now() - interval '1 day'`);
+    await t.call('POST', '/v1/billing/free'); // an ended trial locks the account; Free is the chosen way on
     const g = await get(t);
     expect(g.body.settings['item.batch']).toBe(false); // saved value kept, read as the default
     expect(g.body.locked['item.batch']).toBe('inventory_pro');

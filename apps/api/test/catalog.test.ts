@@ -93,6 +93,7 @@ describe('online catalog', () => {
     );
     forgetPlan(t.orgId);
     expect((await pub(slug)).status).toBe(404);
+    await t.call('POST', '/v1/billing/free');
     expect(
       (await t.call('PUT', '/v1/catalog', { businessId: t.businessId, enabled: true, slug }))
         .status,

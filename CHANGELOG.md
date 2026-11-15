@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Edit Log (Companies Act audit trail).** Every insert, change and delete in the books is written by the database to
+  an append-only log, with who, when, from where and the values before and after. Nobody, not even the owner, can
+  change, delete or switch it off. Utilities › Edit Log shows it with filters and exports a CSV for the auditor.
+- **GSTR-1A, GSTR-9 and CMP-08 packs.** GSTR-1A lists what changed since GSTR-1 was filed and is offered only between
+  GSTR-1 and GSTR-3B; GSTR-3B is then checked against the amended figures. GSTR-9 is worked out from the year's filed
+  GSTR-1 and GSTR-3B (Tables 4–9 and 17) and lists what only you can fill. CMP-08 is worked out for composition dealers
+  at their rate. See `docs/FEATURE_GAPS_2026-11.md` › Progress.
+- **File-ready returns, reviewed by your CA.** GSTR-1, GSTR-3B and the IMS action list can be saved as a *filing pack*:
+  the server checks it (GSTINs, invoice numbers, dates, rates, IGST vs CGST/SGST, 3B against GSTR-1 and 2B), keeps
+  every version with its SHA-256, and marks it ready once errors are fixed and warnings accepted. The business or its
+  CA prepares it, the other approves the exact file or sends it back. A CA invited with the role **CA (review and
+  approve)** gets a free seat on every plan and a **CA Dashboard** across all their clients. The person uploads the
+  file on the portal and records the ARN; the month then locks. The **Return Register** shows every return of the year,
+  its status and what is overdue, from a month the business chooses. The app never files anything itself. See
+  `docs/FILE_READY_PLAN.md`, `docs/FEATURE_GAPS_2026-11.md` and `docs/DECISIONS.md` (D-24 to D-27).
+
 - **A complete sign-up flow, a visible plan, and role permissions you can edit.** Sign-up now leads to a plans page
   (every plan, what it has and what it lacks, "Start 7-day free trial" at the bottom, or use Free), then a four-step
   business setup, then a guide to the first invoice. The trial is 7 days and starts only when the owner starts it, once.

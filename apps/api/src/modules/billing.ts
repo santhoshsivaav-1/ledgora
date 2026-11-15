@@ -106,6 +106,44 @@ export function billingModule({ route }: Registrar) {
 
   route({
     method: 'post',
+    path: '/v1/billing/free',
+    tag: 'Billing',
+    summary:
+      'Carry on with the Free plan after the trial or a paid plan has ended (unlocks a locked account; owner only)',
+    permission: null,
+    handler: async ({ tx, orgId, auth }) => {
+      ownerOnly(auth.role);
+      const [sub] = await tx
+        .select()
+        .from(subscriptions)
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+      if (!sub) throw new AppError('conflict', 'This account has no subscription record');
+      const eff = effectivePlan(sub);
+      // Only a locked account needs this. A paid plan in its grace days must be renewed, not dropped by accident.
+      if (!eff.locked) {
+        if (eff.plan === 'free' && !eff.needsPlan) return { ok: true, status: sub.status };
+        throw new AppError('conflict', 'Your plan is still in force');
+      }
+      await tx
+        .update(subscriptions)
+        .set({
+          plan: 'free',
+          status: 'active',
+          currentPeriodEnd: null,
+          trialEndsAt: sub.trialEndsAt,
+        })
+        .where(eq(subscriptions.id, sub.id));
+      await audit(tx, orgId, 'subscription.free', 'subscription', null, {
+        after: { from: eff.lockReason },
+      });
+      forgetPlan(orgId);
+      return { ok: true, status: 'active' };
+    },
+  });
+
+  route({
+    method: 'post',
     path: '/v1/billing/checkout',
     tag: 'Billing',
     summary: 'Start paying for a plan: returns the provider page to pay on (owner only)',

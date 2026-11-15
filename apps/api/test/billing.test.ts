@@ -106,26 +106,86 @@ describe('trial and plans', () => {
     expect(b.usage).toMatchObject({ businesses: 1, users: 1 });
   });
 
-  it('after the trial: Free. Paid features answer 402 on write, reads still work, core billing still works', async () => {
+  it('after the trial the account is LOCKED: writes answer 402, reads and exports still work, choosing Free unlocks it', async () => {
     const w = await h.newTenant();
     await setSub(w.orgId, `trial_ends_at = now() - interval '1 day'`);
     expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
       plan: 'free',
       expired: true,
+      locked: true,
+      lockReason: 'trial_ended',
     });
+    const blocked = await item(w);
+    expect(blocked.status).toBe(402);
+    expect(blocked.body.error).toMatchObject({
+      code: 'payment_required',
+      details: { locked: true, reason: 'trial_ended' },
+    });
+    expect((await w.call('GET', '/v1/items')).status).toBe(200);
+    expect((await w.call('GET', '/v1/billing')).status).toBe(200);
+    expect((await w.call('POST', '/v1/export', {})).status).not.toBe(402);
+    // Only the owner may choose, and only a locked account needs to.
+    const viewer = await h.addMember(w, 'viewer');
+    expect((await viewer.call('POST', '/v1/billing/free')).status).toBe(403);
+    expect((await w.call('POST', '/v1/billing/free')).status).toBe(200);
+    expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      plan: 'free',
+      locked: false,
+    });
+    expect((await item(w)).status).toBe(201);
     const staff = await w.call('POST', '/v1/staff', { businessId: w.businessId, name: 'Ravi' });
     expect(staff.status).toBe(402);
     expect(staff.body.error).toMatchObject({
-      code: 'payment_required',
-      details: { feature: 'staff', plan: 'free' },
+      details: { feature: 'staff', plan: 'free', requiredPlan: 'silver' },
     });
     expect((await w.call('GET', '/v1/staff?businessId=' + w.businessId)).status).toBe(200);
+  });
+
+  it('a paid plan that ends gets 5 days of grace, then the account locks', async () => {
+    const w = await h.newTenant();
+    const set = (days: number, status = 'active') =>
+      setSub(
+        w.orgId,
+        `plan = 'silver', status = '${status}', current_period_end = now() + interval '${days} days'`,
+      );
+    await set(10);
+    expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      plan: 'silver',
+      locked: false,
+      graceDaysLeft: 0,
+    });
+    // period ended 2 days ago and no renewal webhook arrived: still Silver, 3 grace days left
+    await set(-2);
+    expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      plan: 'silver',
+      locked: false,
+      graceDaysLeft: 3,
+      graceReason: 'period_ended',
+    });
+    expect((await item(w)).status).toBe(201);
+    // a failed payment is graced the same way
+    await set(-1, 'past_due');
+    expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      graceDaysLeft: 4,
+      graceReason: 'payment_failed',
+    });
+    // 6 days past the end: locked
+    await set(-6);
+    expect((await w.call('GET', '/v1/me')).body.entitlements).toMatchObject({
+      plan: 'free',
+      locked: true,
+      lockReason: 'plan_ended',
+    });
+    expect((await item(w)).status).toBe(402);
+    // paying again (the webhook) unlocks it at once
+    await set(30);
     expect((await item(w)).status).toBe(201);
   });
 
   it('Free allows 50 sale documents a month, then 402', async () => {
     const w = await h.newTenant();
     await setSub(w.orgId, `trial_ends_at = now() - interval '1 day'`);
+    expect((await w.call('POST', '/v1/billing/free')).status).toBe(200);
     const itemId = (await item(w)).body.id;
     const sale = () =>
       w.call('POST', '/v1/invoices', {
@@ -142,6 +202,7 @@ describe('trial and plans', () => {
   it('Free allows one business and one user', async () => {
     const w = await h.newTenant();
     await setSub(w.orgId, `trial_ends_at = now() - interval '1 day'`);
+    await w.call('POST', '/v1/billing/free');
     const biz = await w.call('POST', '/v1/businesses', { name: 'Second' });
     expect(biz.status).toBe(402);
     expect(biz.body.error.details).toMatchObject({ limit: 'businesses', cap: 1 });

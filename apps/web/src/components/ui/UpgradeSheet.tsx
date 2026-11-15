@@ -7,14 +7,14 @@ import { configureApiClient } from '../../lib/apiClient';
  * until then nothing returns 402, but every screen already handles it the same way.
  */
 export default function UpgradeSheetHost() {
-  const [info, setInfo] = useState<{ message: string; feature?: string } | null>(null);
+  const [info, setInfo] = useState<{ message: string; feature?: string; locked?: boolean } | null>(null);
   useEffect(() => { configureApiClient({ onUpgrade: setInfo }); }, []);
   if (!info) return null;
   return (
     <div className="modal-overlay" onClick={() => setInfo(null)}>
-      <div className="modal-content glass-panel" role="dialog" aria-label="Upgrade your plan" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, padding: '1.5rem' }}>
+      <div className="modal-content glass-panel" role="dialog" aria-label={info.locked ? 'Choose a plan' : 'Upgrade your plan'} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, padding: '1.5rem' }}>
         <button className="icon-btn" style={{ float: 'right' }} onClick={() => setInfo(null)} title="Close"><X size={18} /></button>
-        <h2 style={{ marginTop: 0 }}><Sparkles size={18} style={{ verticalAlign: '-3px' }} /> Upgrade to use this</h2>
+        <h2 style={{ marginTop: 0 }}><Sparkles size={18} style={{ verticalAlign: '-3px' }} /> {info.locked ? 'Choose a plan to continue' : 'Upgrade to use this'}</h2>
         <p>{info.message}</p>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary" onClick={() => { setInfo(null); window.location.assign('/settings/billing'); }}>See plans</button>

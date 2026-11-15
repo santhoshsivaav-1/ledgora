@@ -1,8 +1,10 @@
-import { and, count, desc, eq, gt, gte, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, gt, gte, isNull, ne } from 'drizzle-orm';
 import { schema, withTenant, type Database, type Tx } from '@ledgora/db';
 import {
   effectivePlan,
   featureForRoute,
+  isLockExempt,
+  minPlanFor,
   planAllows,
   planById,
   type Effective,
@@ -41,14 +43,26 @@ export async function planOf(db: Database, orgId: string, now = new Date()) {
 }
 
 type Limit = 'docs' | 'businesses' | 'users';
-function limitFor(method: string, path: string, overwrite?: string): Limit | null {
+/**
+ * The CA seat (D-25): members and invitations with the CA role never count toward the plan's user limit, on any plan,
+ * as accountant seats do in Zoho Books and QuickBooks. A CA can not write to the books, so the seat can not be used as
+ * a free extra user.
+ */
+export const FREE_SEAT_ROLE = 'ca';
+
+function limitFor(
+  method: string,
+  path: string,
+  overwrite?: string,
+  inviteRole?: string,
+): Limit | null {
   if (method !== 'post') return null;
   if (path === '/v1/invoices' || path === '/v1/pos/sales') return 'docs';
   // A bill saved again with ?overwrite=1 is an edit, not a new document.
   if (path === '/v1/workspace/collections/bills' && overwrite !== '1' && overwrite !== 'true')
     return 'docs';
   if (path === '/v1/businesses') return 'businesses';
-  if (path === '/v1/invitations') return 'users';
+  if (path === '/v1/invitations') return inviteRole === FREE_SEAT_ROLE ? null : 'users';
   return null;
 }
 
@@ -78,7 +92,7 @@ export async function usageOf(db: Database, orgId: string, now = new Date()) {
   const [m] = await db
     .select({ n: count() })
     .from(schema.member)
-    .where(eq(schema.member.organizationId, orgId));
+    .where(and(eq(schema.member.organizationId, orgId), ne(schema.member.role, FREE_SEAT_ROLE)));
   const [i] = await db
     .select({ n: count() })
     .from(schema.invitation)
@@ -87,6 +101,7 @@ export async function usageOf(db: Database, orgId: string, now = new Date()) {
         eq(schema.invitation.organizationId, orgId),
         eq(schema.invitation.status, 'pending'),
         gt(schema.invitation.expiresAt, now),
+        ne(schema.invitation.role, FREE_SEAT_ROLE),
       ),
     );
   return { docsThisMonth: docs, businesses, users: Number(m!.n) + Number(i!.n) };
@@ -97,18 +112,29 @@ export async function requireFeature(
   ctx: OrgContext,
   method: string,
   path: string,
-  opts: { explicit?: string; overwrite?: string } = {},
+  opts: { explicit?: string; overwrite?: string; inviteRole?: string } = {},
 ) {
   const m = method.toLowerCase();
   const feature = (opts.explicit as Feature | undefined) ?? featureForRoute(m, path);
-  const limit = limitFor(m, path, opts.overwrite);
-  if (!feature && !limit) return;
+  const limit = limitFor(m, path, opts.overwrite, opts.inviteRole);
+  const writes = m !== 'get' && m !== 'head' && m !== 'options';
+  if (!feature && !limit && !writes) return;
   const eff = await planOf(db, ctx.orgId);
+  // A locked account (trial over, or a paid plan past its grace days) is read-only: it can look at and export
+  // everything, and choose a plan, but nothing is created, edited or deleted until it does.
+  if (writes && eff.locked && !isLockExempt(path))
+    throw new AppError(
+      'payment_required',
+      eff.lockReason === 'trial_ended'
+        ? 'Your free trial has ended, so this account is read-only. Choose a plan to continue.'
+        : 'Your plan has ended, so this account is read-only. Renew or choose a plan to continue.',
+      { locked: true, reason: eff.lockReason, plan: eff.plan },
+    );
   if (feature && !planAllows(eff.plan, feature))
     throw new AppError(
       'payment_required',
-      `Your ${eff.label} plan does not include this. Upgrade to use it.`,
-      { feature, plan: eff.plan },
+      `${eff.label === 'Free' ? 'The Free plan' : `Your ${eff.label} plan`} does not include this. It is available from the ${minPlanFor(feature).name} plan.`,
+      { feature, plan: eff.plan, requiredPlan: minPlanFor(feature).id },
     );
   if (!limit) return;
   const caps = planById(eff.plan).limits;

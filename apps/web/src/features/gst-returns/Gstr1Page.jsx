@@ -1,10 +1,10 @@
-import { Download, Upload, CheckCircle } from 'lucide-react';
+import { ClipboardCheck, Download, Upload, CheckCircle } from 'lucide-react';
 import { formatCurrency, placeOfSupplyLabel } from '../../utils';
 import { getTaxableAmount } from './gstHelpers';
 
 // GSTR-1: outward supplies, with the JSON for the portal. One page of GST returns (change 3.17).
 export default function Gstr1Page({
-  activeTab, advances, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, exportHSN, grandTotals, hsnRows, nilExempt, exportBills, markFiled, periodFiling,
+  activeTab, advances, b2bRows, b2bTotals, b2cBills, b2cLarge, b2cPos, b2cRates, b2cTable7, b2cTotals, creditNotes, docSummary, exportB2B, exportB2C, exportCDNR, exportDocSummary, exportGSTR1JSON, onSavePack = null, onSaveAmend = null, savingPack = false, exportHSN, grandTotals, hsnRows, nilExempt, exportBills, markFiled, periodFiling,
 }) {
   return (
     <>
@@ -13,6 +13,12 @@ export default function Gstr1Page({
           {/* Actions bar */}
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <button className="btn btn-primary" onClick={exportGSTR1JSON} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Upload size={13} /> JSON Export</button>
+            {onSaveAmend && (
+              <button className="btn btn-secondary" onClick={onSaveAmend} disabled={savingPack} title="After GSTR-1 is filed and before GSTR-3B: what changed since, as GSTR-1A" style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>GSTR-1A</button>
+            )}
+            {onSavePack && (
+              <button className="btn btn-primary" onClick={onSavePack} disabled={savingPack} title="Check the return and keep it for review and filing (Return Register)" style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><ClipboardCheck size={13} /> {savingPack ? 'Saving…' : 'Save filing pack'}</button>
+            )}
             <button className="btn btn-secondary" onClick={exportB2B} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Download size={13} /> B2B</button>
             <button className="btn btn-secondary" onClick={exportB2C} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Download size={13} /> B2C</button>
             <button className="btn btn-secondary" onClick={exportHSN} style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}><Download size={13} /> HSN</button>
