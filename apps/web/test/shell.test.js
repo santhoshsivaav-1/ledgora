@@ -52,8 +52,19 @@ describe('navigation (one source for the new menu)', () => {
     expect(parties.view).toBe('clients');
     // Cash & Bank shipped in Phase 5: one screen, a tab per entry, all behind cashbank:read.
     const cb = nav.find((e) => e.id === 'cashbank');
-    expect(cb.children.map((c) => c.id)).toEqual(['bank-accounts', 'cash-in-hand', 'transfers', 'cheques', 'loans', 'reconcile']);
-    expect(leaves(visibleNav(NAV, { can: (p) => p !== 'cashbank:read', moduleOn: () => true })).map((l) => l.id)).not.toContain('cheques');
+    expect(cb.children.map((c) => c.id)).toEqual([
+      'bank-accounts',
+      'cash-in-hand',
+      'transfers',
+      'cheques',
+      'loans',
+      'reconcile',
+    ]);
+    expect(
+      leaves(visibleNav(NAV, { can: (p) => p !== 'cashbank:read', moduleOn: () => true })).map(
+        (l) => l.id,
+      ),
+    ).not.toContain('cheques');
     expect(isGroup(nav.find((e) => e.id === 'sale'))).toBe(true);
   });
 

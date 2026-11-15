@@ -2,7 +2,20 @@
 // registration, the book year start month, and stock for lines sold in a secondary unit.
 import { describe, expect, it } from 'vitest';
 import {
-  amountInWordsLang, bookYearBounds, compositionTax, sectionsWith, TDS_SECTIONS, remapPostings, DEFAULT_ACCOUNT_ROLES, ACC, bookYearStart, gstDueSummary, gstDuesForPeriod, numberToWords, qrmp3bDay, stockEffect,
+  amountInWordsLang,
+  bookYearBounds,
+  compositionTax,
+  sectionsWith,
+  TDS_SECTIONS,
+  remapPostings,
+  DEFAULT_ACCOUNT_ROLES,
+  ACC,
+  bookYearStart,
+  gstDueSummary,
+  gstDuesForPeriod,
+  numberToWords,
+  qrmp3bDay,
+  stockEffect,
 } from '../src/index.ts';
 
 describe('amount in words by language', () => {
@@ -14,7 +27,9 @@ describe('amount in words by language', () => {
     expect(amountInWordsLang(0, 'hi')).toBe('शून्य रुपये मात्र');
     expect(amountInWordsLang(99, 'hi')).toBe('निन्यानवे रुपये मात्र');
     expect(amountInWordsLang(1500, 'hi')).toBe('एक हज़ार पाँच सौ रुपये मात्र');
-    expect(amountInWordsLang(12345678, 'hi')).toBe('एक करोड़ तेईस लाख पैंतालीस हज़ार छह सौ अठहत्तर रुपये मात्र');
+    expect(amountInWordsLang(12345678, 'hi')).toBe(
+      'एक करोड़ तेईस लाख पैंतालीस हज़ार छह सौ अठहत्तर रुपये मात्र',
+    );
     expect(amountInWordsLang(10.25, 'hi')).toBe('दस रुपये और पच्चीस पैसे मात्र');
     expect(amountInWordsLang(1500000000, 'hi')).toBe('एक सौ पचास करोड़ रुपये मात्र');
   });
@@ -30,7 +45,8 @@ describe('amount in words by language', () => {
     expect(amountInWordsLang(100000, 'ta')).toBe('ஒரு இலட்சம் ரூபாய் மட்டும்');
     expect(amountInWordsLang(10000000, 'ta')).toBe('ஒரு கோடி ரூபாய் மட்டும்');
     expect(amountInWordsLang(12.5, 'ta')).toBe('பன்னிரண்டு ரூபாய் ஐம்பது பைசா மட்டும்');
-    for (let n = 1; n < 1000; n++) expect(amountInWordsLang(n, 'ta')).not.toMatch(/undefined|\s{2}/);
+    for (let n = 1; n < 1000; n++)
+      expect(amountInWordsLang(n, 'ta')).not.toMatch(/undefined|\s{2}/);
   });
 });
 
@@ -43,22 +59,35 @@ describe('GST due dates', () => {
     expect(gstDuesForPeriod('2026-12').map((d) => d.due)).toEqual(['2027-01-11', '2027-01-20']);
   });
   it('QRMP: IFF and PMT-06 in the first two months, quarterly R1 and 3B by state', () => {
-    expect(gstDuesForPeriod('2026-04', { frequency: 'qrmp' }).map((d) => [d.form, d.due, !!d.optional])).toEqual([
+    expect(
+      gstDuesForPeriod('2026-04', { frequency: 'qrmp' }).map((d) => [d.form, d.due, !!d.optional]),
+    ).toEqual([
       ['IFF', '2026-05-13', true],
       ['PMT-06', '2026-05-25', false],
     ]);
-    expect(gstDuesForPeriod('2026-06', { frequency: 'qrmp', stateCode: '33' }).map((d) => [d.form, d.due])).toEqual([
+    expect(
+      gstDuesForPeriod('2026-06', { frequency: 'qrmp', stateCode: '33' }).map((d) => [
+        d.form,
+        d.due,
+      ]),
+    ).toEqual([
       ['GSTR-1', '2026-07-13'],
       ['GSTR-3B', '2026-07-22'],
     ]);
-    expect(gstDuesForPeriod('2026-06', { frequency: 'qrmp', stateCode: '07' })[1].due).toBe('2026-07-24');
+    expect(gstDuesForPeriod('2026-06', { frequency: 'qrmp', stateCode: '07' })[1].due).toBe(
+      '2026-07-24',
+    );
     expect(qrmp3bDay('9')).toBe(24);
     expect(qrmp3bDay(null)).toBe(24);
   });
   it('composition: CMP-08 after each quarter, GSTR-4 after the year; unregistered: nothing', () => {
     expect(gstDuesForPeriod('2026-05', { regType: 'composition' })).toEqual([]);
-    expect(gstDuesForPeriod('2026-09', { regType: 'composition' }).map((d) => [d.form, d.due])).toEqual([['CMP-08', '2026-10-18']]);
-    expect(gstDuesForPeriod('2027-03', { regType: 'composition' }).map((d) => [d.form, d.due])).toEqual([
+    expect(
+      gstDuesForPeriod('2026-09', { regType: 'composition' }).map((d) => [d.form, d.due]),
+    ).toEqual([['CMP-08', '2026-10-18']]);
+    expect(
+      gstDuesForPeriod('2027-03', { regType: 'composition' }).map((d) => [d.form, d.due]),
+    ).toEqual([
       ['CMP-08', '2027-04-18'],
       ['GSTR-4', '2027-04-30'],
     ]);
@@ -72,12 +101,24 @@ describe('book year start', () => {
   it('April is the Indian FY', () => {
     expect(bookYearStart(new Date(2027, 0, 15), 4)).toBe(2026);
     expect(bookYearStart(new Date(2027, 3, 1), 4)).toBe(2027);
-    expect(bookYearBounds(2026, 4)).toEqual({ from: '2026-04-01', to: '2027-03-31', label: '2026-27' });
+    expect(bookYearBounds(2026, 4)).toEqual({
+      from: '2026-04-01',
+      to: '2027-03-31',
+      label: '2026-27',
+    });
   });
   it('January is the calendar year; other months run into the next year', () => {
     expect(bookYearStart(new Date(2027, 0, 15), 1)).toBe(2027);
-    expect(bookYearBounds(2027, 1)).toEqual({ from: '2027-01-01', to: '2027-12-31', label: '2027' });
-    expect(bookYearBounds(2026, 7)).toEqual({ from: '2026-07-01', to: '2027-06-30', label: '2026-27' });
+    expect(bookYearBounds(2027, 1)).toEqual({
+      from: '2027-01-01',
+      to: '2027-12-31',
+      label: '2027',
+    });
+    expect(bookYearBounds(2026, 7)).toEqual({
+      from: '2026-07-01',
+      to: '2027-06-30',
+      label: '2026-27',
+    });
     expect(bookYearBounds(2027, 3).to).toBe('2028-02-29'); // leap year
   });
 });
@@ -107,7 +148,12 @@ describe('TDS / TCS rate masters', () => {
     expect(TDS_SECTIONS.find((s) => s.code === '194O').rate).toBe(0.1);
   });
   it('an override changes a rate, an unknown code is added before Custom, nonsense is ignored', () => {
-    const list = sectionsWith(TDS_SECTIONS, [{ code: '194j', rate: 2 }, { code: '194T', rate: 10 }, { code: 'x', rate: 400 }, { code: '', rate: 1 }]);
+    const list = sectionsWith(TDS_SECTIONS, [
+      { code: '194j', rate: 2 },
+      { code: '194T', rate: 10 },
+      { code: 'x', rate: 400 },
+      { code: '', rate: 1 },
+    ]);
     expect(list.find((s) => s.code === '194J')).toMatchObject({ rate: 2 });
     expect(list.find((s) => s.code === '194J').label).toMatch(/your rate 2%/);
     const i = list.findIndex((s) => s.code === '194T');
@@ -119,12 +165,27 @@ describe('TDS / TCS rate masters', () => {
 });
 
 describe('default accounts', () => {
-  const p = [{ date: '2026-11-01', refType: 'invoice', refId: '1', lines: [
-    { account: ACC.RECEIVABLE, debit: 118 }, { account: ACC.SALES, credit: 100 }, { account: ACC.OUT_CGST, credit: 9 }, { account: ACC.OUT_SGST, credit: 9 },
-  ] }];
+  const p = [
+    {
+      date: '2026-11-01',
+      refType: 'invoice',
+      refId: '1',
+      lines: [
+        { account: ACC.RECEIVABLE, debit: 118 },
+        { account: ACC.SALES, credit: 100 },
+        { account: ACC.OUT_CGST, credit: 9 },
+        { account: ACC.OUT_SGST, credit: 9 },
+      ],
+    },
+  ];
   it('moves only the chosen built-in accounts, keeping the voucher balanced', () => {
     const out = remapPostings(p, { sales: '4005' });
-    expect(out[0].lines.map((l) => l.account)).toEqual([ACC.RECEIVABLE, '4005', ACC.OUT_CGST, ACC.OUT_SGST]);
+    expect(out[0].lines.map((l) => l.account)).toEqual([
+      ACC.RECEIVABLE,
+      '4005',
+      ACC.OUT_CGST,
+      ACC.OUT_SGST,
+    ]);
     const dr = out[0].lines.reduce((n, l) => n + (l.debit || 0), 0);
     const cr = out[0].lines.reduce((n, l) => n + (l.credit || 0), 0);
     expect(dr).toBe(cr);
@@ -138,9 +199,16 @@ describe('default accounts', () => {
 
 describe('lot stock (API and POS)', () => {
   it('batches and serials from opening and moves; sale problems', async () => {
-    const { lotStock, serialStock, saleLotProblems, tracksBatches, tracksSerials } = await import('../src/index.ts');
-    const opening = { batches: [{ batchNo: 'B1', expDate: '2027-01-31', qty: 5 }], serials: ['S1', 'S2'] };
-    const moves = [{ sign: 1, quantity: 3, batchNo: 'B0', expDate: '2026-12-31' }, { sign: -1, quantity: 2, batchNo: 'b1', serials: ['s1'] }];
+    const { lotStock, serialStock, saleLotProblems, tracksBatches, tracksSerials } =
+      await import('../src/index.ts');
+    const opening = {
+      batches: [{ batchNo: 'B1', expDate: '2027-01-31', qty: 5 }],
+      serials: ['S1', 'S2'],
+    };
+    const moves = [
+      { sign: 1, quantity: 3, batchNo: 'B0', expDate: '2026-12-31' },
+      { sign: -1, quantity: 2, batchNo: 'b1', serials: ['s1'] },
+    ];
     expect(lotStock(opening, moves)).toEqual([
       { batchNo: 'B0', expDate: '2026-12-31', mfgDate: '', qty: 3 },
       { batchNo: 'B1', expDate: '2027-01-31', mfgDate: '', qty: 3 },
@@ -149,16 +217,38 @@ describe('lot stock (API and POS)', () => {
     expect(tracksBatches(opening)).toBe(true);
     expect(tracksSerials({})).toBe(false);
     const batches = lotStock(opening, moves);
-    expect(saleLotProblems({ name: 'X', quantity: 4, batchNo: 'B1' }, { batches, date: '2026-11-01', block: true })).toEqual(['X: batch B1 has only 3 left']);
-    expect(saleLotProblems({ name: 'X', quantity: 4, batchNo: 'B1' }, { batches, date: '2026-11-01' })).toEqual([]);
-    expect(saleLotProblems({ name: 'X', quantity: 2, serials: ['S2', 's2'] }, { serials: ['S2'], date: '2026-11-01' })).toEqual(['X: a serial number is repeated']);
-    expect(saleLotProblems({ name: 'X', quantity: 1, serials: ['S9'] }, { serials: ['S2'], date: '2026-11-01' })).toEqual(['X: not in stock: S9']);
+    expect(
+      saleLotProblems(
+        { name: 'X', quantity: 4, batchNo: 'B1' },
+        { batches, date: '2026-11-01', block: true },
+      ),
+    ).toEqual(['X: batch B1 has only 3 left']);
+    expect(
+      saleLotProblems({ name: 'X', quantity: 4, batchNo: 'B1' }, { batches, date: '2026-11-01' }),
+    ).toEqual([]);
+    expect(
+      saleLotProblems(
+        { name: 'X', quantity: 2, serials: ['S2', 's2'] },
+        { serials: ['S2'], date: '2026-11-01' },
+      ),
+    ).toEqual(['X: a serial number is repeated']);
+    expect(
+      saleLotProblems(
+        { name: 'X', quantity: 1, serials: ['S9'] },
+        { serials: ['S2'], date: '2026-11-01' },
+      ),
+    ).toEqual(['X: not in stock: S9']);
   });
 });
 
 describe('income-tax tables for years after 2025-26 (audit)', () => {
   it('use the latest known new-regime slabs and 87A rebate, not the 2024-25 ones', async () => {
-    const { getNewRegimeSlabs, get87AConfig, NEW_REGIME_SLABS_FY_2025_26, NEW_REGIME_SLABS_FY_2024_25 } = await import('../src/index.ts');
+    const {
+      getNewRegimeSlabs,
+      get87AConfig,
+      NEW_REGIME_SLABS_FY_2025_26,
+      NEW_REGIME_SLABS_FY_2024_25,
+    } = await import('../src/index.ts');
     expect(getNewRegimeSlabs('2026-27')).toBe(NEW_REGIME_SLABS_FY_2025_26);
     expect(getNewRegimeSlabs('2025-26')).toBe(NEW_REGIME_SLABS_FY_2025_26);
     expect(getNewRegimeSlabs('2024-25')).toBe(NEW_REGIME_SLABS_FY_2024_25);

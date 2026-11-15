@@ -1,4 +1,5 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import type { AppEnv } from './env.ts';
@@ -197,4 +198,14 @@ export function applySecurity(app: Hono, env: AppEnv) {
   app.use('/v1/*', rateLimit(env));
   app.use('/s/*', rateLimit(env));
   app.use('/v1/*', csrf(env));
+  // No request body, JSON or file, may be bigger than the largest upload we allow (plus a little for the envelope).
+  app.use(
+    '/v1/*',
+    bodyLimit({
+      maxSize: 25 * 1024 * 1024,
+      onError: () => {
+        throw new AppError('bad_request', 'The request is too large');
+      },
+    }),
+  );
 }

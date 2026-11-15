@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { viewFromPath } from '../src/app/router';
 import { INVOICE_TYPES, SALES_INVOICE_TYPES, stockEffect, salesSign } from '../src/utils';
-import { NEXT_STEPS, SALES_PAGES, nextStepsFor, salesPageForType } from '../src/features/sales/salesFlow';
+import {
+  NEXT_STEPS,
+  SALES_PAGES,
+  nextStepsFor,
+  salesPageForType,
+} from '../src/features/sales/salesFlow';
 
 describe('sales flow', () => {
   it('every sales page has its own route and lists only real document types', () => {
@@ -24,9 +29,14 @@ describe('sales flow', () => {
       expect(INVOICE_TYPES[from]).toBeTruthy();
       for (const st of steps) expect(INVOICE_TYPES[st.to]).toBeTruthy();
     }
-    expect(nextStepsFor({ invoiceType: 'quotation' }).map((s) => s.to)).toEqual(['sales-order', 'tax-invoice']);
+    expect(nextStepsFor({ invoiceType: 'quotation' }).map((s) => s.to)).toEqual([
+      'sales-order',
+      'tax-invoice',
+    ]);
     // an invoice stays open when a credit note is raised from it
-    expect(nextStepsFor({ invoiceType: 'tax-invoice' })).toEqual([expect.objectContaining({ to: 'credit-note', linkOnly: true })]);
+    expect(nextStepsFor({ invoiceType: 'tax-invoice' })).toEqual([
+      expect.objectContaining({ to: 'credit-note', linkOnly: true }),
+    ]);
     expect(nextStepsFor({ invoiceType: 'credit-note' })).toEqual([]);
   });
 

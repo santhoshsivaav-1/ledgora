@@ -14,28 +14,48 @@ describe('§40A(3): cash paid to one payee in a day above ₹10,000', () => {
     expect(w).toEqual([{ payee: 'Ravi', date: '2026-11-06', total: 10001, disallowed: 10001 }]);
   });
   it('payee names compare without case or spaces at the ends', () => {
-    expect(cashPaymentWatch([
-      { payee: 'Om ', date: '2026-11-06', amount: 6000, mode: 'cash' },
-      { payee: 'om', date: '2026-11-06', amount: 6000, mode: 'cash' },
-    ])).toHaveLength(1);
+    expect(
+      cashPaymentWatch([
+        { payee: 'Om ', date: '2026-11-06', amount: 6000, mode: 'cash' },
+        { payee: 'om', date: '2026-11-06', amount: 6000, mode: 'cash' },
+      ]),
+    ).toHaveLength(1);
   });
 });
 
 describe('§269SS: a loan or deposit of ₹20,000 or more taken in cash', () => {
   it('₹19,999 is fine; ₹20,000 is flagged; a loan into a bank is never flagged', () => {
-    expect(cashLoanWatch([
-      { id: 'a', lender: 'X', date: '2026-11-01', amount: 19999, cash: true },
-      { id: 'b', lender: 'Y', date: '2026-11-02', amount: 20000, cash: true },
-      { id: 'c', lender: 'Z', date: '2026-11-03', amount: 900000, cash: false },
-    ])).toEqual([{ id: 'b', lender: 'Y', date: '2026-11-02', amount: 20000 }]);
+    expect(
+      cashLoanWatch([
+        { id: 'a', lender: 'X', date: '2026-11-01', amount: 19999, cash: true },
+        { id: 'b', lender: 'Y', date: '2026-11-02', amount: 20000, cash: true },
+        { id: 'c', lender: 'Z', date: '2026-11-03', amount: 900000, cash: false },
+      ]),
+    ).toEqual([{ id: 'b', lender: 'Y', date: '2026-11-02', amount: 20000 }]);
   });
 });
 
 describe('§43B(h): unpaid dues to an MSME supplier past 45 days', () => {
-  const bill = (o) => ({ id: 'P1', supplier: 'Micro Co', date: '2026-09-01', pending: 5000, msme: true, ...o });
+  const bill = (o) => ({
+    id: 'P1',
+    supplier: 'Micro Co',
+    date: '2026-09-01',
+    pending: 5000,
+    msme: true,
+    ...o,
+  });
   it('day 45 is fine, day 46 is overdue', () => {
     expect(msmeOverdue([bill()], '2026-10-16')).toEqual([]);
-    expect(msmeOverdue([bill()], '2026-10-17')).toEqual([{ id: 'P1', supplier: 'Micro Co', date: '2026-09-01', pending: 5000, daysOld: 46, dueBy: '2026-10-16' }]);
+    expect(msmeOverdue([bill()], '2026-10-17')).toEqual([
+      {
+        id: 'P1',
+        supplier: 'Micro Co',
+        date: '2026-09-01',
+        pending: 5000,
+        daysOld: 46,
+        dueBy: '2026-10-16',
+      },
+    ]);
   });
   it('never for a supplier not marked MSME or a paid bill', () => {
     expect(msmeOverdue([bill({ msme: false }), bill({ pending: 0 })], '2027-01-01')).toEqual([]);

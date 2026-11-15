@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { LIVE_IN_APP, SETTINGS } from '@ledgora/contracts';
-import { discountRules, estimatedProfit, optionDefaultsFrom, printOverlayFrom, termsHtmlFrom, visibleOrderFields } from '../src/features/invoices/editor/settingsDefaults';
-import { itemFieldVisibility, lowStockLimit, newItemDefaults } from '../src/features/items/itemFields';
+import {
+  discountRules,
+  estimatedProfit,
+  optionDefaultsFrom,
+  printOverlayFrom,
+  termsHtmlFrom,
+  visibleOrderFields,
+} from '../src/features/invoices/editor/settingsDefaults';
+import {
+  itemFieldVisibility,
+  lowStockLimit,
+  newItemDefaults,
+} from '../src/features/items/itemFields';
 import { customPartyFields, duplicatePhone } from '../src/features/parties/partyFields';
 import { ORDER_DETAIL_FIELDS } from '../src/utils';
 
@@ -24,13 +35,29 @@ describe('new bill options from settings', () => {
     expect(optionDefaultsFrom(defaults)).toEqual({});
   });
   it('maps print choices to bill options', () => {
-    const o = optionDefaultsFrom({ 'print.show.hsn': false, 'print.show.upiQr': false, 'print.show.signature': false, 'print.template': 'modern', 'print.paper': 'thermal3' });
-    expect(o).toMatchObject({ showHSN: false, showUPI: false, showSignature: false, pdfStyle: 'modern', paperSize: 'thermal80' });
+    const o = optionDefaultsFrom({
+      'print.show.hsn': false,
+      'print.show.upiQr': false,
+      'print.show.signature': false,
+      'print.template': 'modern',
+      'print.paper': 'thermal3',
+    });
+    expect(o).toMatchObject({
+      showHSN: false,
+      showUPI: false,
+      showSignature: false,
+      pdfStyle: 'modern',
+      paperSize: 'thermal80',
+    });
   });
   it('turns A4 and A5 sideways for landscape, and ignores landscape on a roll', () => {
     expect(optionDefaultsFrom({ 'print.orientation': 'landscape' }).paperSize).toBe('a4Landscape');
-    expect(optionDefaultsFrom({ 'print.paper': 'a5', 'print.orientation': 'landscape' }).paperSize).toBe('a5Landscape');
-    expect(optionDefaultsFrom({ 'print.paper': 'thermal2', 'print.orientation': 'landscape' }).paperSize).toBe('thermal58');
+    expect(
+      optionDefaultsFrom({ 'print.paper': 'a5', 'print.orientation': 'landscape' }).paperSize,
+    ).toBe('a5Landscape');
+    expect(
+      optionDefaultsFrom({ 'print.paper': 'thermal2', 'print.orientation': 'landscape' }).paperSize,
+    ).toBe('thermal58');
   });
   it('starts without GST when GST is off, without a round-off line when rounding is off', () => {
     expect(optionDefaultsFrom({ 'gst.enabled': false }).showGST).toBe(false);
@@ -46,10 +73,22 @@ describe('new bill options from settings', () => {
 describe('discount rules', () => {
   it('follows mode and unit', () => {
     expect(discountRules({})).toEqual({ line: true, bill: true, percent: true, amount: true });
-    expect(discountRules({ 'txn.discountMode': 'line' })).toMatchObject({ line: true, bill: false });
-    expect(discountRules({ 'txn.discountMode': 'transaction' })).toMatchObject({ line: false, bill: true });
-    expect(discountRules({ 'txn.discountUnit': 'percent' })).toMatchObject({ percent: true, amount: false });
-    expect(discountRules({ 'txn.discountUnit': 'amount' })).toMatchObject({ percent: false, amount: true });
+    expect(discountRules({ 'txn.discountMode': 'line' })).toMatchObject({
+      line: true,
+      bill: false,
+    });
+    expect(discountRules({ 'txn.discountMode': 'transaction' })).toMatchObject({
+      line: false,
+      bill: true,
+    });
+    expect(discountRules({ 'txn.discountUnit': 'percent' })).toMatchObject({
+      percent: true,
+      amount: false,
+    });
+    expect(discountRules({ 'txn.discountUnit': 'amount' })).toMatchObject({
+      percent: false,
+      amount: true,
+    });
   });
 });
 
@@ -57,14 +96,21 @@ describe('print overlay', () => {
   it('adds copies and the footer only when chosen', () => {
     expect(printOverlayFrom({})).toEqual({});
     expect(printOverlayFrom({ 'print.copies': 'original' })).toEqual({});
-    expect(printOverlayFrom({ 'print.copies': 'triplicate' })).toEqual({ multiCopyEnabled: true, multiCopyCount: 3 });
-    expect(printOverlayFrom({ 'print.footer': '  Thank you  ' })).toEqual({ footerMessage: 'Thank you' });
+    expect(printOverlayFrom({ 'print.copies': 'triplicate' })).toEqual({
+      multiCopyEnabled: true,
+      multiCopyCount: 3,
+    });
+    expect(printOverlayFrom({ 'print.footer': '  Thank you  ' })).toEqual({
+      footerMessage: 'Thank you',
+    });
   });
 });
 
 describe('default terms', () => {
   it('becomes escaped paragraphs, one per line', () => {
-    expect(termsHtmlFrom('Pay in 7 days\n\n<b>No returns</b> & no refunds')).toBe('<p>Pay in 7 days</p><p>&lt;b&gt;No returns&lt;/b&gt; &amp; no refunds</p>');
+    expect(termsHtmlFrom('Pay in 7 days\n\n<b>No returns</b> & no refunds')).toBe(
+      '<p>Pay in 7 days</p><p>&lt;b&gt;No returns&lt;/b&gt; &amp; no refunds</p>',
+    );
     expect(termsHtmlFrom('')).toBe('');
   });
 });
@@ -84,26 +130,52 @@ describe('order and dispatch boxes', () => {
 });
 
 describe('estimated profit', () => {
-  const products = [{ id: 'a', purchasePrice: 60 }, { id: 'b', purchasePrice: 0 }];
+  const products = [
+    { id: 'a', purchasePrice: 60 },
+    { id: 'b', purchasePrice: 0 },
+  ];
   it('adds selling less buying over lines with a purchase price', () => {
     expect(estimatedProfit([{ productId: 'a', quantity: 3, rate: 100 }], products)).toBe(120);
     expect(estimatedProfit([{ productId: 'a', quantity: 1, rate: 50 }], products)).toBe(-10);
   });
   it('is null when no line has a purchase price, so no misleading zero', () => {
-    expect(estimatedProfit([{ productId: 'b', quantity: 3, rate: 100 }, { name: 'x', quantity: 1, rate: 5 }], products)).toBeNull();
+    expect(
+      estimatedProfit(
+        [
+          { productId: 'b', quantity: 3, rate: 100 },
+          { name: 'x', quantity: 1, rate: 5 },
+        ],
+        products,
+      ),
+    ).toBeNull();
   });
 });
 
 describe('product form', () => {
   it('starts as it always did unless the owner chose defaults', () => {
     expect(newItemDefaults({})).toMatchObject({ unit: 'Pcs', taxPercent: '', itemType: 'product' });
-    expect(newItemDefaults({ 'item.defaultUnit': 'KGS', 'item.defaultGst': 12 })).toMatchObject({ unit: 'KGS', taxPercent: '12' });
+    expect(newItemDefaults({ 'item.defaultUnit': 'KGS', 'item.defaultGst': 12 })).toMatchObject({
+      unit: 'KGS',
+      taxPercent: '12',
+    });
     expect(newItemDefaults({ 'tax.defaultItemRate': 5 }).taxPercent).toBe('5');
   });
   it('shows or hides boxes with their switches', () => {
-    expect(itemFieldVisibility({})).toMatchObject({ hsn: true, stock: true, minStock: true, tax: true, description: true });
-    expect(itemFieldVisibility({ 'item.hsn': false, 'item.stock': false })).toMatchObject({ hsn: false, stock: false, minStock: false });
-    expect(itemFieldVisibility({ 'item.custom': [{ label: 'Colour', printOnInvoice: false }] }).custom).toHaveLength(1);
+    expect(itemFieldVisibility({})).toMatchObject({
+      hsn: true,
+      stock: true,
+      minStock: true,
+      tax: true,
+      description: true,
+    });
+    expect(itemFieldVisibility({ 'item.hsn': false, 'item.stock': false })).toMatchObject({
+      hsn: false,
+      stock: false,
+      minStock: false,
+    });
+    expect(
+      itemFieldVisibility({ 'item.custom': [{ label: 'Colour', printOnInvoice: false }] }).custom,
+    ).toHaveLength(1);
   });
   it('uses a product minimum only when the alert is on and the minimum is set', () => {
     expect(lowStockLimit({ minStock: 20 }, {}, 5)).toBe(20);
@@ -114,7 +186,10 @@ describe('product form', () => {
 });
 
 describe('party form', () => {
-  const clients = [{ id: '1', name: 'Asha', phone: '+91 98765 43210' }, { id: '2', name: 'Ravi', phone: '9000000000' }];
+  const clients = [
+    { id: '1', name: 'Asha', phone: '+91 98765 43210' },
+    { id: '2', name: 'Ravi', phone: '9000000000' },
+  ];
   it('finds a duplicate phone whatever its formatting, ignoring the party being edited', () => {
     expect(duplicatePhone(clients, '9876543210')?.name).toBe('Asha');
     expect(duplicatePhone(clients, '098765-43210')?.name).toBe('Asha');
@@ -123,7 +198,9 @@ describe('party form', () => {
     expect(duplicatePhone(clients, '')).toBeNull();
   });
   it('lists only named custom fields', () => {
-    expect(customPartyFields({ 'party.custom': [{ label: 'Route' }, { label: '  ' }] })).toEqual([{ label: 'Route' }]);
+    expect(customPartyFields({ 'party.custom': [{ label: 'Route' }, { label: '  ' }] })).toEqual([
+      { label: 'Route' },
+    ]);
     expect(customPartyFields({})).toEqual([]);
   });
 });

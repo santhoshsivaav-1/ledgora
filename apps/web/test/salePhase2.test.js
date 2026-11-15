@@ -37,7 +37,13 @@ const bill = (over = {}) => ({
 
 describe('PaymentBlock math', () => {
   it('two rows that cover the total: paid, balance 0', () => {
-    const s = paymentSummary([{ mode: 'cash', amount: 500 }, { mode: 'upi', amount: 400 }], { total: 900, payments: [] });
+    const s = paymentSummary(
+      [
+        { mode: 'cash', amount: 500 },
+        { mode: 'upi', amount: 400 },
+      ],
+      { total: 900, payments: [] },
+    );
     expect(s).toMatchObject({ ok: true, paid: 900, balance: 0, status: 'paid' });
   });
 
@@ -50,23 +56,52 @@ describe('PaymentBlock math', () => {
 
   it('rows round-trip through the bill: other payments kept, inline ones replaced', () => {
     const earlier = { id: 'pay_1', amount: 100, receiptNo: 'RCT-1' };
-    const first = mergeInlinePayments([earlier], [{ mode: 'cash', amount: 300 }, { mode: 'upi', amount: 0 }], {
+    const first = mergeInlinePayments(
+      [earlier],
+      [
+        { mode: 'cash', amount: 300 },
+        { mode: 'upi', amount: 0 },
+      ],
+      {
+        date: '2026-11-10',
+        invoiceNumber: 'INV-9',
+        now: () => 'T',
+      },
+    );
+    expect(first).toHaveLength(2);
+    expect(first[1]).toMatchObject({
+      amount: 300,
+      mode: 'cash',
+      date: '2026-11-10',
+      source: 'invoice_inline',
+      note: 'Received with INV-9',
+    });
+    const rows = inlineRowsOf({ payments: first });
+    expect(rows).toEqual([
+      {
+        id: first[1].id,
+        mode: 'cash',
+        amount: 300,
+        reference: '',
+        chequeDate: '',
+        accountId: null,
+      },
+    ]);
+    const second = mergeInlinePayments(first, [{ ...rows[0], amount: 250 }], {
       date: '2026-11-10',
       invoiceNumber: 'INV-9',
-      now: () => 'T',
     });
-    expect(first).toHaveLength(2);
-    expect(first[1]).toMatchObject({ amount: 300, mode: 'cash', date: '2026-11-10', source: 'invoice_inline', note: 'Received with INV-9' });
-    const rows = inlineRowsOf({ payments: first });
-    expect(rows).toEqual([{ id: first[1].id, mode: 'cash', amount: 300, reference: '', chequeDate: '', accountId: null }]);
-    const second = mergeInlinePayments(first, [{ ...rows[0], amount: 250 }], { date: '2026-11-10', invoiceNumber: 'INV-9' });
     expect(second.map((p) => p.amount)).toEqual([100, 250]);
     expect(second[1].id).toBe(first[1].id);
   });
 
   it('payments are taken on sales and sale orders only', () => {
-    expect(['tax-invoice', 'bill-of-supply', 'composition', 'sales-order'].every(takesPayment)).toBe(true);
-    expect(['quotation', 'proforma', 'delivery-challan', 'credit-note'].some(takesPayment)).toBe(false);
+    expect(
+      ['tax-invoice', 'bill-of-supply', 'composition', 'sales-order'].every(takesPayment),
+    ).toBe(true);
+    expect(['quotation', 'proforma', 'delivery-challan', 'credit-note'].some(takesPayment)).toBe(
+      false,
+    );
   });
 
   it('renders rows, the post-dated chip and the over-payment error', () => {
@@ -102,17 +137,36 @@ describe('save checks on invoice documents', () => {
 
   it('credit limit warn and block, net of money received with the sale', () => {
     const client = { name: 'Ravi Traders', creditLimit: 50000, creditMode: 'warn' };
-    const base = { client, bills, invoiceType: 'tax-invoice', payments: [], invoiceDate: '2026-11-10' };
+    const base = {
+      client,
+      bills,
+      invoiceType: 'tax-invoice',
+      payments: [],
+      invoiceDate: '2026-11-10',
+    };
     expect(saveChecks({ ...base, total: 10000, rows: [] })).toEqual([]);
     const [c] = saveChecks({ ...base, total: 20000, rows: [] });
-    expect(c).toMatchObject({ kind: 'credit', mode: 'warn', used: 40000, after: 60000, exceededBy: 10000 });
-    expect(saveChecks({ ...base, total: 20000, rows: [{ mode: 'upi', amount: 10000 }] })).toEqual([]);
-    expect(saveChecks({ ...base, client: { ...client, creditMode: 'block' }, total: 20000, rows: [] })[0].mode).toBe('block');
+    expect(c).toMatchObject({
+      kind: 'credit',
+      mode: 'warn',
+      used: 40000,
+      after: 60000,
+      exceededBy: 10000,
+    });
+    expect(saveChecks({ ...base, total: 20000, rows: [{ mode: 'upi', amount: 10000 }] })).toEqual(
+      [],
+    );
+    expect(
+      saveChecks({ ...base, client: { ...client, creditMode: 'block' }, total: 20000, rows: [] })[0]
+        .mode,
+    ).toBe('block');
     expect(saveChecks({ ...base, invoiceType: 'quotation', total: 99999, rows: [] })).toEqual([]);
   });
 
   it('§269ST: cash already paid that day plus this sale', () => {
-    const withCash = [bill({ id: 'INV-7', payments: [{ mode: 'cash', amount: 150000, date: '2026-11-10' }] })];
+    const withCash = [
+      bill({ id: 'INV-7', payments: [{ mode: 'cash', amount: 150000, date: '2026-11-10' }] }),
+    ];
     expect(dayCashFromBills(withCash, 'Ravi Traders', '2026-11-10')).toBe(150000);
     const [c] = saveChecks({
       client: { name: 'Ravi Traders' },
@@ -128,13 +182,29 @@ describe('save checks on invoice documents', () => {
 });
 
 describe('credit notes and sale orders on documents', () => {
-  const inv = bill({ id: 'INV-5', data: { items: [{ productId: 'pen', name: 'Pen', quantity: 10 }] } });
+  const inv = bill({
+    id: 'INV-5',
+    data: { items: [{ productId: 'pen', name: 'Pen', quantity: 10 }] },
+  });
   const cn = (id, qty, status = 'unpaid') =>
-    bill({ id, invoiceType: 'credit-note', status, data: { details: { originalInvoiceRef: 'INV-5' }, items: [{ productId: 'pen', name: 'Pen', quantity: qty }] } });
+    bill({
+      id,
+      invoiceType: 'credit-note',
+      status,
+      data: {
+        details: { originalInvoiceRef: 'INV-5' },
+        items: [{ productId: 'pen', name: 'Pen', quantity: qty }],
+      },
+    });
   it('cannot return more than is left; the credit note being edited does not count', () => {
     const bills = [inv, cn('CN-1', 4), cn('CN-2', 5, 'cancelled')];
     const over = (q, editingId) =>
-      creditNoteOverReturns({ bills, againstNumber: 'INV-5', items: [{ productId: 'pen', name: 'Pen', quantity: q }], editingId });
+      creditNoteOverReturns({
+        bills,
+        againstNumber: 'INV-5',
+        items: [{ productId: 'pen', name: 'Pen', quantity: q }],
+        editingId,
+      });
     expect(over(6)).toEqual([]);
     expect(over(7)).toHaveLength(1);
     expect(over(10, 'CN-1')).toEqual([]);
@@ -142,8 +212,18 @@ describe('credit notes and sale orders on documents', () => {
   });
 
   it('a sale order shows what its invoices have taken', () => {
-    const order = bill({ id: 'SO-1', invoiceType: 'sales-order', data: { items: [{ productId: 'pen', name: 'Pen Blue', quantity: 100 }] } });
-    const made = bill({ id: 'INV-8', data: { sourceDoc: { number: 'SO-1' }, items: [{ productId: 'pen', name: 'Pen Blue', quantity: 40 }] } });
+    const order = bill({
+      id: 'SO-1',
+      invoiceType: 'sales-order',
+      data: { items: [{ productId: 'pen', name: 'Pen Blue', quantity: 100 }] },
+    });
+    const made = bill({
+      id: 'INV-8',
+      data: {
+        sourceDoc: { number: 'SO-1' },
+        items: [{ productId: 'pen', name: 'Pen Blue', quantity: 40 }],
+      },
+    });
     const p = orderProgressFromBills(order, [order, made]);
     expect(p.status).toBe('partially-invoiced');
     expect(p.lines[0]).toMatchObject({ ordered: 100, invoiced: 40, pending: 60 });
@@ -152,7 +232,12 @@ describe('credit notes and sale orders on documents', () => {
 
 describe('additional charges on documents', () => {
   it('blank rows drop out and each saved charge gets an id', () => {
-    expect(savedCharges([{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }, { name: 'x', amount: null }])).toEqual([
+    expect(
+      savedCharges([
+        { name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' },
+        { name: 'x', amount: null },
+      ]),
+    ).toEqual([
       { id: 'chg_1', name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965', taxable: true },
     ]);
   });
@@ -160,9 +245,21 @@ describe('additional charges on documents', () => {
   it('GST returns see charges as isCharge lines; bills without charges are untouched', () => {
     const plain = bill();
     expect(withChargeLines(plain)).toBe(plain);
-    const b = withChargeLines(bill({ data: { items: [{ name: 'Pen', quantity: 1, rate: 1000, taxPercent: 18 }], charges: [{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }] } }));
+    const b = withChargeLines(
+      bill({
+        data: {
+          items: [{ name: 'Pen', quantity: 1, rate: 1000, taxPercent: 18 }],
+          charges: [{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }],
+        },
+      }),
+    );
     expect(b.data.items).toHaveLength(2);
-    expect(b.data.items[1]).toMatchObject({ hsn: '9965', rate: 100, taxPercent: 5, isCharge: true });
+    expect(b.data.items[1]).toMatchObject({
+      hsn: '9965',
+      rate: 100,
+      taxPercent: 5,
+      isCharge: true,
+    });
   });
 
   it('ChargeRows and the printed totals show each charge', () => {
@@ -174,15 +271,38 @@ describe('additional charges on documents', () => {
       showGST: true,
       charges: [{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }],
     });
-    const rows = renderToStaticMarkup(h(ChargeRows, { charges: [{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }], onChange: () => {}, totals, currency: 'INR', showGST: true }));
+    const rows = renderToStaticMarkup(
+      h(ChargeRows, {
+        charges: [{ name: 'Shipping', amount: 100, gstRate: 5, hsn: '9965' }],
+        onChange: () => {},
+        totals,
+        currency: 'INR',
+        showGST: true,
+      }),
+    );
     expect(rows).toContain('Additional charges');
     expect(rows).toContain('Add charge');
     const fmt = (n) => Number(n).toFixed(2);
-    const props = { _ps_labels: {}, accent: '#000', fmt, invoiceType: 'tax-invoice', isIndia: true, isInterstate: false, pdfStyle: 'classic', showGST: true, showSubtotal: true, taxLabel: 'GST', totalDueLabel: 'Total', totals };
+    const props = {
+      _ps_labels: {},
+      accent: '#000',
+      fmt,
+      invoiceType: 'tax-invoice',
+      isIndia: true,
+      isInterstate: false,
+      pdfStyle: 'classic',
+      showGST: true,
+      showSubtotal: true,
+      taxLabel: 'GST',
+      totalDueLabel: 'Total',
+      totals,
+    };
     const each = renderToStaticMarkup(h(TotalsPanel, { ...props, options: {} }));
     expect(each).toContain('Shipping (GST 5%)');
     expect(each).toContain('1285.00');
-    const one = renderToStaticMarkup(h(TotalsPanel, { ...props, options: { showChargeRows: false } }));
+    const one = renderToStaticMarkup(
+      h(TotalsPanel, { ...props, options: { showChargeRows: false } }),
+    );
     expect(one).toContain('Additional charges');
     expect(one).not.toContain('Shipping');
   });
@@ -190,7 +310,9 @@ describe('additional charges on documents', () => {
 
 describe('Salesman form', () => {
   it('validates like the API', () => {
-    expect(staffFormErrors({ name: '', phone: '123', commissionPct: 120, monthlyTarget: -1 })).toEqual({
+    expect(
+      staffFormErrors({ name: '', phone: '123', commissionPct: 120, monthlyTarget: -1 }),
+    ).toEqual({
       name: 'Enter a name',
       phone: 'Use 10 digits',
       commissionPct: 'Between 0 and 100',
@@ -199,7 +321,15 @@ describe('Salesman form', () => {
     expect(staffFormErrors({ name: 'Kumar', phone: '98765 43210' })).toEqual({});
   });
   it('builds the API body', () => {
-    expect(staffBody({ name: ' Kumar ', phone: '98765-43210', userId: '', commissionPct: '2.5', monthlyTarget: '500000' })).toEqual({
+    expect(
+      staffBody({
+        name: ' Kumar ',
+        phone: '98765-43210',
+        userId: '',
+        commissionPct: '2.5',
+        monthlyTarget: '500000',
+      }),
+    ).toEqual({
       name: 'Kumar',
       phone: '9876543210',
       userId: null,

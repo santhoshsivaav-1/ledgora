@@ -22,8 +22,11 @@ describe('parse26AS', () => {
     ]);
   });
   it('reads a CSV with the same columns, quoted names with commas', () => {
-    const csv = 'Name of Deductor,TAN of Deductor,Total Amount Paid / Credited,Total Tax Deducted\n"Om Services, Chennai",CHEO11111A,"1,00,000.00",1000\n';
-    expect(parse26AS(csv)).toEqual([{ deductor: 'Om Services, Chennai', tan: 'CHEO11111A', amount: 100000, tds: 1000 }]);
+    const csv =
+      'Name of Deductor,TAN of Deductor,Total Amount Paid / Credited,Total Tax Deducted\n"Om Services, Chennai",CHEO11111A,"1,00,000.00",1000\n';
+    expect(parse26AS(csv)).toEqual([
+      { deductor: 'Om Services, Chennai', tan: 'CHEO11111A', amount: 100000, tds: 1000 },
+    ]);
   });
   it('returns nothing for a file without the columns', () => {
     expect(parse26AS('hello,world\n1,2')).toEqual([]);
@@ -46,17 +49,52 @@ describe('compare26AS', () => {
   it('matched, mismatched (by more than ₹1), missing either side', () => {
     const r = compare26AS(book, parse26AS(TRACES));
     expect(r.rows).toEqual([
-      { deductor: 'Acme India Pvt Ltd', tan: 'CHEA12345B', book: 10000, statement: 10000, diff: 0, status: 'matched' },
-      { deductor: 'Bala Traders', tan: 'MUMB99999C', book: 1500, statement: 2000, diff: 500, status: 'mismatch' },
-      { deductor: 'Om Services', tan: '', book: 700, statement: 0, diff: -700, status: 'missing_in_26as' },
+      {
+        deductor: 'Acme India Pvt Ltd',
+        tan: 'CHEA12345B',
+        book: 10000,
+        statement: 10000,
+        diff: 0,
+        status: 'matched',
+      },
+      {
+        deductor: 'Bala Traders',
+        tan: 'MUMB99999C',
+        book: 1500,
+        statement: 2000,
+        diff: 500,
+        status: 'mismatch',
+      },
+      {
+        deductor: 'Om Services',
+        tan: '',
+        book: 700,
+        statement: 0,
+        diff: -700,
+        status: 'missing_in_26as',
+      },
     ]);
     expect(r.totals).toEqual({ book: 12200, statement: 12000, diff: -200 });
   });
   it('lists a 26AS deductor we have no record of', () => {
     const r = compare26AS([], [{ deductor: 'New Co', tan: 'X', amount: 1, tds: 50 }]);
-    expect(r.rows).toEqual([{ deductor: 'New Co', tan: 'X', book: 0, statement: 50, diff: 50, status: 'missing_in_books' }]);
+    expect(r.rows).toEqual([
+      {
+        deductor: 'New Co',
+        tan: 'X',
+        book: 0,
+        statement: 50,
+        diff: 50,
+        status: 'missing_in_books',
+      },
+    ]);
   });
   it('a paisa of rounding is a match', () => {
-    expect(compare26AS([{ deductor: 'A', tds: 100.4 }], [{ deductor: 'A', tan: '', amount: 0, tds: 100 }]).rows[0].status).toBe('matched');
+    expect(
+      compare26AS(
+        [{ deductor: 'A', tds: 100.4 }],
+        [{ deductor: 'A', tan: '', amount: 0, tds: 100 }],
+      ).rows[0].status,
+    ).toBe('matched');
   });
 });

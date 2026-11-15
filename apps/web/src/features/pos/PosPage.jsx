@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Plus, Printer, Settings, X } from 'lucide-react';
 import {
-  BUILTIN_UNITS, PosError, billDiscountAmount, cartAdd, cartUpdate, cashSuggestions, maxRedeemable, parseQtyPrefix, posTotals, settleTender,
+  BUILTIN_UNITS, PosError, cartAdd, cartUpdate, cashSuggestions, maxRedeemable, parseQtyPrefix, posTotals, settleTender,
 } from '@ledgora/tax-engine';
 import { confirmAction, promptAction } from '../../components/ui/ConfirmModal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';

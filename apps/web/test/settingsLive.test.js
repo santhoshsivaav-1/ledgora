@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { LIVE_IN_APP, SETTINGS, SETTING_FEATURE, liveKeys, PLANS, planAllows, parseSettingsPatch } from '@ledgora/contracts';
+import {
+  LIVE_IN_APP,
+  SETTINGS,
+  SETTING_FEATURE,
+  liveKeys,
+  PLANS,
+  planAllows,
+  parseSettingsPatch,
+} from '@ledgora/contracts';
 import { partyOutstanding, periodMonths } from '@ledgora/tax-engine';
 import { resetAppSettings, setAppSettings } from '../src/lib/appSettings';
 import { formatQty, getFYOptions, getUpcomingFilings } from '../src/utils';
@@ -24,9 +32,19 @@ describe('quantity decimals', () => {
 describe('financial year options', () => {
   const today = new Date(2026, 10, 12); // 12 Nov 2026
   it('April by default, January when the business starts its books then', () => {
-    expect(getFYOptions(2, today)[0]).toEqual({ value: '2026-27', label: 'FY 2026-27', from: '2026-04-01', to: '2027-03-31' });
+    expect(getFYOptions(2, today)[0]).toEqual({
+      value: '2026-27',
+      label: 'FY 2026-27',
+      from: '2026-04-01',
+      to: '2027-03-31',
+    });
     use({ 'fy.startMonth': 1 });
-    expect(getFYOptions(2, today)[0]).toEqual({ value: '2026', label: 'FY 2026', from: '2026-01-01', to: '2026-12-31' });
+    expect(getFYOptions(2, today)[0]).toEqual({
+      value: '2026',
+      label: 'FY 2026',
+      from: '2026-01-01',
+      to: '2026-12-31',
+    });
     expect(getFYOptions(2, today, 4)[0].from).toBe('2026-04-01'); // GST screens pin April
   });
 });
@@ -35,15 +53,24 @@ describe('upcoming filings follow the GST settings', () => {
   const today = new Date(2026, 9, 25); // 25 Oct 2026
   const forms = (o) => getUpcomingFilings(today, o).map((f) => f.label.split(' (')[0]);
   it('monthly regular: GSTR-1 and 3B', () => {
-    expect(forms({ frequency: 'monthly', regType: 'regular' })).toEqual(expect.arrayContaining(['GSTR-1', 'GSTR-3B']));
+    expect(forms({ frequency: 'monthly', regType: 'regular' })).toEqual(
+      expect.arrayContaining(['GSTR-1', 'GSTR-3B']),
+    );
   });
   it('QRMP: PMT-06 for the other months, no monthly GSTR-3B', () => {
-    const f = getUpcomingFilings(today, { frequency: 'qrmp', regType: 'regular', stateCode: '33' }).map((x) => x.label);
+    const f = getUpcomingFilings(today, {
+      frequency: 'qrmp',
+      regType: 'regular',
+      stateCode: '33',
+    }).map((x) => x.label);
     expect(f.some((l) => l.startsWith('PMT-06'))).toBe(true);
     expect(f.some((l) => /^GSTR-3B \(Oct 2026\)/.test(l))).toBe(false);
   });
   it('composition: CMP-08, no GSTR-1', () => {
-    const jan = getUpcomingFilings(new Date(2027, 0, 5), { frequency: 'monthly', regType: 'composition' }).map((x) => x.label);
+    const jan = getUpcomingFilings(new Date(2027, 0, 5), {
+      frequency: 'monthly',
+      regType: 'composition',
+    }).map((x) => x.label);
     expect(jan.some((l) => l.startsWith('CMP-08'))).toBe(true); // the December quarter, due 18 January
     expect(jan.some((l) => l.startsWith('GSTR-1'))).toBe(false);
   });
@@ -63,13 +90,24 @@ describe('opening balances in party outstanding', () => {
 });
 
 describe('print lines under an item', () => {
-  const item = { description: 'Blue', mrp: 99, batchNo: 'B1', expDate: '2027-01-31', serials: ['S1', 'S2'], regionalName: 'நீலம்' };
+  const item = {
+    description: 'Blue',
+    mrp: 99,
+    batchNo: 'B1',
+    expDate: '2027-01-31',
+    serials: ['S1', 'S2'],
+    regionalName: 'நீலம்',
+  };
   it('follow the Print settings', () => {
     expect(itemSubLines(item, {})).toEqual(['Blue']); // default: description only, as before
     expect(itemSubLines(item, { 'print.show.description': false })).toEqual([]);
-    expect(itemSubLines(item, { 'print.show.mrp': true, 'print.show.batch': true, 'print.regional': true }, (n) => `₹${n}`)).toEqual([
-      'நீலம்', 'Blue', 'MRP ₹99', 'Batch B1 (Exp 2027-01-31)', 'Serial S1, S2',
-    ]);
+    expect(
+      itemSubLines(
+        item,
+        { 'print.show.mrp': true, 'print.show.batch': true, 'print.regional': true },
+        (n) => `₹${n}`,
+      ),
+    ).toEqual(['நீலம்', 'Blue', 'MRP ₹99', 'Batch B1 (Exp 2027-01-31)', 'Serial S1, S2']);
   });
 });
 
@@ -94,9 +132,25 @@ describe('plan table for settings', () => {
 
 describe('payment info on a printed bill', () => {
   it('modes, paid in full, and the party balance before and after', () => {
-    const info = paymentInfo({ total: 1000, payments: [{ amount: 400, mode: 'cash' }, { amount: 100, mode: 'upi' }, { amount: 0, mode: 'cheque' }], others: [{ due: 250 }, { due: -10 }] });
-    expect(info).toEqual({ fullyPaid: false, modes: ['cash', 'upi'], paid: 500, balanceBefore: 250, balanceAfter: 750 });
-    expect(paymentInfo({ total: 1000, payments: [{ amount: 1000, mode: 'upi' }] }).fullyPaid).toBe(true);
+    const info = paymentInfo({
+      total: 1000,
+      payments: [
+        { amount: 400, mode: 'cash' },
+        { amount: 100, mode: 'upi' },
+        { amount: 0, mode: 'cheque' },
+      ],
+      others: [{ due: 250 }, { due: -10 }],
+    });
+    expect(info).toEqual({
+      fullyPaid: false,
+      modes: ['cash', 'upi'],
+      paid: 500,
+      balanceBefore: 250,
+      balanceAfter: 750,
+    });
+    expect(paymentInfo({ total: 1000, payments: [{ amount: 1000, mode: 'upi' }] }).fullyPaid).toBe(
+      true,
+    );
     expect(paymentInfo({ total: 0, payments: [] }).fullyPaid).toBe(false);
   });
 });

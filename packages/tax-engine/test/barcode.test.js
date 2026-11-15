@@ -1,14 +1,33 @@
 // Vyapar parity P7-S1: EAN-13 vectors, Code 128 structure, and the label sheet maths.
 import { describe, expect, it } from 'vitest';
 import {
-  CODE128_PATTERNS, LABEL_SHEETS, barcodeFor, barsOf, code128Modules, code128Values, ean13, ean13CheckDigit, ean13Modules,
-  internalEan13, internalSeqOf, isValidEan13, layoutLabels, nextInternalCodes, sheetById, sheetProblem, slotPosition,
+  CODE128_PATTERNS,
+  LABEL_SHEETS,
+  barcodeFor,
+  barsOf,
+  code128Modules,
+  code128Values,
+  ean13,
+  ean13CheckDigit,
+  ean13Modules,
+  internalEan13,
+  internalSeqOf,
+  isValidEan13,
+  layoutLabels,
+  nextInternalCodes,
+  sheetById,
+  sheetProblem,
+  slotPosition,
 } from '../src/index.ts';
 
 describe('EAN-13', () => {
   // Published example codes (GS1 / Wikipedia / retail packs).
   it.each([
-    ['400638133393', 1], ['590123412345', 7], ['978020137962', 4], ['501234567890', 0], ['629104150021', 3],
+    ['400638133393', 1],
+    ['590123412345', 7],
+    ['978020137962', 4],
+    ['501234567890', 0],
+    ['629104150021', 3],
   ])('check digit of %s is %i', (first12, d) => {
     expect(ean13CheckDigit(first12)).toBe(d);
     expect(ean13(first12)).toBe(first12 + d);
@@ -31,7 +50,10 @@ describe('EAN-13', () => {
     const codes = nextInternalCodes(41, 3);
     expect(codes.map((c) => c.seq)).toEqual([42, 43, 44]);
     expect(new Set(codes.map((c) => c.code)).size).toBe(3);
-    codes.forEach((c) => { expect(isValidEan13(c.code)).toBe(true); expect(internalSeqOf(c.code)).toBe(c.seq); });
+    codes.forEach((c) => {
+      expect(isValidEan13(c.code)).toBe(true);
+      expect(internalSeqOf(c.code)).toBe(c.seq);
+    });
     expect(internalSeqOf('4006381333931')).toBeNull();
     expect(() => internalEan13(1, '300')).toThrow();
   });
@@ -40,7 +62,12 @@ describe('EAN-13', () => {
 describe('Code 128', () => {
   it('every pattern is 11 modules wide (the stop 13), alternating bar and space', () => {
     expect(CODE128_PATTERNS).toHaveLength(106);
-    CODE128_PATTERNS.forEach((p, i) => expect([...p].reduce((s, d) => s + Number(d), 0), `symbol ${i}`).toBe(11));
+    CODE128_PATTERNS.forEach((p, i) =>
+      expect(
+        [...p].reduce((s, d) => s + Number(d), 0),
+        `symbol ${i}`,
+      ).toBe(11),
+    );
     expect(new Set(CODE128_PATTERNS).size).toBe(106);
   });
   it('checksum: start B + Σ value × position, mod 103', () => {
@@ -48,7 +75,9 @@ describe('Code 128', () => {
     expect(code128Values('A').checksum).toBe(34);
     const { values } = code128Values('PJJ123C');
     expect(values[0]).toBe(104);
-    expect(values.at(-1)).toBe((104 + [...'PJJ123C'].reduce((s, c, i) => s + (c.charCodeAt(0) - 32) * (i + 1), 0)) % 103);
+    expect(values.at(-1)).toBe(
+      (104 + [...'PJJ123C'].reduce((s, c, i) => s + (c.charCodeAt(0) - 32) * (i + 1), 0)) % 103,
+    );
   });
   it('module count is 11 per symbol plus the 13-module stop; starts and ends on a bar', () => {
     const m = code128Modules('LUX1');
@@ -65,7 +94,8 @@ describe('Code 128', () => {
 });
 
 describe('label sheets', () => {
-  it('every preset sheet fits on its page', () => LABEL_SHEETS.forEach((s) => expect(sheetProblem(s), s.id).toBe('')));
+  it('every preset sheet fits on its page', () =>
+    LABEL_SHEETS.forEach((s) => expect(sheetProblem(s), s.id).toBe('')));
   it('A4 65-up: 5 × 13, first and last label positions, aligned to the pitch within 0.5 mm', () => {
     const s = sheetById('a4-65');
     expect(s.cols * s.rows).toBe(65);
@@ -83,7 +113,10 @@ describe('label sheets', () => {
     expect(sheetProblem({ ...sheetById('a4-65'), rows: 14 })).toMatch(/bottom edge/);
     expect(sheetProblem({ ...sheetById('a4-65'), gapX: -1 })).toMatch(/negative/);
   });
-  const items = [{ id: 'a', name: 'Pen', code: 'P01', stock: 3 }, { id: 'b', name: 'Pencil', code: 'P02', stock: 0 }];
+  const items = [
+    { id: 'a', name: 'Pen', code: 'P01', stock: 3 },
+    { id: 'b', name: 'Pencil', code: 'P02', stock: 0 },
+  ];
   it('copies, = stock, the 1000 cap', () => {
     expect(layoutLabels(items, { sheet: sheetById('a4-65'), copies: 2 }).labels).toBe(4);
     expect(layoutLabels(items, { sheet: sheetById('a4-65'), copies: 'stock' }).labels).toBe(3 + 1);

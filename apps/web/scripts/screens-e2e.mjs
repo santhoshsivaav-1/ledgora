@@ -7,6 +7,7 @@ const { firefox } = require('playwright');
 const OUT = process.argv[2] || '';
 const APP = process.env.E2E_APP_URL || 'http://localhost:5173';
 const API = process.env.E2E_API_URL || 'http://localhost:4000';
+const password = 'correct-horse-9';
 const results = [];
 const check = (name, ok, extra = '') => { results.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  ' + extra}`); };
 

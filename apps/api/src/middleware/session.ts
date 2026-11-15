@@ -7,8 +7,17 @@ import type { AuthContext, SessionUser } from './context.ts';
 /** The caller's address, for rate limits and the audit log. X-Forwarded-For counts only when TRUST_PROXY is on. */
 export function clientIp(c: Context, env: AppEnv): string | null {
   if (env.TRUST_PROXY) {
-    const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip');
+    // A proxy APPENDS the address it saw, so the left-most entries are whatever the caller wrote. Count from the right,
+    // skipping only the proxies we run (TRUST_PROXY_HOPS, default 1), or a forged header would dodge every rate limit.
+    const hops = env.TRUST_PROXY_HOPS;
+    const chain = (c.req.header('x-forwarded-for') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const fwd = chain.length >= hops ? chain[chain.length - hops] : chain[0];
     if (fwd) return fwd;
+    const real = c.req.header('x-real-ip');
+    if (real) return real;
   }
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)
     ?.incoming;

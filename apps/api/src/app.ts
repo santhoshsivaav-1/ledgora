@@ -129,9 +129,10 @@ export function createApp(base: Omit<Deps, 'auth'>) {
   publicLinkEndpoints(app, deps);
   billingWebhook(app, deps);
 
-  app.get('/v1/openapi.json', (c) => c.json(buildOpenApi(reg.documented, pkg.version)));
-  app.get('/v1/docs', (c) => c.html(docsHtml));
+  // The API reference loads Swagger from a CDN into the app's own origin and lists every route: development only.
   if (deps.env.NODE_ENV !== 'production') {
+    app.get('/v1/openapi.json', (c) => c.json(buildOpenApi(reg.documented, pkg.version)));
+    app.get('/v1/docs', (c) => c.html(docsHtml));
     app.get('/v1/console', (c) => c.html(consoleHtml));
     // Mail and SMS "sent" in development, so a sign-up can be finished without a mail provider.
     app.get('/v1/dev/outbox', (c) => c.json({ data: [...getOutbox()].reverse() }));

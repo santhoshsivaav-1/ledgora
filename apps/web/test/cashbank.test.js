@@ -13,7 +13,10 @@ import {
 
 describe('cheque action buttons by status', () => {
   it('follow the actions the API allows, in order, with labels', () => {
-    expect(chequeButtons({ actions: ['deposit', 'cancel'] }).map((b) => b.label)).toEqual(['Deposit', 'Cancel']);
+    expect(chequeButtons({ actions: ['deposit', 'cancel'] }).map((b) => b.label)).toEqual([
+      'Deposit',
+      'Cancel',
+    ]);
     expect(chequeButtons({ actions: ['clear', 'bounce'] })).toEqual([
       { action: 'clear', label: 'Cleared', tone: 'primary' },
       { action: 'bounce', label: 'Bounced', tone: 'danger' },
@@ -24,10 +27,19 @@ describe('cheque action buttons by status', () => {
 });
 
 describe('Add Loan form: EMI recompute', () => {
-  const form = { principal: '1000000', ratePct: '12', tenureMonths: '12', interestType: 'reducing', emi: '', emiEdited: false };
+  const form = {
+    principal: '1000000',
+    ratePct: '12',
+    tenureMonths: '12',
+    interestType: 'reducing',
+    emi: '',
+    emiEdited: false,
+  };
   it('is the formula figure while the owner has not typed one', () => {
     expect(loanFormEmi(form)).toBe(88848.79);
-    expect(loanFormEmi({ ...form, interestType: 'flat', principal: '120000', ratePct: '10' })).toBe(11000);
+    expect(loanFormEmi({ ...form, interestType: 'flat', principal: '120000', ratePct: '10' })).toBe(
+      11000,
+    );
     expect(loanFormEmi({ ...form, tenureMonths: '' })).toBe(0);
   });
   it('keeps a figure the owner typed', () => {
@@ -47,7 +59,13 @@ describe('reading a statement for reconciliation', () => {
     expect(r.skipped).toBe(1);
     expect(r.rows).toEqual([
       { date: '2026-11-03', description: 'SMS charges', debit: 180, credit: 0, balance: 234920 },
-      { date: '2026-11-06', description: 'UPI/RCT-5/Ravi', debit: 0, credit: 5000, balance: 239920 },
+      {
+        date: '2026-11-06',
+        description: 'UPI/RCT-5/Ravi',
+        debit: 0,
+        credit: 5000,
+        balance: 239920,
+      },
     ]);
     expect(statementClosing(r.rows)).toBe(239920);
     expect(statementClosing([])).toBeNull();
@@ -111,11 +129,15 @@ function zip(parts) {
   const all = [...locals, ...central, end];
   const out = new Uint8Array(all.reduce((s, a) => s + a.length, 0));
   let p = 0;
-  for (const a of all) { out.set(a, p); p += a.length; }
+  for (const a of all) {
+    out.set(a, p);
+    p += a.length;
+  }
   return out;
 }
 
-const SHARED = '<sst><si><t>Date</t></si><si><t>Narration</t></si><si><t>Withdrawal Amt</t></si><si><t>Deposit Amt</t></si><si><t>Closing Balance</t></si><si><r><t>UPI/RCT-5/</t></r><r><t>Ravi &amp; Sons</t></r></si></sst>';
+const SHARED =
+  '<sst><si><t>Date</t></si><si><t>Narration</t></si><si><t>Withdrawal Amt</t></si><si><t>Deposit Amt</t></si><si><t>Closing Balance</t></si><si><r><t>UPI/RCT-5/</t></r><r><t>Ravi &amp; Sons</t></r></si></sst>';
 const SHEET = [
   '<worksheet><sheetData>',
   '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c><c r="E1" t="s"><v>4</v></c></row>',
@@ -127,22 +149,36 @@ const SHEET = [
 describe('Excel (.xlsx) bank statements, read without a library', () => {
   it('reads shared and inline strings, numbers and Excel date serials, stored or deflated', async () => {
     for (const deflate of [false, true]) {
-      const file = zip([['xl/sharedStrings.xml', SHARED, deflate], ['xl/worksheets/sheet1.xml', SHEET, deflate]]);
+      const file = zip([
+        ['xl/sharedStrings.xml', SHARED, deflate],
+        ['xl/worksheets/sheet1.xml', SHEET, deflate],
+      ]);
       const rows = await readXlsx(file);
       expect(rows[1]).toEqual(['46332', 'UPI/RCT-5/Ravi & Sons', '', '5000', '240100']);
       expect(rowsToCsv(rows).split('\n')[2]).toBe('07/11/2026,"SMS, charges",180,,239920');
     }
   });
   it('a statement file (.xlsx) becomes reconcile rows; an old .xls is refused with a hint', async () => {
-    const bytes = zip([['xl/sharedStrings.xml', SHARED, true], ['xl/worksheets/sheet1.xml', SHEET, true]]);
+    const bytes = zip([
+      ['xl/sharedStrings.xml', SHARED, true],
+      ['xl/worksheets/sheet1.xml', SHEET, true],
+    ]);
     const r = await statementRowsFromFile(new File([bytes], 'hdfc.xlsx'));
     expect(r.rows).toEqual([
-      { date: '2026-11-06', description: 'UPI/RCT-5/Ravi & Sons', debit: 0, credit: 5000, balance: 240100 },
+      {
+        date: '2026-11-06',
+        description: 'UPI/RCT-5/Ravi & Sons',
+        debit: 0,
+        credit: 5000,
+        balance: 240100,
+      },
       { date: '2026-11-07', description: 'SMS, charges', debit: 180, credit: 0, balance: 239920 },
     ]);
     const xls = new Uint8Array(64);
     new DataView(xls.buffer).setUint32(0, 0xe011cfd0, true);
-    await expect(statementRowsFromFile(new File([xls], 'old.xls'))).rejects.toThrow(/save it as \.xlsx or CSV/);
+    await expect(statementRowsFromFile(new File([xls], 'old.xls'))).rejects.toThrow(
+      /save it as \.xlsx or CSV/,
+    );
     await expect(readXlsx(new Uint8Array(40))).rejects.toThrow(/not an \.xlsx/);
   });
 });
@@ -151,16 +187,32 @@ describe('reconcile quick entries and the §138 tracker', () => {
   it('a statement debit can be bank charges, drawings or cash withdrawn; a credit interest, capital or cash deposited', () => {
     expect(RECON_QUICK.debit.map((o) => o.id)).toEqual(['bank_charges', 'drawings', 'to_cash']);
     expect(RECON_QUICK.credit.map((o) => o.id)).toEqual(['interest', 'capital', 'from_cash']);
-    expect(RECON_QUICK.credit[0].body).toMatchObject({ direction: 'increase', countAsIncome: true });
+    expect(RECON_QUICK.credit[0].body).toMatchObject({
+      direction: 'increase',
+      countAsIncome: true,
+    });
   });
   it('says what to do at each §138 stage', () => {
-    expect(SECTION_138_TEXT.send_notice.text({ noticeBy: '2026-12-05', daysLeft: 25 })).toBe('Send the demand notice by 2026-12-05 (25 days left)');
-    expect(SECTION_138_TEXT.complaint_window.text({ complaintFrom: '2026-12-06', complaintBy: '2027-01-05', daysLeft: 3 })).toMatch(/2026-12-06 to 2027-01-05/);
+    expect(SECTION_138_TEXT.send_notice.text({ noticeBy: '2026-12-05', daysLeft: 25 })).toBe(
+      'Send the demand notice by 2026-12-05 (25 days left)',
+    );
+    expect(
+      SECTION_138_TEXT.complaint_window.text({
+        complaintFrom: '2026-12-06',
+        complaintBy: '2027-01-05',
+        daysLeft: 3,
+      }),
+    ).toMatch(/2026-12-06 to 2027-01-05/);
   });
 });
 
 // ---- Cash & Bank reports (P6-S6) ----------------------------------------------------------------------------------------
-import { CASH_BANK_REPORTS, bankStatementRows, chequeRegisterRows, loanStatementRows } from '../src/lib/data/cashbank';
+import {
+  CASH_BANK_REPORTS,
+  bankStatementRows,
+  chequeRegisterRows,
+  loanStatementRows,
+} from '../src/lib/data/cashbank';
 
 describe('Cash & Bank report rows', () => {
   it('Bank Statement: an opening row, then entries; the last balance is the account closing', () => {
@@ -168,20 +220,67 @@ describe('Cash & Bank report rows', () => {
       opening: 200000,
       closing: 204820,
       rows: [
-        { id: 'a', txnDate: '2026-11-03', refType: 'adjustment', narration: 'Withdrawal: SMS', partyName: null, deposit: 0, withdrawal: 180, running: 199820, reconciled: true },
-        { id: 'b', txnDate: '2026-11-06', refType: 'payment', narration: 'Payment RCT-5', partyName: 'Ravi', deposit: 5000, withdrawal: 0, running: 204820, reconciled: false },
+        {
+          id: 'a',
+          txnDate: '2026-11-03',
+          refType: 'adjustment',
+          narration: 'Withdrawal: SMS',
+          partyName: null,
+          deposit: 0,
+          withdrawal: 180,
+          running: 199820,
+          reconciled: true,
+        },
+        {
+          id: 'b',
+          txnDate: '2026-11-06',
+          refType: 'payment',
+          narration: 'Payment RCT-5',
+          partyName: 'Ravi',
+          deposit: 5000,
+          withdrawal: 0,
+          running: 204820,
+          reconciled: false,
+        },
       ],
     });
     expect(rows[0]).toMatchObject({ id: 'opening', balance: 200000 });
-    expect(rows[1]).toMatchObject({ withdrawal: 180, deposit: null, reconciled: '✔', reference: 'Adjustment' });
+    expect(rows[1]).toMatchObject({
+      withdrawal: 180,
+      deposit: null,
+      reconciled: '✔',
+      reference: 'Adjustment',
+    });
     expect(rows.at(-1)).toMatchObject({ party: 'Ravi', deposit: 5000, balance: 204820 });
   });
   it('Loan Statement: disbursal, payments and top-ups in date order; the balance ends at what the schedule says is owed', () => {
     const rows = loanStatementRows({
-      id: 'L', principal: 1000000, receivedOn: '2026-04-01', processingFee: 5000, outstanding: 1121151.21,
+      id: 'L',
+      principal: 1000000,
+      receivedOn: '2026-04-01',
+      processingFee: 5000,
+      outstanding: 1121151.21,
       payments: [
-        { id: 't', date: '2026-05-20', kind: 'topup', principal: 200000, interest: 0, charges: 0, tdsAmount: 0, createdAt: '2' },
-        { id: 'e', date: '2026-05-05', kind: 'emi', principal: 78848.79, interest: 10000, charges: 0, tdsAmount: 1000, createdAt: '1' },
+        {
+          id: 't',
+          date: '2026-05-20',
+          kind: 'topup',
+          principal: 200000,
+          interest: 0,
+          charges: 0,
+          tdsAmount: 0,
+          createdAt: '2',
+        },
+        {
+          id: 'e',
+          date: '2026-05-05',
+          kind: 'emi',
+          principal: 78848.79,
+          interest: 10000,
+          charges: 0,
+          tdsAmount: 1000,
+          createdAt: '1',
+        },
       ],
     });
     expect(rows.map((r) => r.type)).toEqual(['Disbursal', 'EMI', 'Top-up']);
@@ -192,17 +291,57 @@ describe('Cash & Bank report rows', () => {
   it('Cheque Register: days past the cheque date only for cheques still open or deposited; stale marked', () => {
     const rows = chequeRegisterRows(
       [
-        { id: '1', direction: 'received', number: '1', partyName: 'A', amount: 100, chequeDate: '2026-11-01', status: 'open', stale: false },
-        { id: '2', direction: 'issued', number: '2', partyName: 'B', amount: 50, chequeDate: '2026-11-01', status: 'cleared', stale: false },
-        { id: '3', direction: 'received', number: '3', partyName: 'C', amount: 10, chequeDate: '2026-11-20', status: 'open', stale: false },
-        { id: '4', direction: 'received', number: '4', partyName: 'D', amount: 10, chequeDate: '2026-07-01', status: 'deposited', stale: true },
+        {
+          id: '1',
+          direction: 'received',
+          number: '1',
+          partyName: 'A',
+          amount: 100,
+          chequeDate: '2026-11-01',
+          status: 'open',
+          stale: false,
+        },
+        {
+          id: '2',
+          direction: 'issued',
+          number: '2',
+          partyName: 'B',
+          amount: 50,
+          chequeDate: '2026-11-01',
+          status: 'cleared',
+          stale: false,
+        },
+        {
+          id: '3',
+          direction: 'received',
+          number: '3',
+          partyName: 'C',
+          amount: 10,
+          chequeDate: '2026-11-20',
+          status: 'open',
+          stale: false,
+        },
+        {
+          id: '4',
+          direction: 'received',
+          number: '4',
+          partyName: 'D',
+          amount: 10,
+          chequeDate: '2026-07-01',
+          status: 'deposited',
+          stale: true,
+        },
       ],
       '2026-11-11',
     );
     expect(rows.map((r) => r.daysOverdue)).toEqual([10, null, null, 133]);
     expect(rows[1].direction).toBe('Issued');
     expect(rows[3].status).toBe('deposited (stale)');
-    expect(CASH_BANK_REPORTS.map((r) => r.id)).toEqual(['bank-statement', 'loan-statement', 'cheque-register']);
+    expect(CASH_BANK_REPORTS.map((r) => r.id)).toEqual([
+      'bank-statement',
+      'loan-statement',
+      'cheque-register',
+    ]);
   });
 });
 
@@ -210,9 +349,24 @@ describe('loan statement with interest credited before payment', () => {
   it('a credit is its own row; its later payment does not count the interest again; balance unchanged by the credit', async () => {
     const { loanStatementRows: rowsOf, fyEndOf } = await import('../src/lib/data/cashbank');
     const rows = rowsOf({
-      id: 'L', principal: 300000, receivedOn: '2026-04-01', processingFee: 0,
+      id: 'L',
+      principal: 300000,
+      receivedOn: '2026-04-01',
+      processingFee: 0,
       credits: [{ id: 'c', date: '2027-03-31', amount: 12000, tdsAmount: 1200, createdAt: '1' }],
-      payments: [{ id: 'p', date: '2027-04-05', kind: 'emi', principal: 25000, interest: 12000, accruedSettled: 12000, charges: 0, tdsAmount: 0, createdAt: '2' }],
+      payments: [
+        {
+          id: 'p',
+          date: '2027-04-05',
+          kind: 'emi',
+          principal: 25000,
+          interest: 12000,
+          accruedSettled: 12000,
+          charges: 0,
+          tdsAmount: 0,
+          createdAt: '2',
+        },
+      ],
     });
     expect(rows.map((r) => [r.type, r.interest, r.tds, r.balance])).toEqual([
       ['Disbursal', null, null, 300000],

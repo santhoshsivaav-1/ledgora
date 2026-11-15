@@ -4,7 +4,8 @@ import { POS_SHORTCUTS, actionForKey } from '../src/features/pos/posKeys';
 import { blankBill, closeTab, parseDiscount, tabLabel } from '../src/features/pos/posBills';
 import { receiptHtml } from '../src/features/pos/receipt';
 
-const key = (k, o = {}) => actionForKey({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...o });
+const key = (k, o = {}) =>
+  actionForKey({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...o });
 
 describe('shortcuts', () => {
   it('every key in the Vyapar screen maps to its action', () => {
@@ -35,14 +36,44 @@ describe('shortcuts', () => {
     expect(key('3', { ctrlKey: true })).toEqual({ action: 'gotoBill', index: 2 });
   });
   it('plain letters and arrows belong to a text box while typing', () => {
-    expect(actionForKey({ key: '/', ctrlKey: false, metaKey: false, altKey: false }, { typing: true })).toBeNull();
-    expect(actionForKey({ key: 'ArrowDown', ctrlKey: false, metaKey: false, altKey: false }, { typing: true })).toBeNull();
-    expect(actionForKey({ key: 'F2', ctrlKey: false, metaKey: false, altKey: false }, { typing: true })?.action).toBe('qty');
-    expect(actionForKey({ key: 'ArrowDown', ctrlKey: false, metaKey: false, altKey: false })).toEqual({ action: 'moveLine', delta: 1 });
+    expect(
+      actionForKey({ key: '/', ctrlKey: false, metaKey: false, altKey: false }, { typing: true }),
+    ).toBeNull();
+    expect(
+      actionForKey(
+        { key: 'ArrowDown', ctrlKey: false, metaKey: false, altKey: false },
+        { typing: true },
+      ),
+    ).toBeNull();
+    expect(
+      actionForKey({ key: 'F2', ctrlKey: false, metaKey: false, altKey: false }, { typing: true })
+        ?.action,
+    ).toBe('qty');
+    expect(
+      actionForKey({ key: 'ArrowDown', ctrlKey: false, metaKey: false, altKey: false }),
+    ).toEqual({ action: 'moveLine', delta: 1 });
   });
   it('the help list names every action the map can return', () => {
     const named = new Set(POS_SHORTCUTS.map((s) => s.action));
-    for (const a of ['newBill', 'closeBill', 'qty', 'itemDiscount', 'removeItem', 'unit', 'charges', 'billDiscount', 'loyalty', 'customer', 'remarks', 'breakup', 'save', 'saveNew', 'payments', 'focusSearch', 'help'])
+    for (const a of [
+      'newBill',
+      'closeBill',
+      'qty',
+      'itemDiscount',
+      'removeItem',
+      'unit',
+      'charges',
+      'billDiscount',
+      'loyalty',
+      'customer',
+      'remarks',
+      'breakup',
+      'save',
+      'saveNew',
+      'payments',
+      'focusSearch',
+      'help',
+    ])
       expect(named.has(a), a).toBe(true);
   });
 });
@@ -77,13 +108,37 @@ describe('held bills', () => {
 
 describe('receipt', () => {
   const invoice = {
-    number: 'INV-7', invoiceDate: '2026-11-11', total: 236, taxableAmount: 200, cgst: 18, sgst: 18, igst: 0, cess: 0, paidAmount: 236, notes: '',
+    number: 'INV-7',
+    invoiceDate: '2026-11-11',
+    total: 236,
+    taxableAmount: 200,
+    cgst: 18,
+    sgst: 18,
+    igst: 0,
+    cess: 0,
+    paidAmount: 236,
+    notes: '',
     data: { totals: { roundOff: 0 } },
-    lines: [{ name: 'Soap <b>', quantity: 2, unit: 'PCS', rate: 100, taxPercent: 18, lineTotal: 236, description: '' }],
+    lines: [
+      {
+        name: 'Soap <b>',
+        quantity: 2,
+        unit: 'PCS',
+        rate: 100,
+        taxPercent: 18,
+        lineTotal: 236,
+        description: '',
+      },
+    ],
     payments: [{ mode: 'cash', amount: 236 }],
   };
   it('shows the books: lines, GST split, tender and change', () => {
-    const h = receiptHtml({ business: { name: 'Shop', gstin: '33AAAAA0000A1Z5' }, invoice, change: 264, settings: { paper: '58mm', receiptFooter: 'Thanks' } });
+    const h = receiptHtml({
+      business: { name: 'Shop', gstin: '33AAAAA0000A1Z5' },
+      invoice,
+      change: 264,
+      settings: { paper: '58mm', receiptFooter: 'Thanks' },
+    });
     expect(h).toContain('INV-7');
     expect(h).toContain('CGST');
     expect(h).toContain('236.00');

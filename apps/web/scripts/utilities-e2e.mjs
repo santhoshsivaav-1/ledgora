@@ -3,7 +3,6 @@
 // API serves the built app); it creates a throwaway account. Screenshots go to the folder given as the first argument.
 import { createRequire } from 'node:module';
 import { signUpAndSetUp } from './e2eSignup.mjs';
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 const require = createRequire(new URL('../package.json', import.meta.url));
@@ -16,7 +15,6 @@ const check = (name, ok, extra = '') => { results.push(!!ok); console.log(`${ok 
 const visible = (loc, timeout = 8000) => loc.first().waitFor({ timeout }).then(() => true, () => false);
 const shot = (page, n) => (OUT ? page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true }) : Promise.resolve());
 const password = 'correct-horse-9';
-const today = new Date().toISOString().slice(0, 10);
 const outbox = async () => (await (await fetch(`${API}/v1/dev/outbox`)).json()).data;
 async function waitForMail(match) {
   for (let i = 0; i < 50; i++) { const f = (await outbox()).find(match); if (f) return f; await new Promise((r) => setTimeout(r, 100)); }
@@ -28,8 +26,6 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, 
 const page = await ctx.newPage();
 const pageErrors = [];
 page.on('pageerror', (e) => { pageErrors.push(e.message); console.log('pageerror:', e.message.slice(0, 200)); });
-/** The input or select of a form field, found by its label text inside `scope` (a dialog). */
-const field = (scope, label) => scope.locator('.form-group', { has: page.locator('label', { hasText: label }) }).locator('input, select').first();
 
 try {
   const email = `ut${Date.now()}@example.com`;

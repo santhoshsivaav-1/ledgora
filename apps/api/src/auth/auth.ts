@@ -68,8 +68,15 @@ export function createAuth(db: Database, env: AppEnv) {
     databaseHooks: {
       user: {
         create: {
-          // E-mail confirmation is switched off for now: every new account counts as verified.
-          before: async (u) => ({ data: { ...u, emailVerified: true } }),
+          // A real e-mail must be confirmed when REQUIRE_EMAIL_VERIFICATION is on. Phone sign-ups carry a placeholder
+          // address (proved by the SMS code instead), and Google vouches for its own addresses.
+          before: async (u) => ({
+            data: {
+              ...u,
+              emailVerified:
+                u.emailVerified || !env.REQUIRE_EMAIL_VERIFICATION || !isRealEmail(u.email),
+            },
+          }),
           // 2.6: workspace, first business and trial exist before the first session does.
           after: async (u) => void (await onboardNewUser(db, u)),
         },

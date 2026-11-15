@@ -6,6 +6,7 @@ import {
   downloadUrl,
   fileRecord,
   idParam,
+  MAX_UPLOAD_BYTES,
   okBody,
   uploadUrl,
   uploadUrlInput,
@@ -78,6 +79,14 @@ export function filesModule({ route }: Registrar) {
       if (!f) throw notFound('File');
       const size = await deps.storage.size(f.storageKey);
       if (size === null) throw new AppError('unprocessable', 'No upload found for this file yet');
+      // The size asked for at upload time was only a promise; what landed in storage is what counts.
+      if (size > MAX_UPLOAD_BYTES || size > f.sizeBytes) {
+        await deps.storage.remove(f.storageKey);
+        throw new AppError(
+          'unprocessable',
+          'The uploaded file is larger than it was declared to be',
+        );
+      }
       const [row] = await tx
         .update(files)
         .set({ status: 'ready', sizeBytes: size, updatedAt: new Date() })

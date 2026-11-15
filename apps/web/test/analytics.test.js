@@ -1,15 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import { buildAnalytics, currenciesIn, deltaPct } from '../src/features/dashboard/analytics.js';
 
-const inv = (over) => ({ id: over.invoiceNumber, invoiceType: 'tax-invoice', status: 'unpaid', totalAmount: 1000, totalTaxAmount: 150, payments: [], ...over });
+const inv = (over) => ({
+  id: over.invoiceNumber,
+  invoiceType: 'tax-invoice',
+  status: 'unpaid',
+  totalAmount: 1000,
+  totalTaxAmount: 150,
+  payments: [],
+  ...over,
+});
 const TODAY = '2026-06-30';
 
 describe('analytics dashboard numbers', () => {
   const bills = [
-    inv({ invoiceNumber: 'A1', invoiceDate: '2026-06-20', clientName: 'Acme', totalAmount: 5000, totalTaxAmount: 750, status: 'paid', paidAmount: 5000, payments: [{ date: '2026-06-22', amount: 5000 }] }),
-    inv({ invoiceNumber: 'A2', invoiceDate: '2026-06-10', clientName: 'Beta', totalAmount: 2000, data: { details: { dueDate: '2026-06-15' } } }),
+    inv({
+      invoiceNumber: 'A1',
+      invoiceDate: '2026-06-20',
+      clientName: 'Acme',
+      totalAmount: 5000,
+      totalTaxAmount: 750,
+      status: 'paid',
+      paidAmount: 5000,
+      payments: [{ date: '2026-06-22', amount: 5000 }],
+    }),
+    inv({
+      invoiceNumber: 'A2',
+      invoiceDate: '2026-06-10',
+      clientName: 'Beta',
+      totalAmount: 2000,
+      data: { details: { dueDate: '2026-06-15' } },
+    }),
     inv({ invoiceNumber: 'A3', invoiceDate: '2026-05-20', clientName: 'Acme', totalAmount: 2500 }),
-    inv({ invoiceNumber: 'Q1', invoiceType: 'quotation', invoiceDate: '2026-06-25', totalAmount: 99999 }),
+    inv({
+      invoiceNumber: 'Q1',
+      invoiceType: 'quotation',
+      invoiceDate: '2026-06-25',
+      totalAmount: 99999,
+    }),
     inv({ invoiceNumber: 'X1', invoiceDate: '2026-06-26', status: 'cancelled', totalAmount: 7777 }),
     inv({ invoiceNumber: 'U1', invoiceDate: '2026-06-12', currency: 'USD', totalAmount: 100 }),
   ];

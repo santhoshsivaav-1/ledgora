@@ -797,7 +797,7 @@ describe('audit trail (2.14)', () => {
         'POST',
         '/v1/parties',
         { name: 'From a phone' },
-        { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
+        { 'x-forwarded-for': '1.2.3.4, 203.0.113.9' },
       );
       const entry = (await proxied.client(p.cookie)('GET', '/v1/audit?limit=5')).body.data.find(
         (r: any) => r.action === 'party.create',

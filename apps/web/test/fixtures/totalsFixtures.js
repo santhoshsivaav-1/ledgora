@@ -41,7 +41,10 @@ export const TOTALS_FIXTURES = [
   {
     name: 'tax.test: delivery charges line in the total',
     input: {
-      items: [{ quantity: 2, rate: 500, taxPercent: 12 }, deliveryChargeLine([{ taxPercent: 12 }], 100)],
+      items: [
+        { quantity: 2, rate: 500, taxPercent: 12 },
+        deliveryChargeLine([{ taxPercent: 12 }], 100),
+      ],
       profile: punjab,
       client: { state: 'Punjab' },
       details: { placeOfSupply: 'Punjab' },
@@ -61,11 +64,24 @@ export const TOTALS_FIXTURES = [
   },
   {
     name: 'tax.test: with-tax discount, tax-inclusive',
-    input: { items: [inclItem], profile: punjab, client: { state: 'Punjab' }, details: {}, showGST: true, taxInclusive: true },
+    input: {
+      items: [inclItem],
+      profile: punjab,
+      client: { state: 'Punjab' },
+      details: {},
+      showGST: true,
+      taxInclusive: true,
+    },
   },
   {
     name: 'tax.test: bill of supply with a with-tax discount',
-    input: { items: [{ ...inclItem, rate: 1000 }], profile: punjab, client: { state: 'Punjab' }, details: {}, showGST: false },
+    input: {
+      items: [{ ...inclItem, rate: 1000 }],
+      profile: punjab,
+      client: { state: 'Punjab' },
+      details: {},
+      showGST: false,
+    },
   },
   {
     name: 'tax.test: e-way bill, interstate',
@@ -78,7 +94,10 @@ export const TOTALS_FIXTURES = [
     },
   },
   { name: 'tax.test: template, bill of supply', input: template(tpl, punjab) },
-  { name: 'tax.test: template, tax invoice', input: template({ ...tpl, invoiceType: 'tax-invoice' }, punjab) },
+  {
+    name: 'tax.test: template, tax invoice',
+    input: template({ ...tpl, invoiceType: 'tax-invoice' }, punjab),
+  },
   {
     name: 'tax.test: template, place of supply decides IGST',
     input: template({ ...tpl, invoiceType: 'tax-invoice', placeOfSupply: 'Haryana' }, punjab),
@@ -127,7 +146,12 @@ export const TOTALS_FIXTURES = [
       client: { state: 'Delhi' },
       details: { placeOfSupply: 'Delhi' },
       showGST: true,
-      invoiceOptions: { showTCS: true, tcsRate: 0.1, tcsCumulativeThisYear: 6_000_000, showRoundOff: true },
+      invoiceOptions: {
+        showTCS: true,
+        tcsRate: 0.1,
+        tcsCumulativeThisYear: 6_000_000,
+        showRoundOff: true,
+      },
     },
   },
   {
@@ -152,7 +176,11 @@ export const TOTALS_FIXTURES = [
       client: { state: 'Punjab' },
       details: { placeOfSupply: 'Punjab' },
       showGST: true,
-      invoiceOptions: { invoiceDiscountType: 'percent', invoiceDiscountValue: 7.5, showRoundOff: true },
+      invoiceOptions: {
+        invoiceDiscountType: 'percent',
+        invoiceDiscountValue: 7.5,
+        showRoundOff: true,
+      },
     },
   },
   {
@@ -209,7 +237,10 @@ export const TOTALS_FIXTURES = [
   {
     name: 'null profile and garbage numbers do not crash',
     input: {
-      items: [{ quantity: 'abc', rate: 100, taxPercent: 18 }, { quantity: 2, rate: -5, taxPercent: 'x' }],
+      items: [
+        { quantity: 'abc', rate: 100, taxPercent: 18 },
+        { quantity: 2, rate: -5, taxPercent: 'x' },
+      ],
       profile: null,
       client: null,
       details: null,

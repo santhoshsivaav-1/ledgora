@@ -27,6 +27,8 @@ const schema = z.object({
   SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   /** Honour X-Forwarded-For. Turn on only behind a proxy you control, or callers can fake their IP. */
   TRUST_PROXY: bool.default(false),
+  /** How many proxies of yours sit in front of the API; the client address is that many entries from the right of X-Forwarded-For. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().default('Ledgora <no-reply@ledgora.local>'),
   SMTP_URL: z.string().optional(),
@@ -74,6 +76,13 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     throw new Error(`Invalid environment:\n${lines.join('\n')}`);
   }
   const env = parsed.data;
+  // A forgotten NODE_ENV must not turn a deployed server into one that signs sessions with a public default.
+  const localDb = /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(env.DATABASE_URL);
+  if (env.NODE_ENV !== 'test' && !localDb) {
+    for (const name of ['AUTH_SECRET', 'FILE_SIGNING_SECRET'] as const)
+      if (env[name].startsWith('dev-only'))
+        throw new Error(`Invalid environment:\n  ${name} must be set (the database is not local)`);
+  }
   if (env.NODE_ENV === 'production') {
     if (env.AUTH_SECRET.startsWith('dev-only'))
       throw new Error('Invalid environment:\n  AUTH_SECRET must be set in production');

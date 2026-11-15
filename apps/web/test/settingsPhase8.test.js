@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { PLANNED_TABLES, SETTINGS, SETTINGS_TABS, SETTING_KEYS } from '@ledgora/contracts';
-import { TAB_IDS, comingSoonLabel, keysShownOn, plannedOf, searchSettings, sectionsOf } from '../src/features/settings/registry/model';
+import {
+  TAB_IDS,
+  comingSoonLabel,
+  keysShownOn,
+  plannedOf,
+  searchSettings,
+  sectionsOf,
+} from '../src/features/settings/registry/model';
 import { viewFromPath, pathForView } from '../src/app/router';
 
 // Vyapar parity P8-S1: what the Settings screen is built from.
@@ -14,7 +21,8 @@ describe('settings screen model', () => {
 
   it('has 11 tabs and no tab page is empty', () => {
     expect(TAB_IDS).toHaveLength(11);
-    for (const t of TAB_IDS) expect(sectionsOf(t).length + plannedOf(t).length, t).toBeGreaterThan(0);
+    for (const t of TAB_IDS)
+      expect(sectionsOf(t).length + plannedOf(t).length, t).toBeGreaterThan(0);
   });
 
   it('badges every key that is not live, so none is silently inert', () => {
@@ -36,10 +44,17 @@ describe('settings screen model', () => {
 
 describe('cards that point elsewhere', () => {
   it('every link on a settings tab opens a screen the router knows', () => {
-    for (const p of PLANNED_TABLES.filter((x) => x.href)) expect(viewFromPath(p.href.split('?')[0]), p.title).not.toBe('dashboard');
+    for (const p of PLANNED_TABLES.filter((x) => x.href))
+      expect(viewFromPath(p.href.split('?')[0]), p.title).not.toBe('dashboard');
   });
   it('the reminder rules a business can edit are live, so none of them is an inert toggle', () => {
-    for (const k of SETTING_KEYS.filter((k) => k.startsWith('reminder.') || k === 'party.reminder' || k === 'msg.enabled' || k === 'visits.retentionDays'))
+    for (const k of SETTING_KEYS.filter(
+      (k) =>
+        k.startsWith('reminder.') ||
+        k === 'party.reminder' ||
+        k === 'msg.enabled' ||
+        k === 'visits.retentionDays',
+    ))
       expect(SETTINGS[k].live, k).toBe(true);
   });
 });
@@ -48,10 +63,20 @@ describe('settings search', () => {
   it('finds a row by label, by help text, and by tab name', () => {
     expect(searchSettings('negative stock')[0].key).toBe('txn.negativeStock');
     expect(searchSettings('scanner input').some((h) => h.key === 'txn.barcodeScan')).toBe(true);
-    expect(searchSettings('multi currency').every((h) => SETTINGS[h.key].tab === 'currency' || /currency/i.test(SETTINGS[h.key].label + SETTINGS[h.key].help))).toBe(true);
+    expect(
+      searchSettings('multi currency').every(
+        (h) =>
+          SETTINGS[h.key].tab === 'currency' ||
+          /currency/i.test(SETTINGS[h.key].label + SETTINGS[h.key].help),
+      ),
+    ).toBe(true);
   });
   it('finds every key by its own label', () => {
-    for (const k of SETTING_KEYS) expect(searchSettings(SETTINGS[k].label, 200).some((h) => h.key === k), k).toBe(true);
+    for (const k of SETTING_KEYS)
+      expect(
+        searchSettings(SETTINGS[k].label, 200).some((h) => h.key === k),
+        k,
+      ).toBe(true);
   });
   it('needs every word, ignores case, and lists live settings first', () => {
     expect(searchSettings('ZZZ nothing')).toEqual([]);

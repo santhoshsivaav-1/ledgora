@@ -11,7 +11,16 @@ describe('rcmSupplierDue (D-13)', () => {
     expect(rcmSupplierDue({ total: 11800, reverseCharge: false, tax: 1800, cess: 0 })).toBe(11800);
   });
   it('takes cess off too, and §194Q TDS and adjusted debit notes as before', () => {
-    expect(rcmSupplierDue({ total: 11000, reverseCharge: true, tax: 800, cess: 200, tds: 10, adjusted: 90 })).toBe(9900);
+    expect(
+      rcmSupplierDue({
+        total: 11000,
+        reverseCharge: true,
+        tax: 800,
+        cess: 200,
+        tds: 10,
+        adjusted: 90,
+      }),
+    ).toBe(9900);
   });
   it('never goes below zero', () => {
     expect(rcmSupplierDue({ total: 100, reverseCharge: true, tax: 500, cess: 0 })).toBe(0);
@@ -22,7 +31,14 @@ describe('rcmItcForPeriod (4(A)(3) in the month the RCM tax is paid)', () => {
   const NOV = { from: '2026-11-01', to: '2026-11-30' };
   const DEC = { from: '2026-12-01', to: '2026-12-31' };
   const heads = { igst: 0, cgst: 250, sgst: 250, cess: 0 };
-  const bill = (o) => ({ id: 'P17', date: '2026-11-08', reverseCharge: true, heads, rcmPayment: null, ...o });
+  const bill = (o) => ({
+    id: 'P17',
+    date: '2026-11-08',
+    reverseCharge: true,
+    heads,
+    rcmPayment: null,
+    ...o,
+  });
 
   it('unpaid: liable in 3.1(d) for the bill month, no credit, listed as unpaid', () => {
     const r = rcmItcForPeriod([bill()], NOV);
@@ -38,11 +54,20 @@ describe('rcmItcForPeriod (4(A)(3) in the month the RCM tax is paid)', () => {
   });
   it('paid next month: liability in November, credit in December only', () => {
     const b = bill({ rcmPayment: { date: '2026-12-03', amount: 500 } });
-    expect(rcmItcForPeriod([b], NOV)).toMatchObject({ liability: heads, claim: { cgst: 0, sgst: 0 } });
-    expect(rcmItcForPeriod([b], DEC)).toMatchObject({ liability: { cgst: 0, sgst: 0 }, claim: heads });
+    expect(rcmItcForPeriod([b], NOV)).toMatchObject({
+      liability: heads,
+      claim: { cgst: 0, sgst: 0 },
+    });
+    expect(rcmItcForPeriod([b], DEC)).toMatchObject({
+      liability: { cgst: 0, sgst: 0 },
+      claim: heads,
+    });
   });
   it('ignores ordinary bills, so there is no double count with normal credit', () => {
-    const r = rcmItcForPeriod([bill({ reverseCharge: false, rcmPayment: { date: '2026-11-20' } })], NOV);
+    const r = rcmItcForPeriod(
+      [bill({ reverseCharge: false, rcmPayment: { date: '2026-11-20' } })],
+      NOV,
+    );
     expect(r.liability).toEqual({ igst: 0, cgst: 0, sgst: 0, cess: 0 });
     expect(r.claim).toEqual({ igst: 0, cgst: 0, sgst: 0, cess: 0 });
   });

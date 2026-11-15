@@ -31,7 +31,10 @@ describe('posSettings', () => {
     expect(s.loyalty.maxRedeemPercent).toBe(50);
   });
   it('caps redeem % at 100 and ignores unknown mode accounts', () => {
-    const s = posSettings({ loyalty: { maxRedeemPercent: 400 }, modeAccounts: { upi: 'a', x: 'b' } });
+    const s = posSettings({
+      loyalty: { maxRedeemPercent: 400 },
+      modeAccounts: { upi: 'a', x: 'b' },
+    });
     expect(s.loyalty.maxRedeemPercent).toBe(100);
     expect(s.modeAccounts).toEqual({ upi: 'a' });
   });
@@ -71,12 +74,18 @@ describe('spreadDiscount', () => {
   });
   it('random carts: Σ parts = min(discount, Σ values), each part ≤ its value', () => {
     let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     for (let k = 0; k < 300; k++) {
-      const vals = Array.from({ length: 1 + Math.floor(rnd() * 8) }, () => Math.round(rnd() * 50000) / 100);
+      const vals = Array.from(
+        { length: 1 + Math.floor(rnd() * 8) },
+        () => Math.round(rnd() * 50000) / 100,
+      );
       const d = Math.round(rnd() * 30000) / 100;
       const parts = spreadDiscount(vals, d);
-      const want = Math.min(d, vals.reduce((s, v) => s + v, 0));
+      const want = Math.min(
+        d,
+        vals.reduce((s, v) => s + v, 0),
+      );
       expect(Math.round(parts.reduce((s, v) => s + v, 0) * 100)).toBe(Math.round(want * 100));
       parts.forEach((p, i) => expect(p).toBeLessThanOrEqual(vals[i] + 1e-9));
     }
@@ -93,7 +102,12 @@ describe('posTotals', () => {
     expect(t.items).toBe(1);
   });
   it('a bill discount comes off the taxable value, so GST falls with it', () => {
-    const lines = cartAdd(cartAdd([], soap, S({ pricing: 'without-tax' })), rice, S({ pricing: 'without-tax' }), 2);
+    const lines = cartAdd(
+      cartAdd([], soap, S({ pricing: 'without-tax' })),
+      rice,
+      S({ pricing: 'without-tax' }),
+      2,
+    );
     const s = S({ pricing: 'without-tax', roundOff: 'none' });
     const t = posTotals({ lines, billDiscount: { type: 'percent', value: 10 } }, s, KA);
     // 200 worth before; 10% = 20 spread 100:100 → soap 90 @18% + rice 90 @5%
@@ -105,7 +119,11 @@ describe('posTotals', () => {
   it('matches computeInvoiceTotals on the lines it hands the server', () => {
     const s = S({ freeQty: true, roundOff: 'up' });
     const lines = cartAdd([], soap, s, 3).map((l) => ({ ...l, freeQty: 1, discount: 5 }));
-    const bill = { lines, billDiscount: { type: 'amount', value: 7 }, charges: [{ name: 'Bag', amount: 10, gstRate: 18 }] };
+    const bill = {
+      lines,
+      billDiscount: { type: 'amount', value: 7 },
+      charges: [{ name: 'Bag', amount: 10, gstRate: 18 }],
+    };
     const t = posTotals(bill, s, KA);
     const server = computeInvoiceTotals({
       items: posInvoiceLines(bill, s),
@@ -129,18 +147,29 @@ describe('posTotals', () => {
   it('bill tax sets one rate on every line', () => {
     const s = S({ billTax: true, pricing: 'without-tax', roundOff: 'none' });
     const lines = cartAdd(cartAdd([], soap, s), rice, s);
-    expect(posInvoiceLines({ lines, billTaxPercent: 12 }, s).map((l) => l.taxPercent)).toEqual([12, 12]);
+    expect(posInvoiceLines({ lines, billTaxPercent: 12 }, s).map((l) => l.taxPercent)).toEqual([
+      12, 12,
+    ]);
     expect(posTotals({ lines, billTaxPercent: 12 }, s, KA).total).toBe(168);
   });
   it('an interstate customer is charged IGST', () => {
-    const t = posTotals({ lines: cartAdd([], soap, S()) }, S(), { ...KA, partyState: 'Tamil Nadu' });
+    const t = posTotals({ lines: cartAdd([], soap, S()) }, S(), {
+      ...KA,
+      partyState: 'Tamil Nadu',
+    });
     expect(t.igst).toBe(18);
     expect(t.cgst).toBe(0);
   });
 });
 
 describe('loyalty', () => {
-  const rule = { enabled: true, earnPer100: 2, pointValue: 0.5, minBill: 100, maxRedeemPercent: 20 };
+  const rule = {
+    enabled: true,
+    earnPer100: 2,
+    pointValue: 0.5,
+    minBill: 100,
+    maxRedeemPercent: 20,
+  };
   it('earns whole points per ₹100 above the minimum', () => {
     expect(pointsEarned(250, rule)).toBe(5);
     expect(pointsEarned(99, rule)).toBe(0);
@@ -166,10 +195,14 @@ describe('settleTender', () => {
     expect(r.payments).toEqual([{ mode: 'cash', amount: 486 }]);
   });
   it('splits UPI and cash', () => {
-    const r = settleTender(1000, [
-      { mode: 'upi', amount: 600 },
-      { mode: 'cash', amount: 500 },
-    ], false);
+    const r = settleTender(
+      1000,
+      [
+        { mode: 'upi', amount: 600 },
+        { mode: 'cash', amount: 500 },
+      ],
+      false,
+    );
     expect(r.change).toBe(100);
     expect(r.payments).toEqual([
       { mode: 'upi', amount: 600 },

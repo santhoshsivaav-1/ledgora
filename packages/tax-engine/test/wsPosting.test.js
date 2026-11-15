@@ -3,11 +3,19 @@ import { ACC, billOwnPayments, isBalanced, workspacePostings } from '../src/inde
 
 // The screens' documents post the same vouchers as the typed ones; every voucher balances.
 const lines = (ps) => ps.flatMap((p) => p.lines);
-const acct = (ps, code) => lines(ps).filter((l) => l.account === code).reduce((n, l) => n + (l.debit || 0) - (l.credit || 0), 0);
+const acct = (ps, code) =>
+  lines(ps)
+    .filter((l) => l.account === code)
+    .reduce((n, l) => n + (l.debit || 0) - (l.credit || 0), 0);
 
 describe('workspace bills', () => {
   const bill = {
-    id: 'INV-1', invoiceType: 'tax-invoice', invoiceNumber: 'INV-1', invoiceDate: '2026-10-05', status: 'paid', totalAmount: 118,
+    id: 'INV-1',
+    invoiceType: 'tax-invoice',
+    invoiceNumber: 'INV-1',
+    invoiceDate: '2026-10-05',
+    status: 'paid',
+    totalAmount: 118,
     payments: [
       { amount: 50, mode: 'cash', date: '2026-10-05' },
       { amount: 30, mode: 'upi', receiptNo: 'RCP-1' }, // posted by its receipt
@@ -29,7 +37,11 @@ describe('workspace bills', () => {
     expect(workspacePostings('bills', { ...bill, invoiceType: 'quotation' }, 'x')).toEqual([]);
     expect(workspacePostings('bills', { ...bill, status: 'cancelled' }, 'x')).toEqual([]);
     expect(workspacePostings('bills', null, 'x')).toEqual([]);
-    const cn = workspacePostings('bills', { ...bill, invoiceType: 'credit-note', payments: [] }, 'x');
+    const cn = workspacePostings(
+      'bills',
+      { ...bill, invoiceType: 'credit-note', payments: [] },
+      'x',
+    );
     expect(acct(cn, ACC.SALES_RETURN)).toBe(100);
     expect(acct(cn, ACC.RECEIVABLE)).toBe(-118);
   });
@@ -38,9 +50,21 @@ describe('workspace bills', () => {
 describe('workspace purchases, receipts and expenses', () => {
   it('purchase with ineligible credit and an inline payment; vouchers paying it are not repeated', () => {
     const p = {
-      docType: 'bill', date: '2026-10-02', invoiceNumber: 'S-9', taxableAmount: 1000, totalTax: 180, totalAmount: 1180, interstate: false,
-      items: [{ name: 'A', quantity: 1, rate: 500, taxPercent: 18 }, { name: 'B', quantity: 1, rate: 500, taxPercent: 18, itcStatus: 'ineligible_17_5' }],
-      payments: [{ amount: 100, mode: 'cash', source: 'purchase_inline' }, { amount: 200, mode: 'bank', source: 'voucher' }],
+      docType: 'bill',
+      date: '2026-10-02',
+      invoiceNumber: 'S-9',
+      taxableAmount: 1000,
+      totalTax: 180,
+      totalAmount: 1180,
+      interstate: false,
+      items: [
+        { name: 'A', quantity: 1, rate: 500, taxPercent: 18 },
+        { name: 'B', quantity: 1, rate: 500, taxPercent: 18, itcStatus: 'ineligible_17_5' },
+      ],
+      payments: [
+        { amount: 100, mode: 'cash', source: 'purchase_inline' },
+        { amount: 200, mode: 'bank', source: 'voucher' },
+      ],
     };
     const ps = workspacePostings('purchases', p, 'x');
     expect(ps.every(isBalanced)).toBe(true);
@@ -51,17 +75,40 @@ describe('workspace purchases, receipts and expenses', () => {
     expect(acct(ps, ACC.PAYABLE)).toBe(-1080);
   });
   it('receipt in, payment out with TDS, expense with GST, income', () => {
-    const rin = workspacePostings('receipts', { date: '2026-10-07', amount: 900, tds: 100, mode: 'UPI', receiptNo: 'R1' }, 'x');
+    const rin = workspacePostings(
+      'receipts',
+      { date: '2026-10-07', amount: 900, tds: 100, mode: 'UPI', receiptNo: 'R1' },
+      'x',
+    );
     expect(acct(rin, ACC.BANK_UNASSIGNED)).toBe(900);
     expect(acct(rin, ACC.TDS_RECEIVABLE)).toBe(100);
     expect(acct(rin, ACC.RECEIVABLE)).toBe(-1000);
-    const rout = workspacePostings('receipts', { direction: 'out', date: '2026-10-07', amount: 980, tds: 20, mode: 'cash' }, 'x');
+    const rout = workspacePostings(
+      'receipts',
+      { direction: 'out', date: '2026-10-07', amount: 980, tds: 20, mode: 'cash' },
+      'x',
+    );
     expect(acct(rout, ACC.PAYABLE)).toBe(1000);
     expect(acct(rout, ACC.TDS_PAYABLE)).toBe(-20);
-    const ex = workspacePostings('expenses', { date: '2026-10-08', amount: 1180, gstAmount: 180, paymentMode: 'cash' }, 'x');
+    const ex = workspacePostings(
+      'expenses',
+      { date: '2026-10-08', amount: 1180, gstAmount: 180, paymentMode: 'cash' },
+      'x',
+    );
     expect(acct(ex, ACC.EXPENSES)).toBe(1000);
     expect(acct(ex, ACC.CASH)).toBe(-1180);
-    const inc = workspacePostings('expenses', { kind: 'income', date: '2026-10-08', amount: 500, gstAmount: 0, exempt: true, paymentMode: 'cash' }, 'x');
+    const inc = workspacePostings(
+      'expenses',
+      {
+        kind: 'income',
+        date: '2026-10-08',
+        amount: 500,
+        gstAmount: 0,
+        exempt: true,
+        paymentMode: 'cash',
+      },
+      'x',
+    );
     expect(acct(inc, ACC.OTHER_INCOME)).toBe(-500);
     for (const ps of [rin, rout, ex, inc]) expect(ps.every(isBalanced)).toBe(true);
   });

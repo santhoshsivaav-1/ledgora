@@ -60,7 +60,14 @@ export default function AuthGate({ children }) {
 
   // Any data request answered 401 (session ended elsewhere, expired, revoked) sends the user back to sign-in.
   useEffect(() => {
-    configureApiClient({ onUnauthorized: () => { setMe(null); setPhase('out'); } });
+    configureApiClient({
+      onUnauthorized: () => {
+        // The session ended: the offline copy of billing data must not outlive it on a shared computer.
+        try { caches?.delete('api-cache'); } catch { /* no Cache API */ }
+        setMe(null);
+        setPhase('out');
+      },
+    });
   }, []);
 
   const signOut = useCallback(async () => {
