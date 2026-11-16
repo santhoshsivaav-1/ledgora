@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./itr4-schema": "./src/itr4Schema.ts",
-    "./itr4-codes": "./src/itr4Codes.ts"
+    "./itr4-codes": "./src/itr4Codes.ts",
+    "./itr3-schema": "./src/itr3Schema.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
