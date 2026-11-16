@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./itr4-schema": "./src/itr4Schema.ts",
     "./itr4-codes": "./src/itr4Codes.ts",
-    "./itr3-schema": "./src/itr3Schema.ts"
+    "./itr3-schema": "./src/itr3Schema.ts",
+    "./itr3-codes": "./src/itr3Codes.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

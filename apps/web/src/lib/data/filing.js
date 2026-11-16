@@ -124,3 +124,16 @@ export const buildItr4 = (businessId, fy, filedOn) =>
 export const incomeTaxCalendar = (businessId, fy) =>
   apiClient.get(`/v1/income-tax-calendar?${qs({ businessId, fy })}`);
 export const aisFormatReport = (text, send) => apiClient.post('/v1/ais-imports/format-report', { text, send });
+
+// R2.5 / R4.1: the ITR-3 build and the fixed-asset register.
+export const buildItr3 = (businessId, fy, filedOn) =>
+  apiClient.post('/v1/filing-packs/build/itr3', { businessId, fy, filedOn });
+export const listAssets = (businessId) => apiClient.get(`/v1/fixed-assets?${qs({ businessId })}`);
+export const saveAsset = (body, assetId) =>
+  assetId ? apiClient.patch(`/v1/fixed-assets/${id(assetId)}`, body) : apiClient.post('/v1/fixed-assets', body);
+export const deleteAsset = (assetId) => apiClient.delete(`/v1/fixed-assets/${id(assetId)}`);
+export const saveAssetOpening = (body) => apiClient.put('/v1/asset-block-openings', body);
+export const assetSchedule = (businessId, fy) =>
+  apiClient.get(`/v1/asset-schedule?${qs({ businessId, fy })}`);
+export const postDepreciation = (businessId, fy) =>
+  apiClient.post('/v1/fixed-assets/post-depreciation', { businessId, fy });

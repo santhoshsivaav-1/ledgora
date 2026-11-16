@@ -195,6 +195,8 @@ export const NAV: NavEntry[] = [
       { id: 'tds-tcs', label: 'TDS / TCS', path: '/gst-returns/tds', module: 'gstReturns', perm: 'report:read' },
       { id: 'income-tax', label: 'Income Tax', view: 'incometax', module: 'incomeTax', perm: 'report:read' },
       { id: 'itr4', label: 'ITR-4 Filing', view: 'itr4', icon: Calculator, perm: 'filing:prepare' },
+      { id: 'itr3', label: 'ITR-3 Filing', view: 'itr3', icon: Calculator, perm: 'filing:prepare' },
+      { id: 'assets', label: 'Fixed Assets', view: 'assets', icon: Calculator, perm: 'filing:prepare' },
       { id: 'return-register', label: 'Return Register', view: 'returns', icon: ClipboardList, perm: 'filing:read' },
       { id: 'practice', label: 'CA Dashboard', view: 'practice', icon: Briefcase, when: 'ca' },
     ],

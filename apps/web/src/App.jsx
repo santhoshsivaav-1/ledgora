@@ -119,6 +119,8 @@ const ReturnRegister = lazyView(() => import('./features/filing/ReturnRegister')
 const FilingPackPage = lazyView(() => import('./features/filing/FilingPackPage'));
 const PracticePage = lazyView(() => import('./features/filing/PracticePage'));
 const Itr4Page = lazyView(() => import('./features/filing/Itr4Page'));
+const Itr3Page = lazyView(() => import('./features/filing/Itr3Page'));
+const AssetsPage = lazyView(() => import('./features/assets/AssetsPage'));
 const EditLogPage = lazyView(() => import('./features/filing/EditLogPage'));
 const CatalogSettingsPage = lazyView(() => import('./features/catalog/CatalogSettingsPage'));
 const GSTReturns = lazyView(() => import('./features/gst-returns/GSTReturns'));
@@ -1075,6 +1077,8 @@ function App() {
                 <Route path="/filing/:id" element={<FilingPackPage key={businessKey} />} />
                 <Route path={pathForView('practice')} element={<PracticePage />} />
                 <Route path={pathForView('itr4')} element={<Itr4Page key={businessKey} />} />
+                <Route path={pathForView('itr3')} element={<Itr3Page key={businessKey} />} />
+                <Route path={pathForView('assets')} element={<AssetsPage key={businessKey} />} />
                 <Route path={pathForView('edit-log')} element={<EditLogPage key={businessKey} />} />
                 <Route path="/practice" element={<Navigate to={pathForView('practice')} replace />} />
                 <Route path={pathForView('catalog')} element={<CatalogSettingsPage key={businessKey} />} />

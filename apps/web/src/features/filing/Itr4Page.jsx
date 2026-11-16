@@ -35,10 +35,10 @@ import { localToday } from '../../utils';
 // needs beyond the books, the challans and advance tax, the AIS / TIS match, and the file itself. The app never files:
 // the file is saved as a pack, reviewed, and the person uploads it on the income-tax portal.
 
-const err = (e) => e?.message || 'Something went wrong';
-const rupees = (v) => `₹${Math.round(Number(v) || 0).toLocaleString('en-IN')}`;
-const dmy = (iso) => (iso ? iso.split('-').reverse().join('-') : '–');
-const fyText = (y) => `${y}-${String(y + 1).slice(2)}`;
+export const err = (e) => e?.message || 'Something went wrong';
+export const rupees = (v) => `₹${Math.round(Number(v) || 0).toLocaleString('en-IN')}`;
+export const dmy = (iso) => (iso ? iso.split('-').reverse().join('-') : '–');
+export const fyText = (y) => `${y}-${String(y + 1).slice(2)}`;
 const TABS = [
   { id: 'taxpayer', label: 'Taxpayer' },
   { id: 'return', label: 'Return' },
@@ -46,7 +46,7 @@ const TABS = [
   { id: 'ais', label: 'AIS / TIS' },
   { id: 'build', label: 'Build the file' },
 ];
-const GRID = {
+export const GRID = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
   gap: '0 16px',
@@ -67,7 +67,7 @@ const PARTICULARS = [
 ];
 const BLANK_BANK = { ifsc: '', bankName: '', accountNo: '', accountType: 'SB', useForRefund: true };
 
-function Taxpayer({ businessId }) {
+export function Taxpayer({ businessId }) {
   const [form, setForm] = useState(null);
   const [warn, setWarn] = useState([]);
   useEffect(() => {
@@ -401,7 +401,7 @@ function ReturnInputs({ businessId, fy }) {
   );
 }
 
-function TaxPayments({ businessId, fy }) {
+export function TaxPayments({ businessId, fy }) {
   const [rows, setRows] = useState(null);
   const [plan, setPlan] = useState(null);
   const [f, setF] = useState({ bsr: '', date: localToday(), serial: '', amount: null });
@@ -588,7 +588,7 @@ function TaxPayments({ businessId, fy }) {
   );
 }
 
-function Ais({ businessId, fy }) {
+export function Ais({ businessId, fy }) {
   const [files, setFiles] = useState(null);
   const [rec, setRec] = useState(null);
   const [preview, setPreview] = useState(null);

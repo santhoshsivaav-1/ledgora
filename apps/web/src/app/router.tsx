@@ -60,6 +60,8 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },
   { id: 'itr4', path: '/itr-4', title: 'ITR-4' },
+  { id: 'itr3', path: '/itr-3', title: 'ITR-3' },
+  { id: 'assets', path: '/fixed-assets', title: 'Fixed assets' },
   // File-ready returns: the Return Register (and each pack at /filing/:id) and the CA's practice view.
   { id: 'returns', path: '/filing', title: 'Return register' },
   { id: 'practice', path: '/ca', title: 'CA Dashboard' },
