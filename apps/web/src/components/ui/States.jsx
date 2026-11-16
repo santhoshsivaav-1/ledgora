@@ -4,11 +4,18 @@ import { AlertTriangle, Inbox } from 'lucide-react';
 // went wrong. One look and one set of words, so a screen never shows a blank page or a raw error.
 
 export function LoadingState({ label = 'Loading…' }) {
+  // A skeleton in the shape of a page (a heading, then a card of rows) instead of a spinner: the layout does not jump when the
+  // data arrives, and the screen reads as already there while the server answers. The label is for screen readers.
+  const bar = (w, h = 12, mb = 12) => <span className="ui-skel" aria-hidden="true" style={{ width: w, height: h, marginBottom: mb }} />;
   return (
-    <div role="status" aria-live="polite" style={{ padding: '3rem', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-        <span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        {label}
+    <div role="status" aria-live="polite" aria-busy="true" style={{ padding: '1rem 0' }}>
+      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{label}</span>
+      {bar('220px', 22, 18)}
+      <div className="glass-panel" style={{ padding: '1.25rem' }} aria-hidden="true">
+        {bar('40%', 14, 18)}
+        {[100, 92, 96, 85, 90].map((w, i) => (
+          <span key={i}>{bar(`${w}%`, 12, 14)}</span>
+        ))}
       </div>
     </div>
   );

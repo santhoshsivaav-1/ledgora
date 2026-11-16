@@ -74,46 +74,63 @@ function GstReturnsPage() {
   return <GSTReturns tab={tab} onTab={(t) => navigate(`/gst-returns/${t}`)} />;
 }
 
-const SettingsView = lazy(() => import('./features/settings/SettingsView'));
-const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout'));
-const SettingsTabPage = lazy(() => import('./features/settings/registry/SettingsTabPage'));
-const BillingPage = lazy(() => import('./features/billing/BillingPage'));
+// Every screen is its own chunk. Loading one only when it is first opened made a first visit wait on the network, so after the
+// app is up the rest are fetched quietly (one at a time, when the browser is idle) and a click finds the code already here.
+const viewLoaders = [];
+const lazyView = (loader) => {
+  viewLoaders.push(loader);
+  return lazy(loader);
+};
+const preloadViews = () => {
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
+  let i = 0;
+  const next = () => {
+    if (i >= viewLoaders.length) return;
+    Promise.resolve(viewLoaders[i++]()).catch(() => {}).finally(() => idle(next));
+  };
+  idle(next);
+};
+
+const SettingsView = lazyView(() => import('./features/settings/SettingsView'));
+const SettingsLayout = lazyView(() => import('./features/settings/SettingsLayout'));
+const SettingsTabPage = lazyView(() => import('./features/settings/registry/SettingsTabPage'));
+const BillingPage = lazyView(() => import('./features/billing/BillingPage'));
 import PlanBanner from './features/billing/PlanBanner';
-const TeamPage = lazy(() => import('./features/settings/team/TeamPage'));
-const RolesPage = lazy(() => import('./features/settings/team/RolesPage'));
-const SecurityPage = lazy(() => import('./features/settings/security/SecurityPage'));
-const AcceptInvitePage = lazy(() => import('./features/auth/AcceptInvitePage'));
-const ClientsView = lazy(() => import('./features/parties/ClientsView'));
-const InventoryView = lazy(() => import('./features/items/InventoryView'));
-const BarcodePage = lazy(() => import('./features/utilities/BarcodePage'));
-const TallyPage = lazy(() => import('./features/utilities/TallyPage'));
-const CloseFyPage = lazy(() => import('./features/utilities/CloseFyPage'));
-const BackupPage = lazy(() => import('./features/utilities/BackupPage'));
-const SetupPage = lazy(() => import('./features/utilities/SetupPage'));
-const TrashPage = lazy(() => import('./features/utilities/TrashPage'));
-const PosPage = lazy(() => import('./features/pos/PosPage'));
-const ReportsView = lazy(() => import('./features/reports/ReportsView'));
-const ExpenseTracker = lazy(() => import('./features/expenses/ExpenseTracker'));
-const RecurringInvoices = lazy(() => import('./features/recurring/RecurringInvoices'));
-const ReceiptVoucher = lazy(() => import('./features/payments/ReceiptVoucher'));
-const SalesmenView = lazy(() => import('./features/sales/SalesmenView'));
-const RemindersPage = lazy(() => import('./features/grow/RemindersPage'));
-const ReturnRegister = lazy(() => import('./features/filing/ReturnRegister'));
-const FilingPackPage = lazy(() => import('./features/filing/FilingPackPage'));
-const PracticePage = lazy(() => import('./features/filing/PracticePage'));
-const Itr4Page = lazy(() => import('./features/filing/Itr4Page'));
-const EditLogPage = lazy(() => import('./features/filing/EditLogPage'));
-const CatalogSettingsPage = lazy(() => import('./features/catalog/CatalogSettingsPage'));
-const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
-const IncomeTax = lazy(() => import('./features/income-tax/IncomeTax'));
-const PurchaseBills = lazy(() => import('./features/purchases/PurchaseBills'));
-const PurchaseOrders = lazy(() => import('./features/purchases/PurchaseOrders'));
-const DebitNotes = lazy(() => import('./features/purchases/DebitNotes'));
-const PaymentVoucher = lazy(() => import('./features/payments/PaymentVoucher'));
-const AccountingPage = lazy(() => import('./features/accounting/AccountingPage'));
-const CashBankPage = lazy(() => import('./features/cashbank/CashBankPage'));
-const ReportsHub = lazy(() => import('./features/reports/ReportsHub'));
-const ReportPage = lazy(() => import('./features/reports/ReportPage'));
+const TeamPage = lazyView(() => import('./features/settings/team/TeamPage'));
+const RolesPage = lazyView(() => import('./features/settings/team/RolesPage'));
+const SecurityPage = lazyView(() => import('./features/settings/security/SecurityPage'));
+const AcceptInvitePage = lazyView(() => import('./features/auth/AcceptInvitePage'));
+const ClientsView = lazyView(() => import('./features/parties/ClientsView'));
+const InventoryView = lazyView(() => import('./features/items/InventoryView'));
+const BarcodePage = lazyView(() => import('./features/utilities/BarcodePage'));
+const TallyPage = lazyView(() => import('./features/utilities/TallyPage'));
+const CloseFyPage = lazyView(() => import('./features/utilities/CloseFyPage'));
+const BackupPage = lazyView(() => import('./features/utilities/BackupPage'));
+const SetupPage = lazyView(() => import('./features/utilities/SetupPage'));
+const TrashPage = lazyView(() => import('./features/utilities/TrashPage'));
+const PosPage = lazyView(() => import('./features/pos/PosPage'));
+const ReportsView = lazyView(() => import('./features/reports/ReportsView'));
+const ExpenseTracker = lazyView(() => import('./features/expenses/ExpenseTracker'));
+const RecurringInvoices = lazyView(() => import('./features/recurring/RecurringInvoices'));
+const ReceiptVoucher = lazyView(() => import('./features/payments/ReceiptVoucher'));
+const SalesmenView = lazyView(() => import('./features/sales/SalesmenView'));
+const RemindersPage = lazyView(() => import('./features/grow/RemindersPage'));
+const ReturnRegister = lazyView(() => import('./features/filing/ReturnRegister'));
+const FilingPackPage = lazyView(() => import('./features/filing/FilingPackPage'));
+const PracticePage = lazyView(() => import('./features/filing/PracticePage'));
+const Itr4Page = lazyView(() => import('./features/filing/Itr4Page'));
+const EditLogPage = lazyView(() => import('./features/filing/EditLogPage'));
+const CatalogSettingsPage = lazyView(() => import('./features/catalog/CatalogSettingsPage'));
+const GSTReturns = lazyView(() => import('./features/gst-returns/GSTReturns'));
+const IncomeTax = lazyView(() => import('./features/income-tax/IncomeTax'));
+const PurchaseBills = lazyView(() => import('./features/purchases/PurchaseBills'));
+const PurchaseOrders = lazyView(() => import('./features/purchases/PurchaseOrders'));
+const DebitNotes = lazyView(() => import('./features/purchases/DebitNotes'));
+const PaymentVoucher = lazyView(() => import('./features/payments/PaymentVoucher'));
+const AccountingPage = lazyView(() => import('./features/accounting/AccountingPage'));
+const CashBankPage = lazyView(() => import('./features/cashbank/CashBankPage'));
+const ReportsHub = lazyView(() => import('./features/reports/ReportsHub'));
+const ReportPage = lazyView(() => import('./features/reports/ReportPage'));
 import AppFooter from './app/AppFooter';
 import SalesOverview from './features/sales/SalesOverview';
 import { SALES_PAGES, salesPageForView, salesPageForType } from './features/sales/salesFlow';
@@ -135,6 +152,9 @@ function App() {
     loadAppSettings().catch(() => {});
   }, [me?.organization?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useAutoLock(!!me, signOut);
+  useEffect(() => {
+    if (me) preloadViews();
+  }, [!!me]); // eslint-disable-line react-hooks/exhaustive-deps
   // v1.9.3 — Setup Wizard shown on first-run (before onboardingComplete = true)
   // Decided once this business's print settings have loaded (see printLoadedFor below).
   const [showWizard, setShowWizard] = useState(false);
@@ -233,29 +253,31 @@ function App() {
     const checkServer = async () => {
       try {
         const res = await fetch('/v1/workspace/profile', { signal: AbortSignal.timeout(8000) });
-        if (res.ok) {
-          if (cancelled) return;
-          misses = 0;
-          setServerDown(false);
-          setServerStatus('online');
-          if (!profileLoaded.current) {
-            profileLoaded.current = true;
-            const p = await res.json();
-            setProfile(p);
-            // Not while someone opens an invitation: they are joining a business, not setting one up.
-            if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
-              setShowWelcome(true);
-            }
+        // Any answer means the server is there. Only a gateway error (502-504: the host is restarting) counts as a miss; a
+        // 401 or 403 is somebody who is not signed in yet, which the sign-in screen handles, not a server that is down.
+        if (res.status >= 502 && res.status <= 504) throw new Error('gateway');
+        if (cancelled) return;
+        misses = 0;
+        setServerDown(false);
+        setServerStatus('online');
+        if (res.ok && !profileLoaded.current) {
+          profileLoaded.current = true;
+          const p = await res.json();
+          setProfile(p);
+          // Not while someone opens an invitation: they are joining a business, not setting one up.
+          if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
+            setShowWelcome(true);
           }
-          return;
         }
-        throw new Error('not ok');
       } catch {
         if (cancelled) return;
         misses += 1;
-        if (!profileLoaded.current || misses >= 3) {
+        // A cold or restarting host can miss once or twice; two misses in a row before the first load, three after it.
+        if (misses >= (profileLoaded.current ? 3 : 2)) {
           setServerDown(true);
           setServerStatus('offline');
+        } else {
+          setTimeout(checkServer, 1500); // look again soon rather than in 5 s
         }
       }
     };
@@ -772,6 +794,30 @@ function App() {
       window.removeEventListener('keydown', onEsc);
     };
   }, [showPalette]);
+
+  if (serverDown && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    // The hosted app: the data lives on the server, nothing needs starting. This is a connection or a restart, so say so
+    // and let the person try again at once instead of waiting for the next check.
+    return (
+      <div className="server-down-overlay">
+        <div className="server-down-modal" role="alert">
+          <FileText size={48} color="#16a34a" />
+          <h2>We can’t reach the server</h2>
+          <p>
+            Your data is stored safely on the server, so nothing is lost. Check your internet connection; if it is fine, the
+            service is restarting and will be back in a moment.
+          </p>
+          <div className="server-down-waiting">
+            <div className="server-down-spinner" />
+            <span>Trying again automatically…</span>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+            Try now
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (serverDown) {
     return (

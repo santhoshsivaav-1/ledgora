@@ -1714,3 +1714,20 @@ Adding an entry? Copy this skeleton.
 **Rule** — the imperative that prevents recurrence.
 **Guard** — the automated check, or "none" plus how to check by hand.
 -->
+
+## ERR-037 - "Needs a Quick Start" on the hosted app, and slow first clicks
+
+**Symptom** - on the hosted site (for example `/itr-4`) the whole app was replaced by "Free GST Billing Software Needs a
+Quick Start ... double-click on your Desktop", most visibly on a first visit or just after a deploy. Opening a screen for the
+first time also waited on the network with only a spinner.
+
+**Cause** - (1) the first server check treated one miss, or any non-200 answer (even a 401), as "server down", and the
+message was written for the desktop install. (2) Each screen is its own chunk fetched only when first opened.
+
+**Rule** - only a network failure or a gateway error (502 to 504) counts as a miss, two in a row before the first load and
+three after it, with a retry after 1.5 s. The hosted app shows "We can't reach the server" with a Try now button; the
+desktop text stays for localhost. After sign-in the other screens are fetched when the browser is idle, and every loading
+state is a skeleton of the page, not a spinner.
+
+**Guard** - by hand: block `/v1/workspace/profile` in the browser for 5 s on first load; the app must not show the notice
+until two checks have failed. Measured on a production build with preloading: 49 to 94 ms from click to first content.
