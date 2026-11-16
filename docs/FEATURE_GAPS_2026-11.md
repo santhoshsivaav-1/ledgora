@@ -45,8 +45,8 @@ browser `web/scripts/filing-e2e.mjs` (21 checks), golden capture `web/scripts/gs
 **Honest limits:** the file has not been uploaded to the real portal (X3), so it is "checked against the published schema
 and rules", not "portal-proven". `ITR_SW_CODE` (the software id the department issues) is not registered; until it is,
 the file carries a placeholder and says so on the build screen. The ITR-4 schema for TY 2026-27 is not published, so that
-year can not be built yet. Refused in ITR-4: house property, capital gains, 44AE, foreign assets, HUF, firms. The
-Return tab does not yet take the financial particulars (debtors, creditors, stock), so rule 139 shows as a warning.
+year can not be built yet. Refused in ITR-4: house property, capital gains, 44AE, foreign assets, HUF, firms (correct:
+those need ITR-2 or ITR-3). The Return tab takes the 31 March financial particulars, which clears rule 139.
 
 Tests: `tax-engine/test/{itr4,itr4Property,advanceTax,aisTis}.test.js`, `api/test/incomeTax.test.ts` (26),
 browser `web/scripts/itr4-e2e.mjs` (12 checks).

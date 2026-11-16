@@ -50,6 +50,20 @@ const GRID = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
   gap: '0 16px',
 };
+const PARTICULARS = [
+  ['partnerMemberOwnCapital', 'Proprietor’s capital'],
+  ['securedLoans', 'Secured loans'],
+  ['unsecuredLoans', 'Unsecured loans'],
+  ['sundryCreditors', 'Sundry creditors'],
+  ['othrCurrLiab', 'Other current liabilities'],
+  ['fixedAssets', 'Fixed assets'],
+  ['inventories', 'Inventories (stock)'],
+  ['sundryDebtors', 'Sundry debtors'],
+  ['balWithBanks', 'Balance with banks'],
+  ['cashInHand', 'Cash in hand'],
+  ['loansAndAdvances', 'Loans and advances'],
+  ['otherAssets', 'Other assets'],
+];
 const BLANK_BANK = { ifsc: '', bankName: '', accountNo: '', accountType: 'SB', useForRefund: true };
 
 function Taxpayer({ businessId }) {
@@ -328,6 +342,21 @@ function ReturnInputs({ businessId, fy }) {
       <button type="button" className="btn btn-secondary" onClick={fromBooks}>
         Use the books’ figures
       </button>
+      <h3 style={{ margin: '16px 0 4px' }}>Financial particulars on 31 March</h3>
+      <p className="ui-help">
+        The department asks for these even under the presumptive scheme: what the business owed,
+        owned and was owed on the last day of the year. Leave a figure at zero if it does not apply.
+      </p>
+      <div style={GRID}>
+        {PARTICULARS.map(([k, label]) => (
+          <Field key={k} label={label}>
+            <MoneyInput
+              value={biz.particulars?.[k] ?? 0}
+              onChange={(v) => setBiz({ particulars: { ...biz.particulars, [k]: v ?? 0 } })}
+            />
+          </Field>
+        ))}
+      </div>
       <h3 style={{ margin: '16px 0 4px' }}>Other income</h3>
       <div style={GRID}>
         <Field
