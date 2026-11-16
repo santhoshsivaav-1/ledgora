@@ -1,10 +1,12 @@
 // R4.1 (docs/FEATURE_GAPS_2026-11.md): the fixed-asset register. Assets and block openings are stored; the depreciation (income
 // tax blocks and Companies Act books) is computed by the tax engine from them every time, so a corrected date, cost or sale
 // is always reflected. ITR-3 reads the same schedule (modules/itr3.ts).
+import { createHash } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { schema, type Tx } from '@ledgora/db';
 import {
+  assetDepreciationBody,
   assetOpeningBody,
   assetOpeningQuery,
   assetScheduleQuery,
@@ -19,6 +21,7 @@ import {
   bookRegister,
   computeBlocks,
   fyBounds,
+  postJournal,
   type BlockCode,
   type BlockOpening,
   type FixedAsset,
@@ -27,8 +30,11 @@ import { audit } from '../audit.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { Registrar } from '../http.ts';
 import { loadBusiness } from './businesses.ts';
+import { accountsByCode, ledgerEnabled, nextCode, repost } from './ledgerRules.ts';
+import { guardPeriod } from './saleRules.ts';
+import { nextSeriesNumber } from './series.ts';
 
-const { fixedAssets, assetBlockOpenings } = schema;
+const { fixedAssets, assetBlockOpenings, accounts, ledgerEntries } = schema;
 const idParams = z.object({ id: uuid });
 const today = () => new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
 
@@ -294,6 +300,120 @@ export function assetsModule({ route }: Registrar) {
         throw new AppError('unprocessable', (e as Error).message);
       }
       return assetScheduleOf(tx, query.businessId, query.fy);
+    },
+  });
+  /** A stable id for the year's depreciation journal, so posting again replaces it instead of adding a second. */
+  const journalIdOf = (businessId: string, fy: string) => {
+    const h = createHash('sha1').update(`depreciation:${businessId}:${fy}`).digest('hex');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  };
+  /** The chart account of that name (case does not matter), created in its group the first time it is needed. */
+  async function accountNamed(
+    tx: Tx,
+    orgId: string,
+    businessId: string,
+    name: string,
+    group: string,
+    kind: 'asset' | 'expense',
+    range: [number, number],
+  ) {
+    const found = [...(await accountsByCode(tx, businessId)).values()].find(
+      (a) => a.name.toLowerCase() === name.toLowerCase() && a.kind === kind,
+    );
+    if (found) return found;
+    const code = await nextCode(tx, businessId, range[0], range[1]);
+    const [row] = await tx
+      .insert(accounts)
+      .values({ orgId, businessId, code, name, group, kind })
+      .returning();
+    return row!;
+  }
+
+  route({
+    method: 'post',
+    path: '/v1/fixed-assets/post-depreciation',
+    tag: 'Assets',
+    summary:
+      "Post the year's depreciation from the register to the books as one journal (Dr Depreciation, Cr Accumulated Depreciation, dated the last day of the year). Posting again for the same year replaces it",
+    permission: 'filing:prepare',
+    body: assetDepreciationBody,
+    handler: async ({ tx, orgId, auth, body, c }) => {
+      await loadBusiness(tx, body.businessId);
+      if (!(await ledgerEnabled(tx, body.businessId)))
+        throw new AppError(
+          'conflict',
+          'The ledger is off for this business. Turn it on in Accounting first.',
+        );
+      let end: string;
+      try {
+        end = fyBounds(body.fy).end;
+      } catch (e) {
+        throw new AppError('unprocessable', (e as Error).message);
+      }
+      await guardPeriod(tx, orgId, auth, body.businessId, end, c.req.header('x-override-reason'));
+      const { assets } = await loadAssetRegister(tx, body.businessId);
+      const amount = Math.round(
+        bookRegister(
+          assets.filter((a) => a.putToUse <= end),
+          body.fy,
+        ).depreciation,
+      );
+      const id = journalIdOf(body.businessId, body.fy);
+      const existing = await tx
+        .select({ narration: ledgerEntries.narration })
+        .from(ledgerEntries)
+        .where(and(eq(ledgerEntries.refType, 'journal'), eq(ledgerEntries.refId, id)))
+        .limit(1);
+      if (amount <= 0) {
+        // Nothing to charge: take back a journal posted earlier for this year, if there is one.
+        if (existing.length)
+          await repost(tx, orgId, {
+            businessId: body.businessId,
+            refType: 'journal',
+            refId: id,
+            postings: [],
+          });
+        return { amount: 0, posted: false, date: end, number: null };
+      }
+      const expense = await accountNamed(
+        tx,
+        orgId,
+        body.businessId,
+        'Depreciation',
+        'Indirect expense',
+        'expense',
+        [5300, 5999],
+      );
+      const contra = await accountNamed(
+        tx,
+        orgId,
+        body.businessId,
+        'Accumulated Depreciation',
+        'Fixed assets',
+        'asset',
+        [1710, 1799],
+      );
+      const number =
+        /^(JV-\d+) · /.exec(existing[0]?.narration ?? '')?.[1] ??
+        (await nextSeriesNumber(tx, orgId, body.businessId, 'JV'));
+      await repost(tx, orgId, {
+        businessId: body.businessId,
+        refType: 'journal',
+        refId: id,
+        postings: postJournal({
+          id,
+          date: end,
+          narration: `${number} · Depreciation for FY ${body.fy} (asset register)`,
+          rows: [
+            { account: expense.code, debit: amount },
+            { account: contra.code, credit: amount },
+          ],
+        }),
+      });
+      await audit(tx, orgId, 'asset.depreciation', 'fixed_asset', id, {
+        after: { fy: body.fy, amount },
+      });
+      return { amount, posted: true, date: end, number };
     },
   });
 }

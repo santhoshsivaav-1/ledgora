@@ -126,3 +126,84 @@ describe('fixed-asset register', () => {
     ).toBeGreaterThanOrEqual(400);
   });
 });
+
+describe("posting the register's depreciation to the books", () => {
+  it('is one journal per year, replaced when asked again, and the ITR-3 then carries it', async () => {
+    const t = await h.newTenant();
+    await t.call('POST', '/v1/accounting/backfill', { businessId: t.businessId, dryRun: false });
+    // Computers bought for 60,000 on 1 June 2025, opened in the books at cost.
+    const acct = await t.call('POST', '/v1/accounts', {
+      businessId: t.businessId,
+      name: 'Computers',
+      group: 'Fixed assets',
+      opening: { amount: 60000, side: 'Dr', date: '2025-06-01' },
+    });
+    expect(acct.status, acct.text).toBe(201);
+    expect((await asset(t, { cost: 60000, putToUse: '2025-06-01' })).status).toBe(201);
+    // 60,000 x 95% / (3 x 365) x 304 days (1 June to 31 March) = 15,824.66, posted to the rupee.
+    const first = await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+      businessId: t.businessId,
+      fy: FY,
+    });
+    expect(first.status, first.text).toBe(200);
+    expect(first.body).toMatchObject({ amount: 15825, posted: true, date: '2026-03-31' });
+    expect(first.body.number).toMatch(/^JV-\d+$/);
+    const again = await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+      businessId: t.businessId,
+      fy: FY,
+    });
+    expect(again.body).toMatchObject({ amount: 15825, number: first.body.number });
+    const tb = (await t.call('GET', `/v1/ledger/trial-balance?businessId=${t.businessId}`)).body;
+    expect(tb.balanced).toBe(true);
+    const dep = tb.lines.find((l: any) => l.name === 'Depreciation');
+    const acc = tb.lines.find((l: any) => l.name === 'Accumulated Depreciation');
+    expect(dep).toMatchObject({ debit: 15825 }); // once, not twice
+    expect(acc).toMatchObject({ credit: 15825 });
+    // The journal shows with the others and can be seen in the books.
+    const js = (await t.call('GET', `/v1/journals?businessId=${t.businessId}`)).body.data;
+    expect(js.some((j: any) => /Depreciation for FY 2025-26/.test(j.narration))).toBe(true);
+  });
+
+  it('refuses when the ledger is off, a bad year, and takes the journal back when there is nothing to charge', async () => {
+    const t = await h.newTenant();
+    expect(
+      (
+        await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+          businessId: t.businessId,
+          fy: FY,
+        })
+      ).status,
+    ).toBe(409);
+    await t.call('POST', '/v1/accounting/backfill', { businessId: t.businessId, dryRun: false });
+    expect(
+      (
+        await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+          businessId: t.businessId,
+          fy: '2025-27',
+        })
+      ).status,
+    ).toBe(422);
+    const a = await asset(t, { cost: 60000, putToUse: '2025-06-01' });
+    expect(
+      (
+        await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+          businessId: t.businessId,
+          fy: FY,
+        })
+      ).body.posted,
+    ).toBe(true);
+    // The asset is removed: the next posting for the year finds nothing to charge and reverses the journal.
+    await t.call('DELETE', `/v1/fixed-assets/${a.body.id}`);
+    expect(
+      (
+        await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+          businessId: t.businessId,
+          fy: FY,
+        })
+      ).body,
+    ).toMatchObject({ amount: 0, posted: false });
+    const tb = (await t.call('GET', `/v1/ledger/trial-balance?businessId=${t.businessId}`)).body;
+    const dep = tb.lines.find((l: any) => l.name === 'Depreciation');
+    expect((dep?.debit ?? 0) - (dep?.credit ?? 0)).toBe(0);
+  });
+});

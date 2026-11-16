@@ -274,6 +274,9 @@ export async function itr3BooksOf(
     out.accumulatedDepreciation = whole(regRows.accumulated);
   } else {
     out.grossBlock = Math.max(0, ledgerNet);
+    // Depreciation booked against no asset cost leaves the fixed assets below zero; the form takes no negative net block, so it
+    // is shown with the liabilities (and reported below) rather than lost, which would unbalance the sheet.
+    if (ledgerNet < 0) out.otherCurrentLiabilities += -ledgerNet;
     if (alive.length || ledgerNet !== 0)
       issues.push(
         issue(

@@ -167,6 +167,49 @@ describe('ITR-3: from the ledger to a filed return', () => {
     });
   });
 
+  it('when the books and the register agree (cost opened, depreciation posted) nothing is reported and the sheet carries the block', async () => {
+    const t = await trader();
+    await putDraft(t, itr3());
+    await t.call('POST', '/v1/accounts', {
+      businessId: t.businessId,
+      name: 'Computers',
+      group: 'Fixed assets',
+      opening: { amount: 60_000, side: 'Dr', date: '2025-06-01' },
+    });
+    await t.call('POST', '/v1/fixed-assets', {
+      businessId: t.businessId,
+      name: 'Laptop',
+      block: 'PM40',
+      cost: 60_000,
+      putToUse: '2025-06-01',
+    });
+    expect(
+      (
+        await t.call('POST', '/v1/fixed-assets/post-depreciation', {
+          businessId: t.businessId,
+          fy: FY,
+        })
+      ).body.amount,
+    ).toBe(15_825);
+    const r = await build(t);
+    expect(errorsOf(r)).toEqual([]);
+    expect(codes(r)).not.toContain('ITR3_ASSETS_DIFFER');
+    expect(codes(r)).not.toContain('ITR3_DEP_NOT_POSTED');
+    const k = r.body.statements.calc;
+    // Books depreciation 15,825 lowers the profit; the tax depreciation (24,000) replaces it in Schedule BP.
+    expect(k).toMatchObject({
+      bookDepreciation: 15_825,
+      profitBeforeTax: 280_000 - 15_825,
+      taxDepreciation: 24_000,
+    });
+    expect(k.businessIncome).toBe(280_000 - 15_825 + 15_825 - 24_000);
+    expect(r.body.statements.balanceSheet).toMatchObject({
+      grossBlock: 60_000,
+      accumulatedDepreciation: 15_825,
+    });
+    expect(k.fundsSource).toBe(k.fundsApplied);
+  });
+
   it('a draft split of services from goods, adjustments and a tax audit go into the file', async () => {
     const t = await trader();
     await putDraft(

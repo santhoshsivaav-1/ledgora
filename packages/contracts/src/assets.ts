@@ -53,3 +53,6 @@ export const assetOpeningBody = z.object({
 });
 export const assetOpeningQuery = z.object({ businessId: uuid });
 export const assetScheduleQuery = z.object({ businessId: uuid, fy });
+
+/** Post the year's depreciation from the register as a journal; asking again for the same year replaces it. */
+export const assetDepreciationBody = z.object({ businessId: uuid, fy });
