@@ -20,3 +20,4 @@ export * from './messaging.ts';
 export * from './plans.ts';
 export * from './filing.ts';
 export * from './incomeTax.ts';
+export * from './assets.ts';

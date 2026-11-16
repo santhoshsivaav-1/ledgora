@@ -239,6 +239,13 @@
       "when": 1794799535779,
       "tag": "0033_income_tax",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794840511785,
+      "tag": "0034_assets",
+      "breakpoints": true
     }
   ]
 }

@@ -18,3 +18,4 @@ export * from './messaging.ts';
 export * from './filing.ts';
 export * from './editLog.ts';
 export * from './incomeTax.ts';
+export * from './assets.ts';
