@@ -101,6 +101,7 @@ const RemindersPage = lazy(() => import('./features/grow/RemindersPage'));
 const ReturnRegister = lazy(() => import('./features/filing/ReturnRegister'));
 const FilingPackPage = lazy(() => import('./features/filing/FilingPackPage'));
 const PracticePage = lazy(() => import('./features/filing/PracticePage'));
+const Itr4Page = lazy(() => import('./features/filing/Itr4Page'));
 const EditLogPage = lazy(() => import('./features/filing/EditLogPage'));
 const CatalogSettingsPage = lazy(() => import('./features/catalog/CatalogSettingsPage'));
 const GSTReturns = lazy(() => import('./features/gst-returns/GSTReturns'));
@@ -1009,6 +1010,7 @@ function App() {
                 <Route path={pathForView('returns')} element={<ReturnRegister key={businessKey} />} />
                 <Route path="/filing/:id" element={<FilingPackPage key={businessKey} />} />
                 <Route path={pathForView('practice')} element={<PracticePage />} />
+                <Route path={pathForView('itr4')} element={<Itr4Page key={businessKey} />} />
                 <Route path={pathForView('edit-log')} element={<EditLogPage key={businessKey} />} />
                 <Route path="/practice" element={<Navigate to={pathForView('practice')} replace />} />
                 <Route path={pathForView('catalog')} element={<CatalogSettingsPage key={businessKey} />} />

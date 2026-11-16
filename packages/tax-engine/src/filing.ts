@@ -20,6 +20,7 @@ export const FILING_KINDS = [
   'cmp08',
   'gstr4',
   'gstr9c',
+  'itr4',
 ] as const;
 export type FilingKind = (typeof FILING_KINDS)[number];
 export const FILING_KIND_LABELS: Record<FilingKind, string> = {
@@ -31,6 +32,7 @@ export const FILING_KIND_LABELS: Record<FilingKind, string> = {
   cmp08: 'CMP-08',
   gstr4: 'GSTR-4',
   gstr9c: 'GSTR-9C',
+  itr4: 'ITR-4',
 };
 
 export const FILING_STATUSES = [
@@ -688,6 +690,13 @@ export function arnProblem(arn: string, gstin: string): string | null {
   if (/^\d{2}$/.test(state) && a.slice(2, 4) !== state)
     return `This ARN is for state ${a.slice(2, 4)}, not ${state}`;
   return null;
+}
+
+/** The acknowledgement number of a filed income-tax return: 15 digits. */
+export function ackProblem(ack: string): string | null {
+  return /^[0-9]{15}$/.test(String(ack ?? '').trim())
+    ? null
+    : 'An income-tax acknowledgement number is 15 digits';
 }
 
 /** JSON with keys in a fixed order, so the same return always hashes the same. */

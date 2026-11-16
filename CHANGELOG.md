@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Income tax from the books (ITR-4).** Taxes › ITR-4 Filing: taxpayer details (Aadhaar and bank accounts sealed at
+  rest), the return's inputs, challans and an advance-tax plan, AIS / TIS import with a match against the books (beta), and
+  the ITR-4 file built for upload. The file is checked against the department's published AY 2026-27 JSON schema and its
+  validation rules before it can be saved as a pack, reviewed by a CA and recorded with the 15-digit acknowledgement. Rules
+  are versioned by year and say how sure they are. The software never files. Not yet portal-proven (needs one real upload);
+  ITR-3 waits for the books' capital and ledger work. Migration `0033`.
+
 - **GST returns built on the server, and the rest of the GST set.** The GSTR-1 and GSTR-3B builders moved from the
   browser screen into the shared engine, checked against the files the screen produced before (byte for byte), so the
   server, the screen and bulk actions for CAs all build the same return. New packs: GSTR-9C (books against GSTR-9) and

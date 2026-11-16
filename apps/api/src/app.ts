@@ -48,6 +48,7 @@ import { trashModule } from './modules/trash.ts';
 import { transferModule } from './modules/transfer.ts';
 import { filingModule } from './modules/filing.ts';
 import { editLogModule } from './modules/editLog.ts';
+import { incomeTaxModule } from './modules/incomeTax.ts';
 
 const startedAt = Date.now();
 
@@ -127,6 +128,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     transferModule,
     filingModule,
     editLogModule,
+    incomeTaxModule,
   ])
     mod(reg);
   localFileEndpoints(app, deps);

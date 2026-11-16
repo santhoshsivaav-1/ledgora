@@ -32,8 +32,26 @@ upload of each is photographed into `docs/acceptance/`. GSTR-1 and GSTR-3B keep 
 Tests: `tax-engine/test/{filing,filingR1,filingR1b,gstReturnsGolden}.test.js`, `api/test/{filing,editLog}.test.ts`,
 browser `web/scripts/filing-e2e.mjs` (21 checks), golden capture `web/scripts/gst-golden-capture.mjs`.
 
-**Next: R2** (income tax from the books): year-versioned rules for the 2025 Act, AIS/TIS import, ITR-4 JSON, advance tax
-and challans, ITR-3.
+**R2 is complete except ITR-3 (R2.5, waits for R4's books).** Built, tested and in the app: Taxes › ITR-4 Filing.
+
+| Item | Status | Where |
+|---|---|---|
+| R2.1 Year-versioned rules | **Done.** FY 2025-26 (AY 2026-27) and FY 2026-27: slabs, 87A with marginal relief, advance-tax dates, ITR-4 due dates, 234F, with a confidence label on each figure. A year with no rules is refused, never guessed | `itrRules.ts` |
+| R2.2 AIS / TIS | **Done, beta.** CSV or JSON read tolerantly, previewed before saving; compared with the books and the return (interest, dividend, TDS by deductor, receipts against GST turnover). The portal publishes no fixed format, so nothing is silently dropped: skipped rows are counted | `aisTis.ts`, `/v1/ais-imports*` |
+| R2.3 ITR-4 JSON | **Done.** Built for 44AD and 44ADA, checked against the department's AY 2026-27 JSON schema (AJV) and its validation rules by number (R6, R52, R267, 288A/B …); 300 random returns checked against an independent tax calculation | `itr4.ts`, `itr4Rules.ts`, `itr4Schema.ts`, `POST …/build/itr4` |
+| R2.4 Advance tax and challans | **Done.** Challans dated by the department's rule (up to 31 March is advance tax), the four instalments (one on 15 March for presumptive filers), what to pay now, 234B and 234C | `advanceTax.ts`, `/v1/tax-challans`, `/v1/advance-tax` |
+| Sealed fields | **Done.** Aadhaar and bank account numbers are AES-256-GCM sealed per organization, shown only by last digits; the edit log keeps a pack's fingerprint, never a copy of the file | `crypto.ts`, migration `0033` |
+
+**Honest limits:** the file has not been uploaded to the real portal (X3), so it is "checked against the published schema
+and rules", not "portal-proven". `ITR_SW_CODE` (the software id the department issues) is not registered; until it is,
+the file carries a placeholder and says so on the build screen. The ITR-4 schema for TY 2026-27 is not published, so that
+year can not be built yet. Refused in ITR-4: house property, capital gains, 44AE, foreign assets, HUF, firms. The
+Return tab does not yet take the financial particulars (debtors, creditors, stock), so rule 139 shows as a warning.
+
+Tests: `tax-engine/test/{itr4,itr4Property,advanceTax,aisTis}.test.js`, `api/test/incomeTax.test.ts` (26),
+browser `web/scripts/itr4-e2e.mjs` (12 checks).
+
+**Next: R3** (TDS and payroll). R2.5 ITR-3 follows R4.
 
 ## 1. Where Ledgora stands
 

@@ -14,6 +14,7 @@ import {
   type Gstr3bCompare,
 } from './filing.ts';
 import { fyRetPeriods, validateCmp08, validateGstr1a, validateGstr9 } from './filingR1.ts';
+import { validateItr4Rules } from './itr4Rules.ts';
 
 const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const n = (v: Numeric) => Number(v) || 0;
@@ -416,6 +417,7 @@ export function validateAnyPack(
   if (kind === 'cmp08') return validateCmp08(payload, ctx);
   if (kind === 'gstr4') return validateGstr4(payload, ctx);
   if (kind === 'gstr9c') return validateGstr9c(payload, ctx);
+  if (kind === 'itr4') return validateItr4Rules(payload);
   return validatePack(kind, payload, ctx, cmp);
 }
 
@@ -423,7 +425,7 @@ export function validateAnyPack(
 export function packMonths(kind: FilingKind, period: string, quarterly: boolean): string[] {
   const month = monthOfRetPeriod(period);
   if (!month) return [];
-  if (kind === 'gstr9' || kind === 'gstr4' || kind === 'gstr9c') {
+  if (kind === 'gstr9' || kind === 'gstr4' || kind === 'gstr9c' || kind === 'itr4') {
     if (month.slice(5, 7) !== '03') return [];
     const fy = Number(month.slice(0, 4)) - 1;
     return fyRetPeriods(fy).map((p) => monthOfRetPeriod(p)!);

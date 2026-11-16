@@ -29,6 +29,7 @@ import {
 import {
   FILING_KIND_LABELS,
   arnProblem,
+  ackProblem,
   canonicalJson,
   gstDuesForPeriod,
   initialStatus,
@@ -63,6 +64,7 @@ import { rulesOfRole } from '../middleware/permission.ts';
 import { sendMail } from '../mail/index.ts';
 import { loadBusiness } from './businesses.ts';
 import { settingValue } from './settingsStore.ts';
+import { ITR4_SCHEMAS, validateItr4Schema } from '@ledgora/tax-engine/itr4-schema';
 import { DEFAULT_PROFILE, SORT, getKv, listDocs, type Doc } from './workspace/store.ts';
 
 const { filingPacks, filingEvents, businesses, businessSettings, member, user, organizations } =
@@ -268,7 +270,7 @@ const aatoOf = (profile: Doc) =>
  * money received (receipts without the payment-out vouchers), each in the screen's own order, since the order of the
  * invoices is the order of the rows in the file.
  */
-async function returnDocsOf(tx: Tx, gstin: string) {
+export async function returnDocsOf(tx: Tx, gstin: string) {
   const sorted = async (c: 'bills' | 'purchases' | 'expenses' | 'receipts' | 'profiles') =>
     (await listDocs(tx, c)).sort(SORT[c]);
   const active = (await getKv<Doc>(tx, 'profile')) ?? DEFAULT_PROFILE;
@@ -537,7 +539,8 @@ export function filingModule({ route }: Registrar) {
     status: 201,
     handler: async ({ tx, orgId, auth, body }) => {
       const biz = await loadBusiness(tx, body.businessId);
-      if (!biz.gstin)
+      // An income-tax return belongs to a person, not to a GST registration: a business with no GSTIN can still file one.
+      if (!biz.gstin && body.kind !== 'itr4')
         throw new AppError(
           'unprocessable',
           'Add the GSTIN of this business before preparing returns',
@@ -558,7 +561,7 @@ export function filingModule({ route }: Registrar) {
       const issues = validateAnyPack(
         body.kind,
         body.payload,
-        { gstin: biz.gstin, retPeriod: body.period, quarterly: body.quarterly },
+        { gstin: biz.gstin ?? undefined, retPeriod: body.period, quarterly: body.quarterly },
         {
           gstr1: body.kind === 'gstr3b' ? await gstr1Of(tx, biz.id, body.period) : undefined,
           itc2b: body.itc2b ?? null,
@@ -566,12 +569,29 @@ export function filingModule({ route }: Registrar) {
       );
       // R1.6: e-invoice coverage of the period's B2B invoices (above ₹5 crore; 30-day window at ₹10 crore and above).
       if (body.kind === 'gstr1') {
-        const docs = await returnDocsOf(tx, biz.gstin);
+        const docs = await returnDocsOf(tx, biz.gstin ?? '');
         const inPeriod = docs.bills.filter(
           (b) =>
             String(b.invoiceDate ?? '') >= bounds.from && String(b.invoiceDate ?? '') <= bounds.to,
         );
         issues.push(...einvoiceChecks(inPeriod, { aato: aatoOf(docs.profile), asOf: today() }));
+      }
+      // R2.3: the ITR-4 file is also checked against the department's published JSON schema for its year.
+      if (body.kind === 'itr4') {
+        const ay = String(
+          (body.payload as { ITR?: { ITR4?: { Form_ITR4?: { AssessmentYear?: string } } } }).ITR
+            ?.ITR4?.Form_ITR4?.AssessmentYear ?? '',
+        );
+        const schemaAy = ay ? `${ay}-${String(Number(ay) + 1).slice(2)}` : '';
+        if (ITR4_SCHEMAS[schemaAy]) issues.push(...validateItr4Schema(body.payload, schemaAy));
+        else
+          issues.push({
+            id: 'ITR4_NO_SCHEMA',
+            severity: 'error',
+            code: 'ITR4_NO_SCHEMA',
+            message: `There is no ITR-4 schema on file for assessment year ${ay || '(missing)'}`,
+            path: '',
+          });
       }
       const ids = new Set(issues.map((i) => i.id));
       const acknowledged = [...new Set(body.acknowledged)].filter((id) => ids.has(id));
@@ -811,7 +831,27 @@ export function filingModule({ route }: Registrar) {
           'The file changed after it was approved; send it for review again',
         );
       const biz = await loadBusiness(tx, p.businessId);
-      if (p.kind !== 'ims') {
+      if (p.kind === 'itr4') {
+        // The acknowledgement number is 15 digits. The file was built for a filing date: filed on the other side of the due
+        // date, its late fee, interest and filing section are wrong, so it must be built again.
+        const problem = ackProblem(body.arn ?? '');
+        if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
+        const f = (
+          p.payload as {
+            ITR?: {
+              ITR4?: { FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string } };
+            };
+          }
+        ).ITR?.ITR4?.FilingStatus;
+        const due = f?.ItrFilingDueDate ?? '';
+        if (due && body.filedOn <= due !== (f?.ReturnFileSec === 11))
+          throw new AppError(
+            'unprocessable',
+            f?.ReturnFileSec === 11
+              ? 'This return was built as filed in time, but you filed it after the due date. Build it again with the real filing date'
+              : 'This return was built as a belated return, but you filed it by the due date. Build it again with the real filing date',
+          );
+      } else if (p.kind !== 'ims') {
         const problem = arnProblem(body.arn ?? '', biz.gstin ?? '');
         if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
       }

@@ -36,6 +36,11 @@ const schema = z.object({
   MSG91_TEMPLATE_ID: z.string().optional(),
   /** Key the server derives per-organization passwords from for scheduled backups. Falls back to AUTH_SECRET; set it to rotate independently. */
   BACKUP_ENCRYPTION_KEY: z.string().min(16).optional(),
+  /** The software id the Income Tax Department assigns to a program that creates ITR JSON files (SW + 8 digits). */
+  ITR_SW_CODE: z
+    .string()
+    .regex(/^SW[0-9]{8}$/)
+    .optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /**

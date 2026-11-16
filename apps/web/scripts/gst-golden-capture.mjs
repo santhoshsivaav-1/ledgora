@@ -21,7 +21,6 @@ const { firefox } = require('playwright');
 const APP = process.env.E2E_APP_URL || 'http://localhost:5173';
 // GOLDEN_OUT=<folder> writes elsewhere, to compare a later build of the screen with the saved files.
 const OUT = process.env.GOLDEN_OUT ? new URL(`file://${process.env.GOLDEN_OUT.replace(/\/?$/, '/')}`) : new URL('../../../packages/tax-engine/test/golden/gst-returns/', import.meta.url);
-const OWN = '33ABCDE1234F1Z7';
 
 const browser = await firefox.launch();
 try {

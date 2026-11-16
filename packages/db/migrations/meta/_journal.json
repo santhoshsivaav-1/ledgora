@@ -232,6 +232,13 @@
       "when": 1794760820736,
       "tag": "0032_filing_kinds_annual",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794799535779,
+      "tag": "0033_income_tax",
+      "breakpoints": true
     }
   ]
 }

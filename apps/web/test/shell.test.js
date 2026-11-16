@@ -104,6 +104,7 @@ describe('navigation (one source for the new menu)', () => {
       'reports',
       'filing',
       'incometax',
+      'itr4',
       'returns',
       'guide',
     ]);

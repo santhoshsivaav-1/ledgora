@@ -51,3 +51,8 @@ export * from './filingR1.ts';
 export * from './gstReturnTables.js';
 export * from './gstReturnsModel.js';
 export * from './filingR1b.ts';
+export * from './itrRules.ts';
+export * from './itr4.ts';
+export * from './itr4Rules.ts';
+export * from './advanceTax.ts';
+export * from './aisTis.ts';

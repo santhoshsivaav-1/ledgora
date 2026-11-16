@@ -14,6 +14,7 @@ export const FILING_PACK_KINDS = [
   'cmp08',
   'gstr4',
   'gstr9c',
+  'itr4',
 ] as const;
 export const FILING_PACK_STATUSES = [
   'draft',

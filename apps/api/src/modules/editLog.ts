@@ -52,6 +52,7 @@ export const EDIT_LOG_TABLES: Record<string, string> = {
   documents: 'Document (billing screens)',
   eway_bills: 'E-way bill',
   filing_packs: 'Filing pack',
+  tax_challans: 'Tax challan',
   fy_closes: 'Year close',
   business_settings: 'Business settings',
   setting_values: 'Setting',

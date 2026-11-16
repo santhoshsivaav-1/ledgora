@@ -194,6 +194,7 @@ export const NAV: NavEntry[] = [
       { id: 'gst-returns', label: 'GST Returns', view: 'filing', icon: BookOpen, module: 'gstReturns', perm: 'report:read' },
       { id: 'tds-tcs', label: 'TDS / TCS', path: '/gst-returns/tds', module: 'gstReturns', perm: 'report:read' },
       { id: 'income-tax', label: 'Income Tax', view: 'incometax', module: 'incomeTax', perm: 'report:read' },
+      { id: 'itr4', label: 'ITR-4 Filing', view: 'itr4', icon: Calculator, perm: 'filing:prepare' },
       { id: 'return-register', label: 'Return Register', view: 'returns', icon: ClipboardList, perm: 'filing:read' },
       { id: 'practice', label: 'CA Dashboard', view: 'practice', icon: Briefcase, when: 'ca' },
     ],
@@ -349,6 +350,7 @@ export function buildClassicNav({ showIfModule, openDocs, isCa = false }: Classi
     { id: 'filing', icon: BookOpen, label: 'GST Returns', module: 'gstReturns' },
     { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
     // File-ready returns (D-27): the register for everyone who files, the CA Dashboard for a CA.
+    { id: 'itr4', icon: Calculator, label: 'ITR-4 Filing', module: 'gstReturns' },
     { id: 'returns', icon: ClipboardList, label: 'Return Register', module: 'gstReturns' },
     ...(isCa ? [{ id: 'practice', icon: Briefcase, label: 'CA Dashboard', module: 'dashboard' }] : []),
     // v1.10.75 - opens the online documentation, which covers every screen

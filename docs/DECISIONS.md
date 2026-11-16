@@ -34,6 +34,8 @@ asks; the answer is written here before work continues.
 | D-25 | Plan for CA review, and the CA seat | paid feature / every plan | **Every plan, Free included. A CA member or invitation never counts toward the user limit** (the accountant seat of Zoho Books); turning a CA into another role needs a free user seat | Owner (asked for the industry standard) | 2026-11-15 | Filing, SaaS |
 | D-26 | From when a return counts as overdue | start of the FY / when the business joined / chosen | **Default: the month before the business was added; the business can change it ("Track from" on the Return Register).** Earlier months are listed as "Before you started" | Owner (asked for the industry standard) | 2026-11-15 | Filing |
 | D-27 | Return Register and CA Dashboard in the menus | new menu only / both | **Both menus carry Return Register; CA Dashboard shows to anyone who is a CA in a client organization**, from any organization (the classic-menu test was updated on purpose) | Owner (asked for the industry standard) | 2026-11-15 | Filing |
+| D-28 | Income tax in the app (R2) | file ITR on the portal for them / build the file for upload | **Build the ITR-4 file, check it against the department's own schema and rules, and let the person or CA upload it**; ITR-3 waits for R4 | Owner (no direct filing, see D-24) | 2026-11-16 | Income tax |
+| D-29 | Aadhaar and bank accounts | plain / sealed | **Sealed (AES-256-GCM, bound to the organization), shown by last digits only; kept out of the edit log and audit rows** | Industry standard for PII | 2026-11-16 | Income tax |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
