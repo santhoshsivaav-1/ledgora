@@ -9,6 +9,7 @@
 import type { FilingIssue } from './filing.ts';
 import { gstinChecksumOk } from './gstin.ts';
 import {
+  computeSurcharge,
   compute234AInterest,
   compute234BInterest,
   compute234CInterest,
@@ -219,6 +220,14 @@ export interface Itr4Input {
     agriculturalIncomeOver5000: boolean;
     section44AE: boolean;
   };
+  /**
+   * ITR-3: business income worked out from the books (the profit and loss account with its adjustments), used in place of a
+   * presumptive `business`. A loss is set off against the other-sources income first (it can not be set off against salary);
+   * what remains is `lossCarriedForward` on the computation.
+   */
+  normalBusiness?: { income: number };
+  /** The due date that applies to this return when it is not the year's ordinary one (a tax-audit case has a later one). */
+  dueDate?: string;
   /** Software id the department assigned (SW + 8 digits). */
   swCode?: string;
   /** The city of the intermediary shown in CreationInfo. */
@@ -240,6 +249,10 @@ export interface Itr4Computation {
   professionalTax: number;
   incomeFromSalary: number;
   incomeOtherSources: number;
+  /** ITR-3: business loss set off against the other-sources income this year, and what is left to carry forward. */
+  businessLossSetOff: number;
+  lossCarriedForward: number;
+  surcharge: number;
   interestSavings: number;
   interestDeposits: number;
   grossTotalIncome: number;
@@ -324,7 +337,20 @@ export function computeItr4(
   const incomeOtherSources =
     interestSavings + interestDeposits + pos(os.refundInterest) + dividend + otherOther;
 
-  const grossTotalIncome = businessIncome + incomeFromSalary + incomeOtherSources;
+  // ITR-3: the books' income. A loss comes off the other-sources income; the rest is carried forward.
+  let businessLossSetOff = 0;
+  let lossCarriedForward = 0;
+  let otherSourcesAfterSetOff = incomeOtherSources;
+  if (input.normalBusiness) {
+    const income = int(input.normalBusiness.income);
+    businessIncome = Math.max(0, income);
+    if (income < 0) {
+      businessLossSetOff = Math.min(-income, incomeOtherSources);
+      lossCarriedForward = -income - businessLossSetOff;
+      otherSourcesAfterSetOff = incomeOtherSources - businessLossSetOff;
+    }
+  }
+  const grossTotalIncome = businessIncome + incomeFromSalary + otherSourcesAfterSetOff;
 
   // Chapter VI-A: both regimes allow only 80CCD(2); the old regime the claims this builder supports.
   const d = input.deductions ?? {};
@@ -361,8 +387,14 @@ export function computeItr4(
   const taxOnTotalIncome = int(computeSlabTax(totalIncome, slabs));
   const rebate87A = int(computeRebate87A(totalIncome, taxOnTotalIncome, regime, input.fy));
   const taxAfterRebate = taxOnTotalIncome - rebate87A;
-  const cess = int(taxAfterRebate * 0.04);
-  const grossTaxLiability = taxAfterRebate + cess;
+  // Surcharge only above ₹50 lakh, which ITR-4 can never reach; ITR-3 can, with marginal relief at each step.
+  const surcharge = int(
+    computeSurcharge(taxAfterRebate, totalIncome, regime, {
+      taxAt: (inc: number) => computeSlabTax(inc, slabs),
+    }),
+  );
+  const cess = int((taxAfterRebate + surcharge) * 0.04);
+  const grossTaxLiability = taxAfterRebate + surcharge + cess;
   const netTaxLiability = grossTaxLiability;
 
   // Taxes paid. By the department's rules 133/134 a challan dated in the year is advance tax, after 31 March self-assessment.
@@ -378,6 +410,7 @@ export function computeItr4(
   const tcsTotal = sum((input.tcs ?? []).map((t) => pos(t.claimed)));
 
   // Interest and fee. Presumptive taxpayers pay all advance tax by 15 March.
+  const dueDate = input.dueDate ?? rules.itr4DueDate;
   const mode = input.business ? 'presumptive' : 'regular';
   const plan = advanceTaxSchedule(
     netTaxLiability,
@@ -406,11 +439,11 @@ export function computeItr4(
       netTaxLiability,
       paidBeforeFiling + tdsTotal + tcsTotal,
       input.filedOn,
-      rules.itr4DueDate,
+      dueDate,
       input.fy,
     ),
   );
-  const fee234F = lateFee234F(rules, input.filedOn, totalIncome);
+  const fee234F = lateFee234F({ ...rules, itr4DueDate: dueDate }, input.filedOn, totalIncome);
   const totalTaxAndInterest =
     netTaxLiability + interest234A + interest234B + interest234C + fee234F;
   const totalTaxesPaid = advanceTaxPaid + tdsTotal + tcsTotal + selfAssessmentTaxPaid;
@@ -419,7 +452,7 @@ export function computeItr4(
   const balanceTaxPayable = difference > 0 ? round10(difference) : 0;
   const refundDue = difference < 0 ? round10(-difference) : 0;
 
-  const late = input.filedOn > rules.itr4DueDate;
+  const late = input.filedOn > dueDate;
   return {
     fy: input.fy,
     ay: rules.ay,
@@ -432,7 +465,10 @@ export function computeItr4(
     standardDeduction,
     professionalTax,
     incomeFromSalary,
-    incomeOtherSources,
+    incomeOtherSources: otherSourcesAfterSetOff,
+    businessLossSetOff,
+    lossCarriedForward,
+    surcharge,
     interestSavings,
     interestDeposits,
     grossTotalIncome,
@@ -930,7 +966,7 @@ export function itr4Json(
 }
 
 /** Schedule 80D: the premium rows and the eligible amounts, with the flags the schema asks for. */
-function schedule80D(d: NonNullable<Itr4Deductions['sec80D']>): Json {
+export function schedule80D(d: NonNullable<Itr4Deductions['sec80D']>): Json {
   const rows = (list: { insurer: string; policy: string; amount: number }[] = []) => ({
     Sch80DInsDtls: list.map((r) => ({
       InsurerName: r.insurer.slice(0, 125),
