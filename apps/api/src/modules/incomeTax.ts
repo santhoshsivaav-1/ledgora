@@ -11,6 +11,7 @@ import {
   aisFormatReportBody,
   aisImportBody,
   aisPreviewBody,
+  buildItr3Body,
   buildItr4Body,
   itrDraftBody,
   itrDraftData,
@@ -29,6 +30,10 @@ import {
   countsAsSales,
   fyBounds,
   gstReturnsModel,
+  computeBlocks,
+  computeItr3,
+  itr3InputChecks,
+  itr3Json,
   itr4Eligibility,
   itr4InputChecks,
   itr4Json,
@@ -39,17 +44,22 @@ import {
   projectAnnualProfit,
   reconcileAis,
   tdsBookByCustomer,
+  validateItr3Rules,
   validateItr4Rules,
   type AisRow,
   type FilingIssue,
+  type Itr3Input,
   type Itr4Input,
 } from '@ledgora/tax-engine';
+import { ITR3_SCHEMAS, validateItr3Schema } from '@ledgora/tax-engine/itr3-schema';
 import { ITR4_SCHEMAS, validateItr4Schema } from '@ledgora/tax-engine/itr4-schema';
 import { audit } from '../audit.ts';
 import { openField, sealField } from '../crypto.ts';
 import { AppError, notFound } from '../errors.ts';
 import type { Registrar } from '../http.ts';
+import { loadAssetRegister } from './assets.ts';
 import { loadBusiness } from './businesses.ts';
+import { itr3BooksOf } from './itr3Books.ts';
 import { returnDocsOf } from './filing.ts';
 
 const { taxpayerProfiles, itrDrafts, taxChallans, aisImports, filingPacks } = schema;
@@ -215,6 +225,45 @@ const challanView = (c: typeof taxChallans.$inferSelect) => ({
   note: c.note,
   kind: challanKind(c.challanDate, c.fy),
 });
+
+/** The taxpayer as both returns take them: the profile with the sealed bank accounts and Aadhaar opened. */
+function taxpayerOf(
+  deps: { env: Parameters<typeof openField>[0] },
+  orgId: string,
+  profile: typeof taxpayerProfiles.$inferSelect,
+) {
+  const accounts = (profile.bankAccounts as StoredBank[]).map((b) => ({
+    ifsc: b.ifsc,
+    bankName: b.bankName,
+    accountNo: openField(deps.env, orgId, b.accountNoSealed) ?? '',
+    accountType: b.accountType as 'SB',
+    useForRefund: b.useForRefund,
+  }));
+  return {
+    unreadable: accounts.some((a) => !a.accountNo),
+    taxpayer: {
+      pan: profile.pan,
+      firstName: profile.firstName || undefined,
+      middleName: profile.middleName || undefined,
+      surname: profile.surname,
+      fatherName: profile.fatherName,
+      dob: profile.dob,
+      residenceNo: profile.residenceNo,
+      residenceName: profile.residenceName || undefined,
+      roadOrStreet: profile.roadOrStreet || undefined,
+      locality: profile.locality,
+      city: profile.city,
+      stateCode: profile.stateCode,
+      pinCode: profile.pinCode,
+      mobile: profile.mobile,
+      email: profile.email,
+      aadhaar: openField(deps.env, orgId, profile.aadhaarSealed) || undefined,
+      employerCategory: profile.employerCategory as Itr4Input['taxpayer']['employerCategory'],
+      bankAccounts: accounts,
+      place: profile.place,
+    },
+  };
+}
 
 export function incomeTaxModule({ route }: Registrar) {
   // ---- taxpayer profile ---------------------------------------------------------------------------------------------
@@ -833,14 +882,7 @@ export function incomeTaxModule({ route }: Registrar) {
         };
       const draft = await draftOf(tx, body.businessId, body.fy);
       const books = await booksOf(tx, biz, body.fy);
-      const accounts = (profile.bankAccounts as StoredBank[]).map((b) => ({
-        ifsc: b.ifsc,
-        bankName: b.bankName,
-        accountNo: openField(deps.env, orgId, b.accountNoSealed) ?? '',
-        accountType: b.accountType as 'SB',
-        useForRefund: b.useForRefund,
-      }));
-      const unreadable = accounts.some((a) => !a.accountNo);
+      const { taxpayer, unreadable } = taxpayerOf(deps, orgId, profile);
       const challans = (await challansOf(tx, body.businessId, body.fy)).map((c) => ({
         bsr: c.bsrCode,
         date: c.challanDate,
@@ -854,27 +896,7 @@ export function incomeTaxModule({ route }: Registrar) {
         fy: body.fy,
         filedOn: body.filedOn,
         regime: draft.regime,
-        taxpayer: {
-          pan: profile.pan,
-          firstName: profile.firstName || undefined,
-          middleName: profile.middleName || undefined,
-          surname: profile.surname,
-          fatherName: profile.fatherName,
-          dob: profile.dob,
-          residenceNo: profile.residenceNo,
-          residenceName: profile.residenceName || undefined,
-          roadOrStreet: profile.roadOrStreet || undefined,
-          locality: profile.locality,
-          city: profile.city,
-          stateCode: profile.stateCode,
-          pinCode: profile.pinCode,
-          mobile: profile.mobile,
-          email: profile.email,
-          aadhaar: openField(deps.env, orgId, profile.aadhaarSealed) || undefined,
-          employerCategory: profile.employerCategory as Itr4Input['taxpayer']['employerCategory'],
-          bankAccounts: accounts,
-          place: profile.place,
-        },
+        taxpayer,
         business: d
           ? {
               section: d.section,
@@ -944,6 +966,160 @@ export function incomeTaxModule({ route }: Registrar) {
     },
   });
 
+  // ---- the ITR-3 file ------------------------------------------------------------------------------------------------
+  route({
+    method: 'post',
+    path: '/v1/filing-packs/build/itr3',
+    tag: 'Filing',
+    summary:
+      'Build the ITR-3 file (business income from the books) from the ledger, the asset register, the taxpayer details and the entered inputs, and check it against the department’s rules and schema. ok: false lists what to fix; ok: true returns the file to save as a pack',
+    permission: 'filing:prepare',
+    body: buildItr3Body,
+    handler: async ({ tx, deps, orgId, body }) => {
+      const biz = await loadBusiness(tx, body.businessId);
+      const rules = itrRulesFor(body.fy);
+      const fail = (issues: FilingIssue[]) => ({
+        ok: false as const,
+        issues,
+        computation: null,
+        payload: null,
+        statements: null,
+      });
+      const profile = await profileRow(tx, body.businessId);
+      if (!profile)
+        return fail([
+          {
+            id: 'PROFILE',
+            severity: 'error',
+            code: 'PROFILE_MISSING',
+            message: 'Fill in the taxpayer details first (PAN, address, bank account)',
+            path: 'profile',
+          },
+        ]);
+      const draft = await draftOf(tx, body.businessId, body.fy);
+      const d3 = draft.itr3;
+      if (!d3)
+        return fail([
+          {
+            id: 'ITR3_DRAFT',
+            severity: 'error',
+            code: 'ITR3_DRAFT',
+            message:
+              'Fill in the business details for the ITR-3 first (the nature of business, the accounting method and the questions)',
+            path: 'itr3',
+          },
+        ]);
+      const { taxpayer, unreadable } = taxpayerOf(deps, orgId, profile);
+      const register = await loadAssetRegister(tx, body.businessId);
+      const blocks = computeBlocks(body.fy, register.assets, register.openings);
+      const ledger = await itr3BooksOf(tx, body.businessId, body.fy, {
+        servicesTurnover: d3.servicesTurnover,
+        loansAreSecured: d3.loansAreSecured,
+        assets: register.assets,
+      });
+      const booked = await booksOf(tx, biz, body.fy);
+      const challans = (await challansOf(tx, body.businessId, body.fy)).map((c) => ({
+        bsr: c.bsrCode,
+        date: c.challanDate,
+        serial: c.serialNo,
+        amount: c.amount,
+      }));
+      const input: Itr3Input = {
+        fy: body.fy,
+        filedOn: body.filedOn,
+        regime: draft.regime,
+        taxpayer,
+        business: {
+          name: d3.business.name,
+          code: d3.business.code,
+          description: d3.business.description || undefined,
+          commencedOn: d3.business.commencedOn,
+          method: d3.business.method,
+          gstTurnover: booked.gstTurnover,
+        },
+        books: ledger.books,
+        balanceSheet: ledger.balanceSheet,
+        adjustments: d3.adjustments,
+        blocks,
+        audit: d3.audit,
+        salary: draft.salary
+          ? {
+              ...draft.salary,
+              employer: d3.employer
+                ? { ...d3.employer, nature: taxpayer.employerCategory }
+                : undefined,
+            }
+          : undefined,
+        // Interest, dividend and rent in the ledger are included from the books; this holds only income that is not in them.
+        otherSources: draft.otherSources,
+        deductions: draft.deductions,
+        tds: draft.tds,
+        tcs: draft.tcs,
+        challans,
+        form10IEA: (profile.form10Iea as { ack: string; filedOn: string } | null) ?? undefined,
+        declarations: d3.declarations,
+        swCode: deps.env.ITR_SW_CODE,
+      };
+      const computation = computeItr3(input, rules);
+      const issues: FilingIssue[] = [...ledger.issues, ...itr3InputChecks(input, computation)];
+      if (Math.abs(computation.calc.profitBeforeTax - ledger.ledgerNetProfit) > 1)
+        issues.push({
+          id: 'ITR3_PL_RECONCILE',
+          severity: 'error',
+          code: 'ITR3_PL_RECONCILE',
+          message: `The profit before tax of the return (₹${computation.calc.profitBeforeTax.toLocaleString('en-IN')}) differs from the books' profit and loss account (₹${Math.round(ledger.ledgerNetProfit).toLocaleString('en-IN')}); some account could not be placed. Open the Profit & Loss report and check the accounts`,
+          path: 'books',
+        });
+      if (unreadable)
+        issues.push({
+          id: 'ACCOUNT_UNREADABLE',
+          severity: 'error',
+          code: 'ACCOUNT_UNREADABLE',
+          message:
+            'A saved bank account number can not be read back; enter it again on the taxpayer details',
+          path: 'taxpayer.bankAccounts',
+        });
+      const statements = {
+        books: ledger.books,
+        balanceSheet: ledger.balanceSheet,
+        blocks,
+        calc: computation.calc,
+      };
+      if (issues.some((i) => i.severity === 'error')) return { ...fail(issues), statements };
+      const payload = itr3Json(input, computation, rules);
+      issues.push(...validateItr3Rules(payload));
+      if (rules.itr4SchemaAy && ITR3_SCHEMAS[rules.itr4SchemaAy])
+        issues.push(...validateItr3Schema(payload, rules.itr4SchemaAy));
+      else
+        issues.push({
+          id: 'ITR3_NO_SCHEMA',
+          severity: 'error',
+          code: 'ITR3_NO_SCHEMA',
+          message: `The ITR-3 format for ${rules.label} is not published yet`,
+          path: '',
+        });
+      if (!deps.env.ITR_SW_CODE)
+        issues.push({
+          id: 'SW_CODE_UNREGISTERED',
+          severity: 'warning',
+          code: 'SW_CODE_UNREGISTERED',
+          message:
+            'This software has no registration code from the Income Tax Department yet (ITR_SW_CODE), so the file carries a placeholder. The portal may refuse the upload: try the file on the portal and tell the software’s owner what it says',
+          path: 'CreationInfo',
+        });
+      const ok = !issues.some((i) => i.severity === 'error');
+      return {
+        ok,
+        kind: 'itr3' as const,
+        period: `03${Number(body.fy.slice(0, 4)) + 1}`,
+        issues,
+        computation,
+        payload: ok ? payload : null,
+        statements,
+      };
+    },
+  });
+
   // ---- the register's income-tax half -------------------------------------------------------------------------------
   route({
     method: 'get',
@@ -957,6 +1133,7 @@ export function incomeTaxModule({ route }: Registrar) {
       await loadBusiness(tx, query.businessId);
       const rules = itrRulesFor(query.fy);
       const now = today();
+      const form = (await draftOf(tx, query.businessId, query.fy)).form;
       const challans = (await challansOf(tx, query.businessId, query.fy)).filter(
         (c) => challanKind(c.challanDate, c.fy) === 'advance',
       );
@@ -966,7 +1143,7 @@ export function incomeTaxModule({ route }: Registrar) {
         .where(
           and(
             eq(filingPacks.businessId, query.businessId),
-            eq(filingPacks.kind, 'itr4'),
+            eq(filingPacks.kind, form),
             eq(filingPacks.period, `03${Number(query.fy.slice(0, 4)) + 1}`),
             isNull(filingPacks.supersededAt),
             isNull(filingPacks.deletedAt),
@@ -983,7 +1160,7 @@ export function incomeTaxModule({ route }: Registrar) {
           passed: a.dueDate < now,
         })),
         itr: {
-          form: 'ITR-4',
+          form: form === 'itr3' ? 'ITR-3' : 'ITR-4',
           dueDate: rules.itr4DueDate,
           confidence: rules.confidence.itr4DueDate,
           schemaAvailable: !!rules.itr4SchemaAy,

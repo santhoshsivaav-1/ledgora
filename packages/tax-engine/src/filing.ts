@@ -21,6 +21,7 @@ export const FILING_KINDS = [
   'gstr4',
   'gstr9c',
   'itr4',
+  'itr3',
 ] as const;
 export type FilingKind = (typeof FILING_KINDS)[number];
 export const FILING_KIND_LABELS: Record<FilingKind, string> = {
@@ -33,6 +34,7 @@ export const FILING_KIND_LABELS: Record<FilingKind, string> = {
   gstr4: 'GSTR-4',
   gstr9c: 'GSTR-9C',
   itr4: 'ITR-4',
+  itr3: 'ITR-3',
 };
 
 export const FILING_STATUSES = [

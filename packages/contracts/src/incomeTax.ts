@@ -116,8 +116,118 @@ const particulars = z
   .partial();
 const premium = z.object({ insurer: text(125).min(1), policy: text(75).min(1), amount: rupees });
 
+const dues43B = z
+  .object({
+    taxDutyCess: rupees,
+    pfEsiContribution: rupees,
+    bonusCommission: rupees,
+    interestToFinancialInstitution: rupees,
+    loanFromFinancialCompany: rupees,
+    interestToScheduledBank: rupees,
+    leaveEncashment: rupees,
+    msePayable: rupees,
+  })
+  .partial();
+
+/** What the person enters for an ITR-3 (books-based) return; the ledger, the asset register and the profile supply the rest. */
+export const itr3DraftData = z.object({
+  business: z.object({
+    name: text(125).default(''),
+    /** The nature-of-business code of the schema (five digits). */
+    code: text(10).default(''),
+    description: text(125).default(''),
+    commencedOn: isoDate.optional(),
+    method: z.enum(['MERC', 'CASH']).default('MERC'),
+  }),
+  /** The part of the year's sales that is services, not goods (the ledger holds one sales account). */
+  servicesTurnover: rupees.default(0),
+  /** Items the Income-tax Act treats differently from the books (they feed Part A-OI and Schedule BP). */
+  adjustments: z
+    .object({
+      personalExpenses: rupees,
+      otherNotAllowedUs37: rupees,
+      otherNotAllowedUs36: rupees,
+      notAllowedUs40: rupees,
+      cashPaymentsUs40A3: rupees,
+      unpaid43B: dues43B,
+      paid43BOfEarlierYears: dues43B,
+      deemedIncomeUs41: rupees,
+    })
+    .partial()
+    .default({}),
+  audit: z
+    .object({
+      audited: z.boolean().default(false),
+      reportDate: isoDate.optional(),
+      ack: z
+        .string()
+        .regex(/^([0-9]{15})?$/, '15 digits')
+        .optional(),
+      auditorName: text(125).optional(),
+      auditorPan: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^([A-Z]{5}[0-9]{4}[A-Z])?$/, 'PAN is 5 letters, 4 digits and a letter')
+        .optional(),
+      cashReceiptsPct: z.number().min(0).max(100).optional(),
+      cashPaymentsPct: z.number().min(0).max(100).optional(),
+    })
+    .default({ audited: false }),
+  /** The ledger has loan accounts but not whether they are secured; this says how to show them. */
+  loansAreSecured: z.boolean().default(false),
+  /** Where the salary comes from, when there is salary (Schedule S names the employer). */
+  employer: z
+    .object({
+      name: text(125).min(1),
+      address: text(200).min(1),
+      city: text(50).min(1),
+      stateCode: z.string().regex(/^(0[1-9]|[1-2][0-9]|3[0-7])$/),
+    })
+    .nullable()
+    .default(null),
+  declarations: z
+    .object({
+      houseProperty: z.boolean().default(false),
+      capitalGains: z.boolean().default(false),
+      foreignAssetsOrIncome: z.boolean().default(false),
+      companyDirector: z.boolean().default(false),
+      unlistedShares: z.boolean().default(false),
+      partnerInFirm: z.boolean().default(false),
+      carriedForwardLoss: z.boolean().default(false),
+      agriculturalIncomeOver5000: z.boolean().default(false),
+      cashDeposits1Crore: z.boolean().default(false),
+      foreignTravel2Lakh: z.boolean().default(false),
+      electricity1Lakh: z.boolean().default(false),
+      manufacturingAccount: z.boolean().default(false),
+      speculativeOrSpecifiedBusiness: z.boolean().default(false),
+      nonResident: z.boolean().default(false),
+    })
+    .default({
+      houseProperty: false,
+      capitalGains: false,
+      foreignAssetsOrIncome: false,
+      companyDirector: false,
+      unlistedShares: false,
+      partnerInFirm: false,
+      carriedForwardLoss: false,
+      agriculturalIncomeOver5000: false,
+      cashDeposits1Crore: false,
+      foreignTravel2Lakh: false,
+      electricity1Lakh: false,
+      manufacturingAccount: false,
+      speculativeOrSpecifiedBusiness: false,
+      nonResident: false,
+    }),
+});
+export type Itr3DraftData = z.infer<typeof itr3DraftData>;
+
 /** What the person enters for one return; the profile, the challans and the books supply the rest. */
 export const itrDraftData = z.object({
+  /** Which return is being prepared: the presumptive ITR-4, or the books-based ITR-3. */
+  form: z.enum(['itr4', 'itr3']).default('itr4'),
+  /** Only for ITR-3. */
+  itr3: itr3DraftData.nullable().default(null),
   regime: z.enum(['new', 'old']).default('new'),
   business: z
     .object({
@@ -285,6 +395,12 @@ export const aisImportBody = z.object({
   rows: z.array(aisRow).min(1).max(5000),
 });
 
+export const buildItr3Body = z.object({
+  businessId: uuid,
+  fy,
+  /** The day the return will be filed: it decides the late fee, interest under 234A and the filing section. */
+  filedOn: isoDate,
+});
 export const buildItr4Body = z.object({
   businessId: uuid,
   fy,

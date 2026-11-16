@@ -65,6 +65,7 @@ import { sendMail } from '../mail/index.ts';
 import { loadBusiness } from './businesses.ts';
 import { settingValue } from './settingsStore.ts';
 import { ITR4_SCHEMAS, validateItr4Schema } from '@ledgora/tax-engine/itr4-schema';
+import { ITR3_SCHEMAS, validateItr3Schema } from '@ledgora/tax-engine/itr3-schema';
 import { DEFAULT_PROFILE, SORT, getKv, listDocs, type Doc } from './workspace/store.ts';
 
 const { filingPacks, filingEvents, businesses, businessSettings, member, user, organizations } =
@@ -540,7 +541,7 @@ export function filingModule({ route }: Registrar) {
     handler: async ({ tx, orgId, auth, body }) => {
       const biz = await loadBusiness(tx, body.businessId);
       // An income-tax return belongs to a person, not to a GST registration: a business with no GSTIN can still file one.
-      if (!biz.gstin && body.kind !== 'itr4')
+      if (!biz.gstin && body.kind !== 'itr4' && body.kind !== 'itr3')
         throw new AppError(
           'unprocessable',
           'Add the GSTIN of this business before preparing returns',
@@ -576,20 +577,27 @@ export function filingModule({ route }: Registrar) {
         );
         issues.push(...einvoiceChecks(inPeriod, { aato: aatoOf(docs.profile), asOf: today() }));
       }
-      // R2.3: the ITR-4 file is also checked against the department's published JSON schema for its year.
-      if (body.kind === 'itr4') {
+      // R2.3 / R2.5: an income-tax return is also checked against the department's published JSON schema for its year.
+      if (body.kind === 'itr4' || body.kind === 'itr3') {
+        const form = body.kind === 'itr4' ? 'ITR4' : 'ITR3';
+        const label = body.kind === 'itr4' ? 'ITR-4' : 'ITR-3';
+        const schemas = body.kind === 'itr4' ? ITR4_SCHEMAS : ITR3_SCHEMAS;
+        const check = body.kind === 'itr4' ? validateItr4Schema : validateItr3Schema;
         const ay = String(
-          (body.payload as { ITR?: { ITR4?: { Form_ITR4?: { AssessmentYear?: string } } } }).ITR
-            ?.ITR4?.Form_ITR4?.AssessmentYear ?? '',
+          (
+            body.payload as {
+              ITR?: Record<string, { [k: string]: { AssessmentYear?: string } } | undefined>;
+            }
+          ).ITR?.[form]?.[`Form_${form}`]?.AssessmentYear ?? '',
         );
         const schemaAy = ay ? `${ay}-${String(Number(ay) + 1).slice(2)}` : '';
-        if (ITR4_SCHEMAS[schemaAy]) issues.push(...validateItr4Schema(body.payload, schemaAy));
+        if (schemas[schemaAy]) issues.push(...check(body.payload, schemaAy));
         else
           issues.push({
-            id: 'ITR4_NO_SCHEMA',
+            id: `${form}_NO_SCHEMA`,
             severity: 'error',
-            code: 'ITR4_NO_SCHEMA',
-            message: `There is no ITR-4 schema on file for assessment year ${ay || '(missing)'}`,
+            code: `${form}_NO_SCHEMA`,
+            message: `There is no ${label} schema on file for assessment year ${ay || '(missing)'}`,
             path: '',
           });
       }
@@ -831,18 +839,27 @@ export function filingModule({ route }: Registrar) {
           'The file changed after it was approved; send it for review again',
         );
       const biz = await loadBusiness(tx, p.businessId);
-      if (p.kind === 'itr4') {
+      if (p.kind === 'itr4' || p.kind === 'itr3') {
         // The acknowledgement number is 15 digits. The file was built for a filing date: filed on the other side of the due
         // date, its late fee, interest and filing section are wrong, so it must be built again.
         const problem = ackProblem(body.arn ?? '');
         if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
-        const f = (
+        const itr = (
           p.payload as {
-            ITR?: {
-              ITR4?: { FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string } };
-            };
+            ITR?: Record<
+              string,
+              | {
+                  FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
+                  PartA_GEN1?: {
+                    FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
+                  };
+                }
+              | undefined
+            >;
           }
-        ).ITR?.ITR4?.FilingStatus;
+        ).ITR;
+        // ITR-4 keeps the filing status at the top of the form; ITR-3 inside Part A General.
+        const f = p.kind === 'itr3' ? itr?.ITR3?.PartA_GEN1?.FilingStatus : itr?.ITR4?.FilingStatus;
         const due = f?.ItrFilingDueDate ?? '';
         if (due && body.filedOn <= due !== (f?.ReturnFileSec === 11))
           throw new AppError(
