@@ -1211,7 +1211,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
             const halfRate = taxRate / 2;
             const halfTax = taxAmount / 2;
             return (
-              <tr key={item.id} className={index % 2 === 0 ? 'inv-tr-even' : ''}>
+              <tr key={item.id ?? index} className={index % 2 === 0 ? 'inv-tr-even' : ''}>
                 <td className="inv-td inv-td-muted">{index + 1}</td>
                 <td className="inv-td inv-td-name">
                   {item.name || '-'}

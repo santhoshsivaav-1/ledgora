@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { Fragment, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.jsx'
@@ -140,10 +140,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Development runs every effect twice to expose bugs. The call-count check (scripts/perf-guard-e2e.mjs) turns that off in its own
+// browser (localStorage ledgora_no_strict=1, development only) so it counts what a real visitor's browser makes.
+const noStrict = import.meta.env.DEV && (() => { try { return localStorage.getItem('ledgora_no_strict') === '1' } catch { return false } })()
+const Strict = noStrict ? Fragment : StrictMode
+
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
+  <Strict>
     <Providers>
       <App />
     </Providers>
-  </StrictMode>,
+  </Strict>,
 )

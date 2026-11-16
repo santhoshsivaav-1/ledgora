@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { schema } from '@ledgora/db';
 import {
   INVOICE_TYPES,
+  countsAsSales,
   businessKeyOf,
   counterKeyFor,
   formatDocNumber,
@@ -205,6 +206,126 @@ export function workspaceModule({ route }: Registrar) {
         success: true as const,
         ...(params.collection === 'bills' ? { permanent: true } : {}),
       };
+    },
+  });
+
+  // ---- search and the bell, answered by the server so the browser never downloads whole collections ----
+  /** One day further on, as a calendar date: the bell's "due soon" window is counted from the browser's own today. */
+  const addDays = (iso: string, days: number) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  route({
+    method: 'get',
+    path: '/v1/workspace/search',
+    tag: 'Workspace',
+    summary:
+      'Open Anything: the invoices, parties and items matching what was typed (at most 8 of each), with the same visibility rules as the lists',
+    query: z.object({ q: z.string().trim().min(2).max(60) }),
+    response: z.object({
+      bills: z.array(anyDoc),
+      clients: z.array(anyDoc),
+      products: z.array(anyDoc),
+    }),
+    handler: async ({ tx, auth, query }) => {
+      // The typed text is data, never a pattern: % and _ are escaped.
+      const like = `%${query.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+      const find = async (name: Collection, fields: string[], order: string) => {
+        const match = sql.join(
+          fields.map((f) => sql`${documents.data}->>${f} ilike ${like}`),
+          sql` or `,
+        );
+        const own =
+          auth.ownOnly && TRANSACTIONS.has(name)
+            ? sql` and ${documents.data}->>'_createdBy' = ${auth.user.id}`
+            : sql``;
+        const rows = (await tx.execute(
+          sql`select data from documents where collection = ${name} and deleted_at is null and (${match})${own}
+              order by ${sql.raw(order)} limit 8`,
+        )) as unknown as { data: Doc }[];
+        return visible(
+          name,
+          rows.map((r) => r.data),
+          auth,
+        );
+      };
+      const [bills, clients, products] = await Promise.all([
+        find('bills', ['invoiceNumber', 'clientName'], "data->>'invoiceDate' desc nulls last"),
+        find('clients', ['name', 'phone', 'gstin', 'email'], "data->>'name'"),
+        find('products', ['name', 'hsn', 'sku', 'barcode'], "data->>'name'"),
+      ]);
+      return { bills, clients, products };
+    },
+  });
+
+  route({
+    method: 'get',
+    path: '/v1/workspace/notifications',
+    tag: 'Workspace',
+    summary:
+      'What the bell shows, worked out on the server: overdue and soon-due invoices, the products that may be low on stock, and the recurring auto-fire note',
+    query: z.object({
+      today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      soon: z.coerce.number().int().min(0).max(30).default(3),
+    }),
+    response: z.object({
+      overdue: z.array(anyDoc),
+      dueSoon: z.array(anyDoc),
+      lowStock: z.array(anyDoc),
+      stockAlert: z.object({ enabled: z.boolean(), threshold: z.number() }),
+      autoFire: z.unknown(),
+    }),
+    handler: async ({ tx, auth, query }) => {
+      const until = addDays(query.today, query.soon);
+      const own = auth.ownOnly ? sql` and data->>'_createdBy' = ${auth.user.id}` : sql``;
+      // Only unpaid invoices with a due date up to the window are read; the rest of the business never leaves the database.
+      const bills = (
+        (await tx.execute(
+          sql`select data from documents where collection = 'bills' and deleted_at is null
+              and coalesce(data->>'status', '') <> 'paid'
+              and data->'data'->'details'->>'dueDate' is not null and data->'data'->'details'->>'dueDate' <= ${until}${own}
+              order by data->'data'->'details'->>'dueDate' limit 500`,
+        )) as unknown as { data: Doc }[]
+      ).map((r) => r.data);
+      const dueOf = (b: Doc) =>
+        String((b.data as { details?: { dueDate?: string } } | undefined)?.details?.dueDate ?? '');
+      const pick = (b: Doc) => ({
+        id: b.id,
+        invoiceNumber: b.invoiceNumber,
+        clientName: b.clientName,
+        dueDate: dueOf(b),
+        totalAmount: b.totalAmount,
+      });
+      const live = bills.filter((b) => b.status !== 'paid' && countsAsSales(b as never));
+      const overdue = live.filter((b) => dueOf(b) < query.today).map(pick);
+      const dueSoon = live.filter((b) => dueOf(b) >= query.today && dueOf(b) <= until).map(pick);
+
+      const cfg =
+        (await getKv<{ enabled?: boolean; threshold?: number }>(tx, `${META}stockAlertSettings`)) ??
+        {};
+      const stockAlert = { enabled: cfg.enabled !== false, threshold: Number(cfg.threshold ?? 5) };
+      // Candidates: stock at or below the shared threshold or the item's own minimum. The screen applies the exact rule
+      // (a minimum counts only when that setting is on), so a looser net here can not change what is shown.
+      const lowStock = stockAlert.enabled
+        ? (
+            (await tx.execute(
+              sql`select data from documents where collection = 'products' and deleted_at is null
+                  and data->>'stock' ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                  and (data->>'stock')::numeric <= greatest(${stockAlert.threshold}::numeric,
+                      case when data->>'minStock' ~ '^[0-9]+(\\.[0-9]+)?$' then (data->>'minStock')::numeric else 0 end)
+                  order by data->>'name' limit 200`,
+            )) as unknown as { data: Doc }[]
+          ).map((r) => ({
+            id: r.data.id,
+            name: r.data.name,
+            stock: r.data.stock,
+            minStock: r.data.minStock,
+          }))
+        : [];
+      const autoFire = (await getKv(tx, `${META}lastRecurringAutoFire`)) ?? null;
+      return { overdue, dueSoon, lowStock, stockAlert, autoFire };
     },
   });
 

@@ -50,6 +50,7 @@ import { filingModule } from './modules/filing.ts';
 import { editLogModule } from './modules/editLog.ts';
 import { incomeTaxModule } from './modules/incomeTax.ts';
 import { assetsModule } from './modules/assets.ts';
+import { bootstrapModule } from './modules/bootstrap.ts';
 
 const startedAt = Date.now();
 
@@ -59,6 +60,17 @@ export function createApp(base: Omit<Deps, 'auth'>) {
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
   applySecurity(app, deps.env);
+  // How long the API took, on every answer (Server-Timing shows in the browser's network panel), and a log line for the slow
+  // ones, so a slow screen can be traced to its call in minutes.
+  app.use('/v1/*', async (c, next) => {
+    const t0 = performance.now();
+    await next();
+    const ms = performance.now() - t0;
+    c.header('Server-Timing', `app;dur=${ms.toFixed(1)}`);
+    const limit = deps.env.SLOW_REQUEST_MS;
+    if (limit > 0 && ms > limit)
+      console.warn(`[slow] ${c.req.method} ${c.req.path} ${Math.round(ms)}ms`);
+  });
 
   // Better Auth owns everything under /v1/auth: sign-up, sign-in, OTP, 2FA, password reset, Google.
   app.on(['GET', 'POST'], '/v1/auth/*', (c) => deps.auth.handler(c.req.raw));
@@ -131,6 +143,7 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     editLogModule,
     incomeTaxModule,
     assetsModule,
+    bootstrapModule,
   ])
     mod(reg);
   localFileEndpoints(app, deps);

@@ -31,4 +31,6 @@ The code is finished and tested. These steps need your accounts, the department,
 11. **The ITR-3 business codes and the 45% block**: when the department publishes the schema for the next year, download it into
     `packages/tax-engine/schemas/itr3/`, run `node scripts/gen-itr3-skeleton.mjs` and `node scripts/gen-itr3-codes.mjs`, register
     it in `src/itr3Schema.ts`, and re-read its validation-rules document against `src/itr3Rules.ts` (`ITR3_RULES_CHECKED`).
+12. **Have a lawyer review the privacy policy and terms** (`apps/web/src/features/public/PublicPages.jsx`) and set `VITE_COMPANY_NAME` and `VITE_SUPPORT_EMAIL` for the build. They are plain-language drafts that describe what the software does; they are not legal advice. Update `LEGAL_UPDATED` in `apps/web/src/config/company.js` whenever the wording changes.
+13. **Check the Railway region and database address** (`docs/DEPLOY_RAILWAY.md` section 5): the API and Postgres in one region, `DATABASE_URL` on the internal address. Then look for `[slow]` lines in the service log.
 

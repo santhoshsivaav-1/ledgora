@@ -13,10 +13,85 @@ import {
 } from '@ledgora/contracts';
 import { AppError, notFound } from '../errors.ts';
 import { deviceLabel } from '../auth/device.ts';
-import { listPage, type Registrar } from '../http.ts';
+import { listPage, type Deps, type Registrar } from '../http.ts';
+import type { AuthContext } from '../middleware/context.ts';
 import { rulesOfRole } from '../middleware/permission.ts';
 
 const { member, organizations, session, memberBusinesses, subscriptions, auditLog } = schema;
+
+/** Who the person is, their organizations, role, permissions and plan: `/v1/me`, and the first part of `/v1/bootstrap`. */
+export async function buildMe(deps: Deps, auth: AuthContext) {
+  const rows = await deps.db
+    .select({ id: organizations.id, name: organizations.name, role: member.role })
+    .from(member)
+    .innerJoin(organizations, eq(organizations.id, member.organizationId))
+    .where(eq(member.userId, auth.user.id))
+    .orderBy(member.createdAt);
+  const current = rows.find((r) => r.id === auth.activeOrganizationId) ?? rows[0];
+  if (!current) throw new AppError('forbidden', 'This account has no organization yet');
+  const role = current.role as Role;
+  const [m] = await deps.db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.userId, auth.user.id), eq(member.organizationId, current.id)));
+  const { limits, sub } = await withTenant(deps.db, current.id, async (tx) => ({
+    limits: await tx
+      .select({ b: memberBusinesses.businessId })
+      .from(memberBusinesses)
+      .where(eq(memberBusinesses.memberId, m!.id)),
+    sub: (await tx.select().from(subscriptions).orderBy(desc(subscriptions.createdAt)).limit(1))[0],
+  }));
+  return {
+    user: {
+      id: auth.user.id,
+      name: auth.user.name,
+      email: auth.user.email.endsWith('.invalid') ? '' : auth.user.email,
+      phoneNumber: auth.user.phoneNumber,
+      twoFactorEnabled: auth.user.twoFactorEnabled,
+    },
+    organization: { id: current.id, name: current.name },
+    role,
+    ...(await (async () => {
+      const rules = await rulesOfRole(deps.db, current.id, role);
+      return {
+        permissions: [...rules.permissions],
+        restrictions: { ownOnly: rules.ownOnly, hideCost: rules.hideCost },
+        ...(rules.label ? { roleLabel: rules.label } : {}),
+      };
+    })()),
+    businessIds: role !== 'owner' && limits.length ? limits.map((l) => l.b) : null,
+    organizations: rows.map((r) => ({ id: r.id, name: r.name, role: r.role as Role })),
+    // SaaS plans: what the screens may offer (reads are never gated; writes to a missing feature answer 402).
+    entitlements: (() => {
+      const eff = effectivePlan(sub ?? null);
+      return {
+        plan: eff.plan,
+        label: eff.label,
+        trial: eff.trial,
+        trialDaysLeft: eff.trialDaysLeft,
+        graceDaysLeft: eff.graceDaysLeft,
+        graceReason: eff.graceReason,
+        expired: eff.expired,
+        locked: eff.locked,
+        lockReason: eff.lockReason,
+        needsPlan: eff.needsPlan,
+        status: eff.status,
+        startedAt: sub?.startedAt?.toISOString() ?? sub?.createdAt?.toISOString() ?? null,
+        trialEndsAt: sub?.trialEndsAt?.toISOString() ?? null,
+        currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+        interval: sub?.billingInterval ?? null,
+        features: [...planById(eff.plan).features],
+      };
+    })(),
+    subscription: sub
+      ? {
+          plan: sub.plan,
+          status: sub.status,
+          trialEndsAt: sub.trialEndsAt?.toISOString() ?? null,
+        }
+      : null,
+  };
+}
 
 export function accountModule({ route }: Registrar) {
   route({
@@ -26,80 +101,7 @@ export function accountModule({ route }: Registrar) {
     summary: 'Who you are, your organizations, role, permissions and plan',
     access: 'session',
     response: meSchema,
-    handler: async ({ auth, deps }) => {
-      const rows = await deps.db
-        .select({ id: organizations.id, name: organizations.name, role: member.role })
-        .from(member)
-        .innerJoin(organizations, eq(organizations.id, member.organizationId))
-        .where(eq(member.userId, auth.user.id))
-        .orderBy(member.createdAt);
-      const current = rows.find((r) => r.id === auth.activeOrganizationId) ?? rows[0];
-      if (!current) throw new AppError('forbidden', 'This account has no organization yet');
-      const role = current.role as Role;
-      const [m] = await deps.db
-        .select({ id: member.id })
-        .from(member)
-        .where(and(eq(member.userId, auth.user.id), eq(member.organizationId, current.id)));
-      const { limits, sub } = await withTenant(deps.db, current.id, async (tx) => ({
-        limits: await tx
-          .select({ b: memberBusinesses.businessId })
-          .from(memberBusinesses)
-          .where(eq(memberBusinesses.memberId, m!.id)),
-        sub: (
-          await tx.select().from(subscriptions).orderBy(desc(subscriptions.createdAt)).limit(1)
-        )[0],
-      }));
-      return {
-        user: {
-          id: auth.user.id,
-          name: auth.user.name,
-          email: auth.user.email.endsWith('.invalid') ? '' : auth.user.email,
-          phoneNumber: auth.user.phoneNumber,
-          twoFactorEnabled: auth.user.twoFactorEnabled,
-        },
-        organization: { id: current.id, name: current.name },
-        role,
-        ...(await (async () => {
-          const rules = await rulesOfRole(deps.db, current.id, role);
-          return {
-            permissions: [...rules.permissions],
-            restrictions: { ownOnly: rules.ownOnly, hideCost: rules.hideCost },
-            ...(rules.label ? { roleLabel: rules.label } : {}),
-          };
-        })()),
-        businessIds: role !== 'owner' && limits.length ? limits.map((l) => l.b) : null,
-        organizations: rows.map((r) => ({ id: r.id, name: r.name, role: r.role as Role })),
-        // SaaS plans: what the screens may offer (reads are never gated; writes to a missing feature answer 402).
-        entitlements: (() => {
-          const eff = effectivePlan(sub ?? null);
-          return {
-            plan: eff.plan,
-            label: eff.label,
-            trial: eff.trial,
-            trialDaysLeft: eff.trialDaysLeft,
-            graceDaysLeft: eff.graceDaysLeft,
-            graceReason: eff.graceReason,
-            expired: eff.expired,
-            locked: eff.locked,
-            lockReason: eff.lockReason,
-            needsPlan: eff.needsPlan,
-            status: eff.status,
-            startedAt: sub?.startedAt?.toISOString() ?? sub?.createdAt?.toISOString() ?? null,
-            trialEndsAt: sub?.trialEndsAt?.toISOString() ?? null,
-            currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
-            interval: sub?.billingInterval ?? null,
-            features: [...planById(eff.plan).features],
-          };
-        })(),
-        subscription: sub
-          ? {
-              plan: sub.plan,
-              status: sub.status,
-              trialEndsAt: sub.trialEndsAt?.toISOString() ?? null,
-            }
-          : null,
-      };
-    },
+    handler: async ({ auth, deps }) => buildMe(deps, auth),
   });
 
   route({

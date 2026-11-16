@@ -75,7 +75,29 @@ Railway sets `PORT`; the API listens on it. The API refuses to start in producti
 4. `https://<your-domain>/` shows the sign-in screen. Create an account, open the confirmation e-mail, and the business
    form follows.
 
-## 5. Backups
+## 5. Speed: where the API and the database run, and how to see a slow call
+
+Every screen makes several API calls and each one goes to Postgres, so **the distance between the API and the database
+is paid on every call**. If one is slow on Railway, check these first:
+
+1. **Same region.** The web/API service and the Postgres service must be in the same Railway region (Service › Settings ›
+   Region). A database in another region adds that round trip to every query; this was the first suspect when `/profile`
+   took 4 to 9 seconds.
+2. **Use the private address.** Point `DATABASE_URL` at the database's internal (`*.railway.internal`) address, not the
+   public proxy; the public proxy is slower and counts as outgoing traffic.
+3. **Read the timings.** Every `/v1/*` answer carries a `Server-Timing: app;dur=…` header (open the browser's Network
+   panel › Timing, or `curl -i`). It is the time inside the API. If the page waited much longer than that, the delay is in
+   the network, not in the code.
+4. **Find the slow call.** The API logs `[slow] GET /v1/... 1432ms` for any call over `SLOW_REQUEST_MS` (default 1000;
+   `0` turns it off). Search the service log for `[slow]`.
+5. **Size of the pool.** Each API process opens up to 10 database connections (`max` in `packages/db/src/client.ts`).
+   Several instances can exhaust a small Postgres plan; if connections run out, put a pooler (PgBouncer, or Neon's pooled
+   address) in front and lower the pool size.
+
+The browser side is covered by `apps/web/scripts/perf-guard-e2e.mjs`: it fails if a page makes more API calls than its
+budget, makes the same call twice, or downloads whole bill, party or item lists on a page that does not show them.
+
+## 6. Backups
 
 All data is in Postgres. Turn on Railway's Postgres backups (paid plans) or point `DATABASE_URL` at a managed
 Postgres with point-in-time recovery (Neon, RDS, Supabase), and test a restore before launch. The in-app Export

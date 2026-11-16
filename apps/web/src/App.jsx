@@ -7,10 +7,9 @@ import {
   saveProfile,
   saveBusinessProfile,
   getEnabledModules,
-  getAllBills,
-  getAllProducts,
-  getAllClients,
+  getProfile,
 } from './lib/data';
+import { searchWorkspace } from './lib/data/search';
 import { isModuleEnabled, DOCS_URL } from './utils';
 import { listBusinesses, switchOrganization } from './services/session';
 // v1.10.4 — Route-level lazy loading. Prior App.jsx synchronously
@@ -74,24 +73,38 @@ function GstReturnsPage() {
   return <GSTReturns tab={tab} onTab={(t) => navigate(`/gst-returns/${t}`)} />;
 }
 
-// Every screen is its own chunk. Loading one only when it is first opened made a first visit wait on the network, so after the
-// app is up the rest are fetched quietly (one at a time, when the browser is idle) and a click finds the code already here.
+// Every screen is its own chunk. A first visit would wait on the network for it, so the few busiest screens are fetched when the
+// browser is idle after start-up, and any other when its menu item is hovered or focused (a click then finds the code already
+// here). Fetching all forty screens one after the other at start-up competed with the data the page was waiting for.
 const viewLoaders = [];
-const lazyView = (loader) => {
+const loaderByView = {};
+const warmed = new Set();
+const lazyView = (loader, ...viewIds) => {
   viewLoaders.push(loader);
+  for (const id of viewIds) loaderByView[id] = loader;
   return lazy(loader);
 };
+const warmView = (id) => {
+  const loader = loaderByView[id];
+  if (!loader || warmed.has(id)) return;
+  warmed.add(id);
+  Promise.resolve(loader()).catch(() => warmed.delete(id));
+};
+/** The busiest screens, fetched one at a time when the browser is idle. */
+const HOT_VIEWS = ['clients', 'inventory', 'reports', 'receipts'];
+const NO_RECORDS = { bills: [], clients: [], products: [] };
 const preloadViews = () => {
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
   let i = 0;
   const next = () => {
-    if (i >= viewLoaders.length) return;
-    Promise.resolve(viewLoaders[i++]()).catch(() => {}).finally(() => idle(next));
+    if (i >= HOT_VIEWS.length) return;
+    warmView(HOT_VIEWS[i++]);
+    idle(next);
   };
   idle(next);
 };
 
-const SettingsView = lazyView(() => import('./features/settings/SettingsView'));
+const SettingsView = lazyView(() => import('./features/settings/SettingsView'), 'settings');
 const SettingsLayout = lazyView(() => import('./features/settings/SettingsLayout'));
 const SettingsTabPage = lazyView(() => import('./features/settings/registry/SettingsTabPage'));
 const BillingPage = lazyView(() => import('./features/billing/BillingPage'));
@@ -100,37 +113,37 @@ const TeamPage = lazyView(() => import('./features/settings/team/TeamPage'));
 const RolesPage = lazyView(() => import('./features/settings/team/RolesPage'));
 const SecurityPage = lazyView(() => import('./features/settings/security/SecurityPage'));
 const AcceptInvitePage = lazyView(() => import('./features/auth/AcceptInvitePage'));
-const ClientsView = lazyView(() => import('./features/parties/ClientsView'));
-const InventoryView = lazyView(() => import('./features/items/InventoryView'));
-const BarcodePage = lazyView(() => import('./features/utilities/BarcodePage'));
-const TallyPage = lazyView(() => import('./features/utilities/TallyPage'));
-const CloseFyPage = lazyView(() => import('./features/utilities/CloseFyPage'));
-const BackupPage = lazyView(() => import('./features/utilities/BackupPage'));
-const SetupPage = lazyView(() => import('./features/utilities/SetupPage'));
-const TrashPage = lazyView(() => import('./features/utilities/TrashPage'));
-const PosPage = lazyView(() => import('./features/pos/PosPage'));
-const ReportsView = lazyView(() => import('./features/reports/ReportsView'));
-const ExpenseTracker = lazyView(() => import('./features/expenses/ExpenseTracker'));
-const RecurringInvoices = lazyView(() => import('./features/recurring/RecurringInvoices'));
-const ReceiptVoucher = lazyView(() => import('./features/payments/ReceiptVoucher'));
-const SalesmenView = lazyView(() => import('./features/sales/SalesmenView'));
-const RemindersPage = lazyView(() => import('./features/grow/RemindersPage'));
-const ReturnRegister = lazyView(() => import('./features/filing/ReturnRegister'));
+const ClientsView = lazyView(() => import('./features/parties/ClientsView'), 'clients');
+const InventoryView = lazyView(() => import('./features/items/InventoryView'), 'inventory');
+const BarcodePage = lazyView(() => import('./features/utilities/BarcodePage'), 'barcode');
+const TallyPage = lazyView(() => import('./features/utilities/TallyPage'), 'tally');
+const CloseFyPage = lazyView(() => import('./features/utilities/CloseFyPage'), 'close-fy');
+const BackupPage = lazyView(() => import('./features/utilities/BackupPage'), 'backup');
+const SetupPage = lazyView(() => import('./features/utilities/SetupPage'), 'setup');
+const TrashPage = lazyView(() => import('./features/utilities/TrashPage'), 'trash');
+const PosPage = lazyView(() => import('./features/pos/PosPage'), 'pos');
+const ReportsView = lazyView(() => import('./features/reports/ReportsView'), 'reports');
+const ExpenseTracker = lazyView(() => import('./features/expenses/ExpenseTracker'), 'expenses', 'other-income');
+const RecurringInvoices = lazyView(() => import('./features/recurring/RecurringInvoices'), 'recurring');
+const ReceiptVoucher = lazyView(() => import('./features/payments/ReceiptVoucher'), 'receipts');
+const SalesmenView = lazyView(() => import('./features/sales/SalesmenView'), 'salesman');
+const RemindersPage = lazyView(() => import('./features/grow/RemindersPage'), 'reminders');
+const ReturnRegister = lazyView(() => import('./features/filing/ReturnRegister'), 'returns');
 const FilingPackPage = lazyView(() => import('./features/filing/FilingPackPage'));
-const PracticePage = lazyView(() => import('./features/filing/PracticePage'));
-const Itr4Page = lazyView(() => import('./features/filing/Itr4Page'));
-const Itr3Page = lazyView(() => import('./features/filing/Itr3Page'));
-const AssetsPage = lazyView(() => import('./features/assets/AssetsPage'));
-const EditLogPage = lazyView(() => import('./features/filing/EditLogPage'));
-const CatalogSettingsPage = lazyView(() => import('./features/catalog/CatalogSettingsPage'));
-const GSTReturns = lazyView(() => import('./features/gst-returns/GSTReturns'));
-const IncomeTax = lazyView(() => import('./features/income-tax/IncomeTax'));
-const PurchaseBills = lazyView(() => import('./features/purchases/PurchaseBills'));
-const PurchaseOrders = lazyView(() => import('./features/purchases/PurchaseOrders'));
-const DebitNotes = lazyView(() => import('./features/purchases/DebitNotes'));
-const PaymentVoucher = lazyView(() => import('./features/payments/PaymentVoucher'));
-const AccountingPage = lazyView(() => import('./features/accounting/AccountingPage'));
-const CashBankPage = lazyView(() => import('./features/cashbank/CashBankPage'));
+const PracticePage = lazyView(() => import('./features/filing/PracticePage'), 'practice');
+const Itr4Page = lazyView(() => import('./features/filing/Itr4Page'), 'itr4');
+const Itr3Page = lazyView(() => import('./features/filing/Itr3Page'), 'itr3');
+const AssetsPage = lazyView(() => import('./features/assets/AssetsPage'), 'assets');
+const EditLogPage = lazyView(() => import('./features/filing/EditLogPage'), 'edit-log');
+const CatalogSettingsPage = lazyView(() => import('./features/catalog/CatalogSettingsPage'), 'catalog');
+const GSTReturns = lazyView(() => import('./features/gst-returns/GSTReturns'), 'filing');
+const IncomeTax = lazyView(() => import('./features/income-tax/IncomeTax'), 'incometax');
+const PurchaseBills = lazyView(() => import('./features/purchases/PurchaseBills'), 'purchases');
+const PurchaseOrders = lazyView(() => import('./features/purchases/PurchaseOrders'), 'purchase-orders');
+const DebitNotes = lazyView(() => import('./features/purchases/DebitNotes'), 'purchase-returns');
+const PaymentVoucher = lazyView(() => import('./features/payments/PaymentVoucher'), 'payment-out');
+const AccountingPage = lazyView(() => import('./features/accounting/AccountingPage'), 'accounting');
+const CashBankPage = lazyView(() => import('./features/cashbank/CashBankPage'), 'cashbank');
 const ReportsHub = lazyView(() => import('./features/reports/ReportsHub'));
 const ReportPage = lazyView(() => import('./features/reports/ReportPage'));
 import AppFooter from './app/AppFooter';
@@ -155,7 +168,20 @@ function App() {
   }, [me?.organization?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useAutoLock(!!me, signOut);
   useEffect(() => {
-    if (me) preloadViews();
+    if (!me) return undefined;
+    preloadViews();
+    // A menu item about to be clicked: fetch its screen's code now.
+    const warm = (e) => {
+      const el = e.target?.closest?.('[data-path], a[href^="/"]');
+      const href = el?.getAttribute('data-path') || el?.getAttribute('href');
+      if (href?.startsWith('/')) warmView(viewFromPath(href.split(/[?#]/)[0]));
+    };
+    document.addEventListener('pointerover', warm, { passive: true });
+    document.addEventListener('focusin', warm);
+    return () => {
+      document.removeEventListener('pointerover', warm);
+      document.removeEventListener('focusin', warm);
+    };
   }, [!!me]); // eslint-disable-line react-hooks/exhaustive-deps
   // v1.9.3 — Setup Wizard shown on first-run (before onboardingComplete = true)
   // Decided once this business's print settings have loaded (see printLoadedFor below).
@@ -218,23 +244,24 @@ function App() {
   const [showPalette, setShowPalette] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIdx, setPaletteIdx] = useState(0);
-  // v1.9.4 — pre-load searchable content so Ctrl+K acts as a true global
-  // search across invoices, clients, products, and settings sections.
-  // Small cost (fires once on mount + when palette opens); big UX win.
-  const [searchCorpus, setSearchCorpus] = useState({ bills: [], clients: [], products: [] });
+  // Cross-app search: invoices, parties and items matching what is typed, found by the server (at most 8 of each). Nothing is
+  // downloaded until the palette is open and at least two letters are typed.
+  const [found, setFound] = useState({ bills: [], clients: [], products: [] });
+  const [openAnythingQuery, setOpenAnythingQuery] = useState('');
+  const searchText = (vyapar ? openAnythingQuery : paletteQuery).trim();
+  const searching = showPalette && searchText.length >= 2;
   useEffect(() => {
-    Promise.all([
-      getAllBills().catch(() => []),
-      getAllClients().catch(() => []),
-      getAllProducts().catch(() => []),
-    ]).then(([bills, clients, products]) => {
-      setSearchCorpus({
-        bills: bills.slice(0, 100),
-        clients: clients.slice(0, 200),
-        products: products.slice(0, 200),
-      });
-    });
-  }, [showPalette]); // refresh when palette opens
+    if (!searching) return undefined;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => {
+      searchWorkspace(searchText, ctrl.signal).then(setFound, () => {});
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searching, searchText]);
+  const searchCorpus = useMemo(() => (searching ? found : NO_RECORDS), [searching, found]);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
   // Palette useMemo + dependent effects are declared further down, AFTER
@@ -259,10 +286,9 @@ function App() {
       if (profileBusy || profileLoaded.current) return;
       profileBusy = true;
       try {
-        const res = await fetch('/v1/workspace/profile');
-        if (cancelled || !res.ok || profileLoaded.current) return;
+        const p = await getProfile();
+        if (cancelled || profileLoaded.current) return;
         profileLoaded.current = true;
-        const p = await res.json();
         setProfile(p);
         // Not while someone opens an invitation: they are joining a business, not setting one up.
         if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
@@ -1205,6 +1231,7 @@ function App() {
       {vyapar ? (
         <OpenAnything
           open={showPalette}
+          onQueryChange={setOpenAnythingQuery}
           onClose={() => setShowPalette(false)}
           actions={openAnythingActions}
           onShowShortcuts={() => {

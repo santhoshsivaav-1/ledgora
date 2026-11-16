@@ -26,8 +26,8 @@ export default function PlanChip() {
   const go = () => { setOpen(false); navigate('/settings/billing'); };
   return (
     <div className="plan-chip-wrap" ref={ref}>
-      <button type="button" className={`plan-chip plan-chip-${s.tone}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)} title="Your plan">
-        <Crown size={13} aria-hidden="true" /> {s.chip}
+      <button type="button" className={`plan-chip plan-chip-${s.tone}`} title={s.chip} aria-label={`Your plan: ${s.chip}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)} title="Your plan">
+        <Crown size={13} aria-hidden="true" /> <span className="plan-chip-text">{s.chip}</span>
       </button>
       {open && (
         <div className="plan-pop" role="dialog" aria-label="Your plan">

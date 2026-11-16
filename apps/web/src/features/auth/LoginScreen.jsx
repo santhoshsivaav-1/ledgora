@@ -28,13 +28,13 @@ function Msg({ error, notice }) {
 const PHONE_RE = /^\+\d{8,15}$/;
 
 // The sign-in landing page: e-mail or phone, sign up, forgot password and the two-factor step.
-export default function LoginScreen({ onSignedIn }) {
+export default function LoginScreen({ onSignedIn, initialMode }) {
   // A password-reset e-mail comes back to /?reset=1&token=...
   const resetToken = (() => {
     const q = new URLSearchParams(window.location.search);
     return q.get('reset') && q.get('token') ? q.get('token') : '';
   })();
-  const [mode, setMode] = useState(resetToken ? 'reset' : 'signin'); // signin | signup | phone | forgot | reset | twofactor
+  const [mode, setMode] = useState(resetToken ? 'reset' : initialMode || 'signin'); // signin | signup | phone | forgot | reset | twofactor
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -45,7 +45,13 @@ export default function LoginScreen({ onSignedIn }) {
   const tr = useT();
   const lang = useLang();
 
-  const go = (m) => { setError(''); setMode(m); };
+  // The forgot-password step has an address of its own (/forgot-password) that follows the screen, so it can be linked to.
+  const go = (m) => {
+    setError(''); setMode(m);
+    const onForgot = window.location.pathname.replace(/\/+$/, '') === '/forgot-password';
+    if (m === 'forgot' && !onForgot) window.history.replaceState({}, '', '/forgot-password');
+    else if (m !== 'forgot' && m !== 'check-mail-reset' && onForgot) window.history.replaceState({}, '', '/');
+  };
 
   const run = async (fn) => {
     setBusy(true); setError(''); setNotice('');
@@ -55,7 +61,7 @@ export default function LoginScreen({ onSignedIn }) {
 
   const goHome = () => {
     // Drop ?reset=1&token=... from the address bar once used.
-    if (window.location.search) window.history.replaceState({}, '', window.location.pathname);
+    if (window.location.search || window.location.pathname.replace(/\/+$/, '') === '/forgot-password') window.history.replaceState({}, '', window.location.pathname.replace(/\/+$/, '') === '/forgot-password' ? '/' : window.location.pathname);
     onSignedIn();
   };
 
@@ -127,7 +133,7 @@ export default function LoginScreen({ onSignedIn }) {
       <div className="auth-card glass-panel">
         <div className="auth-brand auth-card-brand">Ledgora</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <select className="form-input" style={{ width: 'auto', padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} aria-label="Language" value={lang} onChange={(e) => setLocalLang(e.target.value)}>
+          <select className="form-input" style={{ width: 'auto', padding: '0.2rem 1.6rem 0.2rem 0.6rem', fontSize: '0.8rem' }} aria-label="Language" value={lang} onChange={(e) => setLocalLang(e.target.value)}>
             {LANGS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           </select>
         </div>

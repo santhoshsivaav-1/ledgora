@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getMe, getOnboarding, signOut as apiSignOut } from '../../services/session';
-import { configureApiClient } from '../../lib/apiClient';
+import { getStartup, signOut as apiSignOut } from '../../services/session';
+import { configureApiClient, forgetReads, rememberRead } from '../../lib/apiClient';
 import { flushPrintSettings } from '../print/printSettingsStore';
-import { clearMirroredPrefs, flushMirroredPrefs, restorePrefs, startMirroring } from '../../utils/prefsMirror';
+import { applyPrefs, clearMirroredPrefs, flushMirroredPrefs, startMirroring } from '../../utils/prefsMirror';
 import LoginScreen from './LoginScreen';
 import BusinessSetup from './BusinessSetup';
 import PlansScreen from './PlansScreen';
@@ -30,11 +30,17 @@ export default function AuthGate({ children }) {
 
   const refresh = useCallback(async () => {
     try {
-      const who = await getMe();
-      if (!who) { setMe(null); setPhase('out'); return; }
-      const ob = await getOnboarding();
-      // This person's saved screen settings (print layout, region, ...) come back from the server before the app draws.
-      if (ob.complete) startMirroring(await restorePrefs());
+      // One call answers who we are, the set-up state, this person's saved screen settings and the businesses.
+      const boot = await getStartup();
+      if (!boot) { setMe(null); setPhase('out'); return; }
+      const { me: who, onboarding: ob } = boot;
+      // This person's saved screen settings (print layout, region, ...) are back before the app draws.
+      if (ob.complete) {
+        applyPrefs(boot.prefs);
+        startMirroring(boot.prefs !== null, boot.prefs);
+      }
+      // The screens that list the businesses find them already here.
+      if (boot.businesses) rememberRead('/v1/businesses', { data: boot.businesses });
       setMe(who);
       setOnboarding(ob);
       const ent = who.entitlements;
@@ -64,6 +70,7 @@ export default function AuthGate({ children }) {
       onUnauthorized: () => {
         // The session ended: the offline copy of billing data must not outlive it on a shared computer.
         try { caches?.delete('api-cache'); } catch { /* no Cache API */ }
+        forgetReads();
         setMe(null);
         setPhase('out');
       },
@@ -98,7 +105,7 @@ export default function AuthGate({ children }) {
       </div>
     );
   }
-  if (phase === 'out') return <LoginScreen onSignedIn={refresh} />;
+  if (phase === 'out') return <LoginScreen onSignedIn={refresh} initialMode={window.location.pathname.replace(/\/+$/, '') === '/forgot-password' ? 'forgot' : undefined} />;
   if (phase === 'plans' || phase === 'ended') {
     return (
       <SessionContext.Provider value={value}>

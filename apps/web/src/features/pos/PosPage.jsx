@@ -87,7 +87,7 @@ export default function PosPage() {
       const b = await listBusinesses();
       const biz = b[0];
       if (!biz) return null;
-      const [settings, banks] = await Promise.all([getPosSettings(biz.id), listBankAccounts(biz.id).catch(() => [])]);
+      const [settings, banks] = await Promise.all([getPosSettings(biz.id), listBankAccounts(biz.id, false, { ifOn: true }).catch(() => [])]);
       return { biz, settings, banks };
     })().then((c) => { setCtx(c); if (c) setHeld(readHeld(c.biz.id)); }, setError);
   }, []);

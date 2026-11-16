@@ -4,6 +4,7 @@
 // PrintSettings.jsx (as the UI form state).
 // ============================================================================
 
+import { forgetReads } from '../../lib/apiClient';
 import { getAllAppSettings } from '../../lib/appSettings';
 import { printOverlayFrom } from '../invoices/editor/settingsDefaults';
 
@@ -340,6 +341,7 @@ function pushPrintSettings(keepalive = false) {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (!cache) return Promise.resolve();
+  forgetReads(); // a remembered read of these settings is now out of date
   return fetch(metaUrl(activeKey), {
     method: 'POST', credentials: 'same-origin', keepalive, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: cache }),
   }).catch(() => {}); // a role that may not change settings (403) simply keeps the change in memory for this session

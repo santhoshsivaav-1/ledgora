@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Much faster navigation and sign-in.** A page used to make 36–44 API calls (the whole bills, parties and items lists downloaded on every screen, the businesses fetched seven times, sign-in as three calls one after another); it now makes 8–11, and moving between screens 0–3. Open Anything and the notification bell ask the server instead of downloading everything; repeated reads are shared for ten seconds and forgotten on any change. New `GET /v1/bootstrap`, `/v1/workspace/search` and `/v1/workspace/notifications`; every API answer carries `Server-Timing` and calls over `SLOW_REQUEST_MS` are logged. See `docs/AUDIT_2026-11.md` section 12.
+- The plan chip in the top bar no longer wraps or overlaps; the language selector's arrow no longer covers the word; the menu group is called "Backup & Sync"; a missing `key` that logged a warning on four Settings pages is fixed.
+
 ### Added
+
+- **Public pages:** `/pricing`, `/privacy`, `/terms`, and `/forgot-password` (which used to show the sign-in screen). Set `VITE_COMPANY_NAME` and `VITE_SUPPORT_EMAIL`.
 
 - **ITR-3 for a proprietor with books (R2.5), and the fixed-asset register (R4.1).** Taxes › ITR-3 Filing builds the whole
   return from your ledger and asset register: the trading and profit and loss accounts, the balance sheet, Schedule BP with

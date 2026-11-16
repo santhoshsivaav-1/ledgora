@@ -18,7 +18,8 @@ export const saveCashbankSettings = (body) => apiClient.put('/v1/cashbank/settin
 export const moneyAccounts = async (businessId) => (await apiClient.get(`/v1/cashbank/accounts?${qs({ businessId })}`)).data;
 export const cashbankSummary = (businessId) => apiClient.get(`/v1/cashbank/summary?${qs({ businessId })}`);
 
-export const listBankAccounts = async (businessId, all = false) => (await apiClient.get(`/v1/bank-accounts?${qs({ businessId, all: all ? '1' : '0' })}`)).data;
+// `ifOn`: a screen that only offers banks when there are some asks for an empty list, not a 409, while Cash & Bank is off.
+export const listBankAccounts = async (businessId, all = false, { ifOn = false } = {}) => (await apiClient.get(`/v1/bank-accounts?${qs({ businessId, all: all ? '1' : '0', ...(ifOn ? { ifOn: '1' } : {}) })}`)).data;
 export const createBankAccount = (body) => apiClient.post('/v1/bank-accounts', body);
 export const updateBankAccount = (id, patch) => apiClient.patch(`/v1/bank-accounts/${enc(id)}`, patch);
 export const deleteBankAccount = (id) => apiClient.delete(`/v1/bank-accounts/${enc(id)}`);

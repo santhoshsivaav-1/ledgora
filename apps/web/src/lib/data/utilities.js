@@ -1,7 +1,7 @@
 // Utilities (Vyapar parity Phase 7): barcode codes, Tally export, Close FY, backup and restore, the setup checklist and
 // the typed trash. Talks to the typed /v1 API.
 
-import { apiClient } from '../apiClient';
+import { apiClient, forgetReads } from '../apiClient';
 
 const qs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== '')).toString();
 const enc = encodeURIComponent;
@@ -67,6 +67,7 @@ export const trashList = async (type) => (await apiClient.get(`/v1/trash?${qs({ 
 export async function trashRestore(id, reason) {
   if (!reason) return apiClient.post(`/v1/trash/${enc(id)}/restore`);
   // the owner's override reason travels in a header, which apiClient does not send
+  forgetReads();
   const res = await fetch(`/v1/trash/${enc(id)}/restore`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-override-reason': reason }, body: '{}' });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error?.message || 'Could not restore');

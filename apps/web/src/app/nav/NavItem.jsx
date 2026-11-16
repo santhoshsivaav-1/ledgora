@@ -28,6 +28,7 @@ export function NavLeafButton({ leaf, activeId, onGo, badge, sub = false }) {
     <button
       type="button"
       className="vy-item"
+      data-path={leaf.href ? undefined : leafPath(leaf)}
       aria-current={current ? 'page' : undefined}
       title={lockedFeature ? `${label} (needs the ${minPlanFor(lockedFeature).name} plan)` : label}
       onClick={() => (leaf.href ? window.open(leaf.href, '_blank', 'noopener,noreferrer') : onGo(leafPath(leaf)))}

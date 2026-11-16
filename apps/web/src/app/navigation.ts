@@ -203,7 +203,7 @@ export const NAV: NavEntry[] = [
   },
   {
     id: 'sync',
-    label: 'Sync, Share & Backup',
+    label: 'Backup & Sync',
     icon: RefreshCw,
     children: [
       { id: 'backup', label: 'Backup & Restore', view: 'settings-data', perm: 'data:export' },

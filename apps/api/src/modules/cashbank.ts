@@ -263,7 +263,10 @@ export function cashbankModule({ route }: Registrar) {
     query: bankAccountListQuery,
     response: z.object({ data: z.array(bankAccount) }),
     handler: async ({ tx, orgId, query }) => {
-      await requireCashbank(tx, query.businessId);
+      if (query.ifOn === '1') {
+        const s = await cashbankSettings(tx, query.businessId);
+        if (!s.ledger || !s.enabled) return { data: [] };
+      } else await requireCashbank(tx, query.businessId);
       const rows = await tx
         .select()
         .from(paymentAccounts)

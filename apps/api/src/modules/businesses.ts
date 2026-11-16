@@ -58,6 +58,16 @@ async function onlyOneDefault(tx: Tx, id: string) {
     .where(and(ne(businesses.id, id), isNull(businesses.deletedAt)));
 }
 
+/** The businesses of the organization, by name: `GET /v1/businesses` and part of `/v1/bootstrap`. */
+export async function listBusinessesOf(tx: Tx) {
+  const rows = await tx
+    .select()
+    .from(businesses)
+    .where(isNull(businesses.deletedAt))
+    .orderBy(businesses.name);
+  return rows.map(toBusiness);
+}
+
 export function businessesModule({ route }: Registrar) {
   route({
     method: 'get',
@@ -65,14 +75,7 @@ export function businessesModule({ route }: Registrar) {
     tag: 'Businesses',
     summary: 'The businesses (GSTINs) of this organization',
     response: z.object({ data: z.array(business) }),
-    handler: async ({ tx }) => {
-      const rows = await tx
-        .select()
-        .from(businesses)
-        .where(isNull(businesses.deletedAt))
-        .orderBy(businesses.name);
-      return { data: rows.map(toBusiness) };
-    },
+    handler: async ({ tx }) => ({ data: await listBusinessesOf(tx) }),
   });
 
   route({

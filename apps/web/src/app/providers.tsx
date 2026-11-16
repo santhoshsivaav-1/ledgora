@@ -1,10 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BrowserRouter } from 'react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import AuthGate from '../features/auth/AuthGate';
 import PublicCatalogPage from '../features/catalog/PublicCatalogPage';
 import UpgradeSheetHost from '../components/ui/UpgradeSheet';
 import { createQueryClient } from '../lib/queryClient';
+
+const PublicPages = lazy(() => import('../features/public/PublicPages'));
 
 // Dark mode (change 3.2). A UI preference, so it is one of the few things that still lives in localStorage.
 const THEME_KEY = 'freegstbill_theme';
@@ -42,9 +44,21 @@ function ThemeProvider({ children }: { children: ReactNode }) {
 // The public catalogue (/c/<slug>, P9-S6) needs no sign-in, so it is drawn outside the gate.
 const publicSlug = typeof window !== 'undefined' ? /^\/c\/([a-z0-9-]{3,40})\/?$/i.exec(window.location.pathname)?.[1] : undefined;
 
+// So are the pricing page and the two legal pages: anyone, signed in or not, can open them.
+const PUBLIC_PATHS = ['/pricing', '/privacy', '/terms'];
+const publicPath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') : '';
+
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
   if (publicSlug) return <PublicCatalogPage slug={publicSlug.toLowerCase()} />;
+  if (PUBLIC_PATHS.includes(publicPath))
+    return (
+      <ThemeProvider>
+        <Suspense fallback={null}>
+          <PublicPages path={publicPath} />
+        </Suspense>
+      </ThemeProvider>
+    );
   return (
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>

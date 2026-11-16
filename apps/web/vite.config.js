@@ -23,6 +23,13 @@ export default defineConfig({
   root: path.resolve(__dirname, 'src'),
   publicDir: path.resolve(__dirname, 'public'),
   plugins: [
+    // The page's Content-Security-Policy bans eval, which is right for the built app. Vite's hot reload in development uses it,
+    // so every page logged a policy error that hid real ones; the development server alone allows it.
+    {
+      name: 'dev-csp-eval',
+      apply: 'serve',
+      transformIndexHtml: (html) => html.replace(/script-src(\s+)'self'/, "script-src$1'self' 'unsafe-eval'"),
+    },
     react(),
     VitePWA({
       // v1.10.2 — Prior 'autoUpdate' triggered an immediate location.reload()

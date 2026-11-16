@@ -77,8 +77,9 @@
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* The plan in the header. */
-.plan-chip-wrap { position: relative; }
-.plan-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem; border-radius: 999px; border: 1px solid var(--border); font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
+.plan-chip-wrap { position: relative; flex: none; }
+@media (max-width: 600px) { .plan-chip-text { display: none; } .plan-chip { padding: 0.3rem 0.45rem; } }
+.plan-chip { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; flex: none; padding: 0.25rem 0.7rem; border-radius: 999px; border: 1px solid var(--border); font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
 .plan-chip-trial { background: var(--success-light); color: var(--success); border-color: transparent; }
 .plan-chip-paid { background: var(--primary); color: #fff; border-color: transparent; }
 .plan-chip-warn { background: var(--danger-light); color: var(--danger); border-color: transparent; }

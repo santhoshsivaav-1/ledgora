@@ -51,6 +51,8 @@ const schema = z.object({
   IFSC_API_URL: z.string().default('https://ifsc.razorpay.com'),
   /** Sends scheduled report e-mails (weekly / monthly) from this process. Off in tests and on a replica that should not send. */
   REPORT_SCHEDULER: bool.default(true),
+  /** An API call slower than this many milliseconds is logged as `[slow]` (0 turns it off). Every call also answers a Server-Timing header. */
+  SLOW_REQUEST_MS: z.coerce.number().int().min(0).default(1000),
   RATE_LIMIT_ENABLED: bool.default(true),
   RATE_LIMIT_API_PER_MIN: z.coerce.number().int().min(1).default(1500),
   RATE_LIMIT_LOGIN_PER_MIN: z.coerce.number().int().min(1).default(10),

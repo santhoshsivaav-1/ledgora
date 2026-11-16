@@ -20,6 +20,13 @@ export const isMirrored = (key) => MIRRORED.test(String(key));
 
 // Missing keys come back from the data folder; keys the browser has win.
 // Returns true only when the data-folder copy was read.
+/** Puts the keys the browser no longer has back from the saved copy (the start-up call already carries it). */
+export function applyPrefs(value) {
+  for (const [k, v] of Object.entries(value || {})) {
+    if (isMirrored(k) && typeof v === 'string' && localStorage.getItem(k) === null) localStorage.setItem(k, v);
+  }
+}
+
 export async function restorePrefs() {
   try {
     const ctrl = new AbortController();
@@ -28,9 +35,7 @@ export async function restorePrefs() {
     clearTimeout(timer);
     if (!res.ok) return false;
     const { value } = await res.json();
-    for (const [k, v] of Object.entries(value || {})) {
-      if (isMirrored(k) && typeof v === 'string' && localStorage.getItem(k) === null) localStorage.setItem(k, v);
-    }
+    applyPrefs(value);
     return true;
   } catch {
     return false; // server not reachable yet: the browser copy is used as is
@@ -62,7 +67,7 @@ const touch = (k) => { if (paused) return; dirty.add(k); clearTimeout(timer); ti
 // successful restore: had the server been unreachable at start, this browser
 // may hold first-run defaults, which must never replace the saved copy.
 let installed = false;
-export function startMirroring(restored) {
+export function startMirroring(restored, saved = null) {
   if (!restored || installed) return;
   installed = true;
   try {
@@ -71,11 +76,11 @@ export function startMirroring(restored) {
     const remove = proto.removeItem;
     proto.setItem = function setItem(k, v) { set.call(this, k, v); if (this === window.localStorage && isMirrored(k)) touch(k); };
     proto.removeItem = function removeItem(k) { remove.call(this, k); if (this === window.localStorage && isMirrored(k)) touch(k); };
-    // Seed the data-folder copy with what this browser has now (after the
-    // restore it holds everything the copy had, plus its own newer values).
+    // Seed the data-folder copy with what this browser has now (after the restore it holds everything the copy had, plus its
+    // own newer values). Only what differs from the copy just read is sent: sending all of it on every start was a write per page load.
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (isMirrored(k)) touch(k);
+      if (isMirrored(k) && (!saved || saved[k] !== localStorage.getItem(k))) touch(k);
     }
   } catch { /* storage blocked: nothing to mirror */ }
 }

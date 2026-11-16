@@ -30,7 +30,7 @@
 .vy-search:hover { color: var(--sidebar-fg); }
 .vy-search:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
 .vy-search kbd { margin-left: auto; padding: 1px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); font: 500 11px var(--font); color: var(--sidebar-muted); }
-.vy-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 var(--s-2) var(--s-3); scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.vy-nav { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 var(--s-2) var(--s-6); scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
 .vy-nav ul { list-style: none; margin: 0; padding: 0; }
 .vy-item {
   position: relative; display: flex; align-items: center; gap: var(--s-3); width: 100%; min-height: 44px; padding: 0 var(--s-3);
@@ -85,7 +85,7 @@
   background: var(--topbar-bg); border-bottom: 1px solid var(--border); color: var(--text);
 }
 .vy-topbar .vy-topbar-menu { display: none; }
-.vy-biz { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.vy-biz { display: flex; align-items: center; gap: var(--s-2); min-width: 0; flex: 0 1 auto; }
 .vy-biz-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neg); flex-shrink: 0; border: 0; padding: 0; cursor: pointer; }
 .vy-biz-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); font: 600 16px var(--font); cursor: pointer; }
 .vy-biz-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -95,7 +95,7 @@
 .vy-biz-input::placeholder { color: var(--text-muted); font-weight: 500; }
 .vy-crumb { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: var(--s-3); margin-left: var(--s-1); border-left: 1px solid var(--border); color: var(--text-muted); font-size: 14px; white-space: nowrap; overflow: hidden; }
 .vy-crumb b { color: var(--text); font-weight: 500; }
-.vy-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); }
+.vy-topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); flex: none; }
 .vy-fy { min-height: 32px; width: auto; padding: 0 var(--s-2); border-radius: var(--r-pill); font-size: 13px; }
 .vy-icon-wrap { position: relative; display: inline-flex; }
 .vy-icon-wrap .ui-badge { position: absolute; top: -4px; right: -4px; pointer-events: none; }

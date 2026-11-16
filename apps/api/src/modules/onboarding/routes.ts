@@ -1,5 +1,5 @@
 import { and, eq, isNull, asc, desc } from 'drizzle-orm';
-import { schema } from '@ledgora/db';
+import { schema, type Tx } from '@ledgora/db';
 import { onboardingInput, onboardingStatus, type OnboardingStatus } from '@ledgora/contracts';
 import { INDIAN_STATES, getStateCode } from '@ledgora/tax-engine';
 import { audit } from '../../audit.ts';
@@ -24,6 +24,18 @@ const toStatus = (b: typeof businesses.$inferSelect): OnboardingStatus => ({
   },
 });
 
+/** Has the first-run form been filled in: `GET /v1/onboarding` and part of `/v1/bootstrap`. */
+export async function onboardingStatusOf(tx: Tx) {
+  const [b] = await tx
+    .select()
+    .from(businesses)
+    .where(isNull(businesses.deletedAt))
+    .orderBy(desc(businesses.isDefault), asc(businesses.createdAt))
+    .limit(1);
+  if (!b) throw new AppError('not_found', 'This organization has no business yet');
+  return toStatus(b);
+}
+
 /** The first-run form that follows sign-up: names the business and sets its state, GSTIN and address. */
 export function onboardingModule({ route }: Registrar) {
   route({
@@ -32,16 +44,7 @@ export function onboardingModule({ route }: Registrar) {
     tag: 'Onboarding',
     summary: 'Has the first-run business form been filled in, and what is saved so far',
     response: onboardingStatus,
-    handler: async ({ tx }) => {
-      const [b] = await tx
-        .select()
-        .from(businesses)
-        .where(isNull(businesses.deletedAt))
-        .orderBy(desc(businesses.isDefault), asc(businesses.createdAt))
-        .limit(1);
-      if (!b) throw new AppError('not_found', 'This organization has no business yet');
-      return toStatus(b);
-    },
+    handler: async ({ tx }) => onboardingStatusOf(tx),
   });
 
   route({

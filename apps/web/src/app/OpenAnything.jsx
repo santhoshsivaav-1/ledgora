@@ -6,7 +6,7 @@ import { getRecents, pushRecent, rankActions } from './openAnythingRank';
 // what it finds (a label starting with what you typed first, then a word in it, then letters in order) and, before
 // you type, shows the last eight things you opened.
 
-export default function OpenAnything({ open, onClose, actions, onShowShortcuts }) {
+export default function OpenAnything({ open, onClose, actions, onShowShortcuts, onQueryChange }) {
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const [recents, setRecents] = useState(getRecents);
@@ -34,6 +34,7 @@ export default function OpenAnything({ open, onClose, actions, onShowShortcuts }
   const close = () => {
     setQuery('');
     setIndex(0);
+    onQueryChange?.('');
     onClose();
   };
 
@@ -44,6 +45,7 @@ export default function OpenAnything({ open, onClose, actions, onShowShortcuts }
       onQuery={(q) => {
         setQuery(q);
         setIndex(0);
+        onQueryChange?.(q);
       }}
       actions={ranked}
       index={index}

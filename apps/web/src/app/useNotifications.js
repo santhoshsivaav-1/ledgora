@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getAllBills, getAllProducts, getStockAlertSettings } from '../lib/data';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { dataVersion } from '../lib/apiClient';
+import { notificationSummary } from '../lib/data/search';
 import { getAllAppSettings } from '../lib/appSettings';
 import { lowStockLimit } from '../features/items/itemFields';
-import { getUpcomingFilings, countsAsSales, localToday, toLocalIsoDate } from '../utils';
+import { getUpcomingFilings, localToday } from '../utils';
 
 // The bell's contents (moved out of App.jsx unchanged, Vyapar parity P0-S2, so both shells share it): overdue and
 // due-soon invoices, low stock, filing deadlines and the recurring auto-fire, with "mark all read".
@@ -97,66 +98,48 @@ export default function useNotifications(currentView) {
     }
   };
 
+  // The server works out what is overdue, due soon and possibly low on stock (one small call; before, the browser downloaded
+  // every bill and product to do it on every screen change). It is asked on start, every 10 minutes, and when the screen
+  // changes only if something was saved since it was last asked, so the bell still updates after a payment is recorded.
+  const lastAsked = useRef({ at: 0, version: -1 });
+  const alive = useRef(true);
+  const compute = useCallback(async () => {
+    try {
+      lastAsked.current = { at: Date.now(), version: dataVersion() };
+      // Local dates: toISOString() is UTC (yesterday in India until 05:30).
+      const today = localToday();
+      const sum = await notificationSummary(today, 3);
+      if (!alive.current) return;
+      // Honour the user's stock-alert preferences: when disabled nothing is low; when enabled each product's own minimum
+      // (if that setting is on) or the shared threshold decides.
+      const threshold = Number(sum.stockAlert?.threshold ?? 5);
+      const settings = getAllAppSettings();
+      const lowStock = sum.stockAlert?.enabled === false ? [] : sum.lowStock.filter((p) => (p.stock ?? 999) <= lowStockLimit(p, settings, threshold));
+      // Recurring auto-fire breadcrumb: only today's counts, older ones would stay sticky forever.
+      const af = sum.autoFire;
+      setNotifications({
+        overdue: sum.overdue,
+        dueSoon: sum.dueSoon,
+        lowStock,
+        filings: getUpcomingFilings().filter((f) => f.daysAway <= 10),
+        autoFire: af && af.date === today && af.count > 0 ? af : null,
+      });
+    } catch {
+      /* offline / server down: leave previous counts */
+    }
+  }, []);
   useEffect(() => {
-    let cancelled = false;
-    const compute = async () => {
-      try {
-        const [bills, products, stockAlertCfg] = await Promise.all([
-          getAllBills().catch(() => []),
-          getAllProducts().catch(() => []),
-          getStockAlertSettings().catch(() => ({ enabled: true, threshold: 5 })),
-        ]);
-        if (cancelled) return;
-        // Local dates: toISOString() is UTC (yesterday in India until 05:30),
-        // while the server stamps lastRecurringAutoFire with its local date.
-        const today = localToday();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 3);
-        const tomorrowStr = toLocalIsoDate(tomorrow);
-        // v1.10.67 (#66 item 12) — never chase payment for a cancelled invoice;
-        // nor for a quotation, proforma, challan or credit note (countsAsSales).
-        const overdue = bills.filter((b) => {
-          const d = b.data?.details?.dueDate;
-          return d && d < today && b.status !== 'paid' && countsAsSales(b);
-        });
-        const dueSoon = bills.filter((b) => {
-          const d = b.data?.details?.dueDate;
-          return d && d >= today && d <= tomorrowStr && b.status !== 'paid' && countsAsSales(b);
-        });
-        // Honour the user's stock-alert preferences. When disabled, the filter
-        // returns nothing — bell badge drops to 0 for the stock category.
-        // When enabled, use the configured threshold (default 5).
-        const stockThreshold = Number(stockAlertCfg?.threshold ?? 5);
-        const lowStock =
-          stockAlertCfg?.enabled === false
-            ? []
-            : products.filter((p) => (p.stock ?? 999) <= lowStockLimit(p, getAllAppSettings(), stockThreshold));
-        const filings = getUpcomingFilings().filter((f) => f.daysAway <= 10);
-        // Recurring auto-fire breadcrumb — set by server.js processDueRecurring().
-        // Only "fresh" (today's) auto-fires count as a notification; older ones
-        // would otherwise stay sticky forever.
-        let autoFire = null;
-        try {
-          const r = await fetch('/v1/workspace/meta/lastRecurringAutoFire');
-          if (r.ok) {
-            const j = await r.json();
-            if (j.value && j.value.date === today && j.value.count > 0) autoFire = j.value;
-          }
-        } catch {
-          /* fine */
-        }
-        setNotifications({ overdue, dueSoon, lowStock, filings, autoFire });
-      } catch {
-        /* offline / server down — leave previous counts */
-      }
-    };
-    compute();
-    const interval = setInterval(compute, 10 * 60 * 1000);
+    alive.current = true;
+    const id = setInterval(compute, 10 * 60 * 1000);
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      alive.current = false;
+      clearInterval(id);
     };
-  }, [currentView]); // recompute on view change so the bell stays fresh after the user records a payment
+  }, [compute]);
+  useEffect(() => {
+    const unchanged = lastAsked.current.version === dataVersion() && Date.now() - lastAsked.current.at < 10 * 60 * 1000;
+    if (!unchanged) compute();
+  }, [currentView, compute]);
 
   return { notifications, isLive, notifTotal, dismissableCount, markAllNotifsRead };
 }

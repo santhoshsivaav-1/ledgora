@@ -88,6 +88,8 @@ export const bankAccountListQuery = z.object({
   businessId: uuid,
   /** '1' = switched-off accounts too. */
   all: z.enum(['0', '1']).default('0'),
+  /** '1' = answer an empty list, not a 409, while Cash & Bank is off (a screen that only offers banks when there are some). */
+  ifOn: z.enum(['0', '1']).default('0'),
 });
 
 /** Cash in Hand and every bank: the pickers for transfers and money modes. */

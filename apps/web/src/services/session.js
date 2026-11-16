@@ -1,6 +1,8 @@
 // Talks to the account API (apps/api) through the Vite proxy / same-origin /v1 path. The session lives in an httpOnly
 // cookie the browser sends by itself; nothing here stores a token.
 
+import { apiClient, forgetReads } from '../lib/apiClient';
+
 export class ApiError extends Error {
   constructor(message, { status = 0, code = '', details = null } = {}) {
     super(message);
@@ -28,6 +30,8 @@ const FRIENDLY = {
 };
 
 async function call(method, path, body) {
+  // A change through this path (switching organization, adding a business, signing out) changes what every list shows.
+  if (method !== 'GET') forgetReads();
   let res;
   try {
     res = await fetch(path, {
@@ -65,6 +69,26 @@ export async function getMe() {
   }
 }
 export const getOnboarding = () => call('GET', '/v1/onboarding');
+/**
+ * Everything the app needs to start, in one call: who the person is, the business set-up state, their saved screen preferences
+ * and the businesses. null when nobody is signed in. A server that does not have this route yet answers the old way.
+ */
+export async function getStartup() {
+  try {
+    return await call('GET', '/v1/bootstrap');
+  } catch (e) {
+    if (e.status === 401) return null;
+    if (e.status !== 404) throw e;
+  }
+  const me = await getMe();
+  if (!me) return null;
+  const [onboarding, prefs, businesses] = await Promise.all([
+    getOnboarding(),
+    call('GET', '/v1/workspace/local-prefs').then((r) => r.value, () => null),
+    call('GET', '/v1/businesses').then((r) => r.data, () => null),
+  ]);
+  return { me, onboarding, prefs, businesses };
+}
 export const saveOnboarding = (business) => call('POST', '/v1/onboarding/business', business);
 
 // ---- sign-in methods ----
@@ -83,7 +107,8 @@ export const verifyBackupCode = (code) => call('POST', '/v1/auth/two-factor/veri
 // A "branch" is a business (GSTIN) inside the organization you are signed in
 // to. The list is already filtered by the server: members limited to some
 // businesses (member_businesses) only ever see theirs, via row-level security.
-export const listBusinesses = () => call('GET', '/v1/businesses');
+// Through the shared client: the screens that list the businesses ask once, not once each.
+export const listBusinesses = () => apiClient.get('/v1/businesses');
 export const createBusiness = (body) => call('POST', '/v1/businesses', body);
 export const updateBusiness = (id, body) => call('PATCH', `/v1/businesses/${id}`, body);
 
