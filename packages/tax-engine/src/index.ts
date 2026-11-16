@@ -56,3 +56,4 @@ export * from './itr4.ts';
 export * from './itr4Rules.ts';
 export * from './advanceTax.ts';
 export * from './aisTis.ts';
+export * from './depreciation.ts';
