@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { sql } from 'drizzle-orm';
 import { health } from '@ledgora/contracts';
 import pkg from '../package.json' with { type: 'json' };
@@ -71,6 +72,14 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     if (limit > 0 && ms > limit)
       console.warn(`[slow] ${c.req.method} ${c.req.path} ${Math.round(ms)}ms`);
   });
+
+  // v1.10.81 — gzip the JSON answers above 1 KB (hono's compress middleware;
+  // it skips already-encoded, streamed and no-transform responses on its own).
+  // Invoice/report list payloads run into hundreds of KB raw; on the Railway
+  // free plan's link that was seconds per screen load on phones. The filter
+  // keeps uploads/downloads (octet-stream, already-compressed formats) and
+  // files out of the compressor, so the shared CPU pays nothing for them.
+  app.use('/v1/*', compress({ contentTypeFilter: (type) => type.startsWith('application/json') }));
 
   // Better Auth owns everything under /v1/auth: sign-up, sign-in, OTP, 2FA, password reset, Google.
   app.on(['GET', 'POST'], '/v1/auth/*', (c) => deps.auth.handler(c.req.raw));

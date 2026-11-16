@@ -6,7 +6,7 @@
   "description": "React 19 + Vite app (the logged-in product UI).",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/compress-dist.mjs",
     "size": "node scripts/bundle-size.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

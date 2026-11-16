@@ -91,10 +91,16 @@ const warmView = (id) => {
   warmed.add(id);
   Promise.resolve(loader()).catch(() => warmed.delete(id));
 };
-/** The busiest screens, fetched one at a time when the browser is idle. */
+// v1.10.81 — The busiest screens, fetched one at a time when the browser is idle. On a weak
+// link (Data Saver on, or 2G / slow-2G) this warm-up races the service worker's first precache
+// and the screens' own data calls — part of the reported "first load is slow" — so there a
+// screen's code is fetched only when it is actually opened (the hover/focus warm-up below
+// still runs, and the service worker caches whatever ends up being fetched).
 const HOT_VIEWS = ['clients', 'inventory', 'reports', 'receipts'];
 const NO_RECORDS = { bills: [], clients: [], products: [] };
 const preloadViews = () => {
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn && (conn.saveData || /^(slow-)?2g$/.test(conn.effectiveType || ''))) return;
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
   let i = 0;
   const next = () => {

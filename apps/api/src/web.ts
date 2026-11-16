@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { AppEnv } from './env.ts';
 import { notFoundHandler } from './errors.ts';
 
@@ -26,7 +26,35 @@ export function serveWeb(app: Hono, env: AppEnv) {
   // Read on each request: it is small, and a rebuilt app (new file names) is picked up without a restart.
   const index = () => readFileSync(path.join(dir, 'index.html'), 'utf8');
   const isApi = (p: string) => p.startsWith('/v1/') || p === '/health';
-  app.use('/*', async (c, next) => (isApi(c.req.path) ? next() : serveStatic({ root })(c, next)));
-  app.get('*', (c) => (isApi(c.req.path) ? notFoundHandler(c) : c.html(index())));
+  // v1.10.81 — precompressed lets serveStatic hand out the `.br` / `.gz` twins the web build
+  // writes next to every text file (scripts/compress-dist.mjs) with `Content-Encoding`.
+  // Without it every first visit and every pre-SW reload re-downloaded the whole bundle
+  // uncompressed — the reported "first load is so slow" on the Railway free plan. The
+  // twins exist per-file, so nothing is compressed at request time (no CPU on the host).
+  app.use('/*', async (c, next) =>
+    isApi(c.req.path) ? next() : serveStatic({ root, precompressed: true })(c, next),
+  );
+  // The SPA fallback (paths like /clients that fell through serveStatic) served a raw index.html;
+  // hand out its compressed twin on the same terms when the browser accepts one. The twins are
+  // rebuilt with every deploy, so no staleness beyond what the build itself just made.
+  const fallbackIndex = (c: Context) => {
+    const accept = c.req.header('accept-encoding') || '';
+    for (const [ext, encoding] of [
+      ['.br', 'br'],
+      ['.gz', 'gzip'],
+    ] as const) {
+      if (!accept.includes(encoding)) continue;
+      try {
+        const twin = readFileSync(path.join(dir, `index.html${ext}`));
+        c.header('content-encoding', encoding);
+        c.header('vary', 'accept-encoding', { append: true });
+        return c.body(new Uint8Array(twin), 200, { 'content-type': 'text/html; charset=utf-8' });
+      } catch {
+        /* no twin — fall through to the raw file */
+      }
+    }
+    return c.html(index());
+  };
+  app.get('*', (c) => (isApi(c.req.path) ? notFoundHandler(c) : fallbackIndex(c)));
   return true;
 }
