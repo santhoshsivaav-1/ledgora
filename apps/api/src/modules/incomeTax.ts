@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { schema, type Tx } from '@ledgora/db';
 import {
   advanceTaxQuery,
+  aisFormatReportBody,
   aisImportBody,
   aisPreviewBody,
   buildItr4Body,
@@ -33,6 +34,7 @@ import {
   itr4Json,
   itrRulesFor as engineRulesFor,
   parseAis,
+  formatFingerprint,
   planAdvanceTax,
   projectAnnualProfit,
   reconcileAis,
@@ -637,6 +639,22 @@ export function incomeTaxModule({ route }: Registrar) {
     handler: async ({ body }) => {
       const p = parseAis(body.text);
       return { rows: p.rows, errors: p.errors, skipped: p.skipped, mapping: p.mapping };
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/ais-imports/format-report',
+    tag: 'Income tax',
+    summary:
+      'A file did not read well: show, then (send: true) pass on only its column headings to the people who maintain the importer. No values, names or numbers leave',
+    permission: 'filing:prepare',
+    body: aisFormatReportBody,
+    handler: async ({ body }) => {
+      const f = formatFingerprint(body.text);
+      if (body.send)
+        console.info('[ais-format]', JSON.stringify({ at: new Date().toISOString(), ...f }));
+      return { ...f, sent: body.send };
     },
   });
 

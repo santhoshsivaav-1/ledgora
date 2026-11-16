@@ -272,6 +272,11 @@ export const aisRow = z.object({
 });
 /** A file's text, sent to be read and shown back before anything is saved. */
 export const aisPreviewBody = z.object({ text: z.string().min(1).max(5_000_000) });
+/** `send: false` only shows what would be shared. */
+export const aisFormatReportBody = z.object({
+  text: z.string().min(1).max(5_000_000),
+  send: z.boolean().default(false),
+});
 export const aisImportBody = z.object({
   businessId: uuid,
   fy,

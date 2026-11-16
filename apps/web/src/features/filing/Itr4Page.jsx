@@ -9,6 +9,7 @@ import { Checkbox, Field, MoneyInput, Select, TextInput } from '../../components
 import { listBusinesses } from '../../lib/data/accounting';
 import {
   addChallan,
+  aisFormatReport,
   advanceTax,
   buildItr4,
   deleteAis,
@@ -591,6 +592,7 @@ function Ais({ businessId, fy }) {
   const [files, setFiles] = useState(null);
   const [rec, setRec] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [share, setShare] = useState(null);
   const load = useCallback(() => {
     Promise.all([listAis(businessId, fy), reconcileAisApi(businessId, fy)]).then(
       ([l, r]) => {
@@ -607,7 +609,8 @@ function Ais({ businessId, fy }) {
     if (!file) return;
     try {
       const p = await previewAis(await file.text());
-      setPreview({ ...p, fileName: file.name });
+      setPreview({ ...p, fileName: file.name, text: await file.text() });
+      setShare(null);
     } catch (x) {
       toast(err(x), 'error');
     }
@@ -652,9 +655,41 @@ function Ais({ businessId, fy }) {
               </button>{' '}
             </>
           )}
+          <button
+            type="button"
+            className="btn btn-link"
+            onClick={async () => {
+              try {
+                setShare(await aisFormatReport(preview.text, false));
+              } catch (x) {
+                toast(err(x), 'error');
+              }
+            }}
+          >
+            Did not read well? Report the format
+          </button>{' '}
           <button type="button" className="btn btn-link" onClick={() => setPreview(null)}>
             Cancel
           </button>
+        </div>
+      )}
+      {share && preview && (
+        <div role="status" className="ui-help">
+          {share.sent ? (
+            'Thank you. The column names were sent.'
+          ) : (
+            <>
+              Only these column names would be sent, never any values: <b>{share.columns.join(', ') || '(none found)'}</b>{' '}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!share.columns.length}
+                onClick={async () => setShare(await aisFormatReport(preview.text, true))}
+              >
+                Send them
+              </button>
+            </>
+          )}
         </div>
       )}
       {files.map((x) => (

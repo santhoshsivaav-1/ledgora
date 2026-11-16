@@ -594,3 +594,59 @@ export function reconcileAis(rows: AisRow[], books: AisBooks): AisReconciliation
 
   return { lines, tds, issues, feedback };
 }
+
+const BOM = new RegExp('^\\uFEFF');
+
+/**
+ * What can be shared about a file that did not read, without sharing what is in it: the column headings of a CSV, or the
+ * key names of a JSON file. Anything that looks like a value (a long number, an ID, a long text) is left out.
+ */
+export function formatFingerprint(text: string): {
+  type: 'csv' | 'json' | 'unknown';
+  columns: string[];
+} {
+  const safe = (c: string) => {
+    const t = c.trim().replace(/^"|"$/g, '').trim();
+    return t.length > 0 && t.length <= 40 && !/\d{4,}/.test(t) && !/[@₹]/.test(t) ? t : null;
+  };
+  const body = text.replace(BOM, '').trimStart();
+  if (body.startsWith('{') || body.startsWith('[')) {
+    try {
+      const keys = new Set<string>();
+      const walk = (v: unknown, depth: number) => {
+        if (keys.size >= 60 || depth > 4 || v === null || typeof v !== 'object') return;
+        for (const item of Array.isArray(v) ? v.slice(0, 5) : [v]) {
+          if (item === null || typeof item !== 'object') continue;
+          for (const [k, child] of Object.entries(item)) {
+            const s = safe(k);
+            if (s) keys.add(s);
+            walk(child, depth + 1);
+          }
+        }
+      };
+      walk(JSON.parse(body), 0);
+      return { type: 'json', columns: [...keys] };
+    } catch {
+      return { type: 'unknown', columns: [] };
+    }
+  }
+  // The heading row is the one with the most columns among the first lines; a title above it has few.
+  const lines = body
+    .split(/\r?\n/)
+    .filter((l) => l.trim())
+    .slice(0, 15);
+  if (!lines.length) return { type: 'unknown', columns: [] };
+  const width = (l: string) => Math.max(...[',', '\t', ';', '|'].map((d) => l.split(d).length));
+  const line = lines.reduce((best, l) => (width(l) > width(best) ? l : best));
+  const delim = [',', '\t', ';', '|'].sort(
+    (a, b) => line.split(b).length - line.split(a).length,
+  )[0]!;
+  return {
+    type: 'csv',
+    columns: line
+      .split(delim)
+      .map(safe)
+      .filter((c): c is string => !!c)
+      .slice(0, 40),
+  };
+}

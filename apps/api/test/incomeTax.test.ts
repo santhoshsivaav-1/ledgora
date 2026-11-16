@@ -557,6 +557,21 @@ TDS - payment to contractors,ACME CONTRACTORS PVT LTD,CHEA12345B,500000,10000,19
       ).status,
     ).toBe(400);
   });
+  it('a format report shows, and only on request sends, the column headings and no values', async () => {
+    const t = await h.newTenant();
+    const text = 'Category,Source,Reported Value\nInterest,HDFC BANK,12500\n';
+    const shown = await t.call('POST', '/v1/ais-imports/format-report', { text });
+    expect(shown.body).toEqual({
+      type: 'csv',
+      columns: ['Category', 'Source', 'Reported Value'],
+      sent: false,
+    });
+    const sent = await t.call('POST', '/v1/ais-imports/format-report', { text, send: true });
+    expect(sent.body.sent).toBe(true);
+    expect(JSON.stringify(sent.body)).not.toContain('HDFC');
+    const viewer = await h.addMember(t, 'viewer');
+    expect((await viewer.call('POST', '/v1/ais-imports/format-report', { text })).status).toBe(403);
+  });
   it('the return’s own entries are what AIS is compared with', async () => {
     const t = await h.newTenant();
     await putDraft(

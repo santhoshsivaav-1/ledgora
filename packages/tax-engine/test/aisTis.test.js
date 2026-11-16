@@ -1,7 +1,14 @@
 // R2.2: AIS / TIS import and reconciliation. The importer reads by column name and says what it understood; a file it
 // can not read is an error, never an empty success.
 import { describe, expect, it } from 'vitest';
-import { aisCategoryOf, parseAis, parseAisCsv, parseAisJson, reconcileAis } from '../src/index.ts';
+import {
+  aisCategoryOf,
+  formatFingerprint,
+  parseAis,
+  parseAisCsv,
+  parseAisJson,
+  reconcileAis,
+} from '../src/index.ts';
 
 const CSV = `Annual Information Statement,,,,
 Name: TEST PERSON,PAN: ABCPK1234F,,,
@@ -217,5 +224,21 @@ describe('reconciliation with the books', () => {
     expect(reconcileAis(changed, books).lines.find((l) => l.category === 'dividend')).toMatchObject(
       { ais: 1000, status: 'books_higher' },
     );
+  });
+});
+
+describe('formatFingerprint shares headings only', () => {
+  it('takes a CSV heading row, not a title above it or any values', () => {
+    const f = formatFingerprint(
+      'AIS for RAVI KUMAR\nCategory,Source,Reported Value\nInterest,HDFC BANK,12500\n',
+    );
+    expect(f).toEqual({ type: 'csv', columns: ['Category', 'Source', 'Reported Value'] });
+  });
+  it('drops anything that looks like a value, and reads JSON key names only', () => {
+    expect(formatFingerprint('PAN ABCPK1234F,Amount\n').columns).toEqual(['Amount']);
+    const j = formatFingerprint('{"aisData":[{"infoCategory":"x","amount":5,"9876543210":1}]}');
+    expect(j).toEqual({ type: 'json', columns: ['aisData', 'infoCategory', 'amount'] });
+    expect(formatFingerprint('not a file {')).toMatchObject({ type: 'csv' });
+    expect(formatFingerprint('{bad json')).toEqual({ type: 'unknown', columns: [] });
   });
 });

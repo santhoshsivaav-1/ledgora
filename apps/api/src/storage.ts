@@ -139,5 +139,6 @@ export function localStorage(env: AppEnv, publicBase: string): Storage {
 
 export function createStorage(env: AppEnv): Storage {
   if (env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY) return s3Storage(env);
-  return localStorage(env, `http://localhost:${env.API_LISTEN_PORT}`);
+  // Signed local URLs are opened by the browser, so in production they must carry the public address, not localhost.
+  return localStorage(env, env.API_URL ?? `http://localhost:${env.API_LISTEN_PORT}`);
 }

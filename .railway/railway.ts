@@ -50,11 +50,18 @@ export default defineRailway(() => {
       API_URL: `https://${WEB_DOMAIN}`,
       ALLOWED_ORIGINS: `https://${WEB_DOMAIN}`,
       TRUST_PROXY: 'true',
+      REQUIRE_EMAIL_VERIFICATION: 'true',
       // Secrets: set once in the dashboard (Variables), the file keeps them.
       AUTH_SECRET: preserve(),
       FILE_SIGNING_SECRET: preserve(),
       RESEND_API_KEY: preserve(),
       MAIL_FROM: preserve(),
+      // File storage (Cloudflare R2 or any S3). Without these, uploads would sit on Railway's disk and vanish on deploy.
+      S3_ENDPOINT: preserve(),
+      S3_BUCKET: preserve(),
+      S3_ACCESS_KEY_ID: preserve(),
+      S3_SECRET_ACCESS_KEY: preserve(),
+      BACKUP_ENCRYPTION_KEY: preserve(),
       // Optional: set in the dashboard to turn these on.
       GOOGLE_CLIENT_ID: preserve(),
       GOOGLE_CLIENT_SECRET: preserve(),

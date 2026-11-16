@@ -127,20 +127,22 @@ const safeOrigin = (url?: string) => {
   }
 };
 
-const APP_CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https:",
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "frame-src 'self' blob: data:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join('; ');
+const appCsp = (env: AppEnv) =>
+  [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    // Browsers PUT uploads straight to the bucket with a signed URL, so its origin must be allowed to connect.
+    `connect-src 'self'${safeOrigin(env.S3_ENDPOINT) ? ` ${safeOrigin(env.S3_ENDPOINT)}` : ''}`,
+    "worker-src 'self' blob:",
+    "frame-src 'self' blob: data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
 
 // P9 public share page: inline style only, no script, no framing, nothing loaded from anywhere.
 const SHARE_CSP =
@@ -173,7 +175,7 @@ export function applySecurity(app: Hono, env: AppEnv) {
           ? SHARE_CSP
           : p === '/v1/docs' || p === '/v1/console'
             ? PAGE_CSP
-            : APP_CSP,
+            : appCsp(env),
     );
     // Hashed build files never change, so they may be kept for a year; everything else is checked every time.
     c.header(

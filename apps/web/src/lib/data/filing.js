@@ -123,3 +123,4 @@ export const buildItr4 = (businessId, fy, filedOn) =>
   apiClient.post('/v1/filing-packs/build/itr4', { businessId, fy, filedOn });
 export const incomeTaxCalendar = (businessId, fy) =>
   apiClient.get(`/v1/income-tax-calendar?${qs({ businessId, fy })}`);
+export const aisFormatReport = (text, send) => apiClient.post('/v1/ais-imports/format-report', { text, send });

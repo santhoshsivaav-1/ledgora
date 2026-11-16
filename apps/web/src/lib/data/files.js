@@ -14,7 +14,7 @@ export async function uploadAttachment(file) {
     method: 'POST',
     body: JSON.stringify({ kind: 'attachment', fileName: file.name || 'attachment', contentType, sizeBytes: file.size }),
   });
-  const put = await fetch(slot.uploadUrl, { method: slot.method || 'PUT', headers: slot.headers || {}, body: file, credentials: 'include' });
+  const put = await fetch(slot.uploadUrl, { method: slot.method || 'PUT', headers: slot.headers || {}, body: file, credentials: 'same-origin' });
   if (!put.ok) throw new Error('Upload failed');
   const done = await apiFetch(`/v1/files/${slot.fileId}/complete`, { method: 'POST' });
   return { fileId: done.id, fileName: done.fileName };
