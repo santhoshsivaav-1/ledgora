@@ -43,7 +43,7 @@ try {
   const forgot = await pub.locator('body').innerText();
   check('/forgot-password opens the reset form directly', /Forgot|Reset/i.test(forgot) && (await pub.locator('input[type=email]').count()) >= 1 && !/Welcome back/.test(forgot));
   await shot(pub, 'p0-forgot');
-  await pub.goto(APP);
+  await pub.goto(`${APP}/login`);
   const lang = pub.getByLabel('Language');
   const pad = await lang.evaluate((e) => parseFloat(getComputedStyle(e).paddingRight));
   check('the language selector leaves room for its arrow', pad >= 24, `padding-right ${pad}px`);

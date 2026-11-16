@@ -1,7 +1,7 @@
 // The sign-up flow every browser test starts with: create the account, start the 7-day trial on the plans page,
 // the four business-setup steps, then skip the first-invoice guide. Returns when the app is open.
 export async function signUpAndSetUp(page, { app, name, email, password, business, state = 'Tamil Nadu', registration = 'regular', gstin = '33ABCDE1234F1Z7', waitForMail = null }) {
-  await page.goto(app);
+  await page.goto(`${app}/signup`);
   await page.getByRole('tab', { name: 'Create account' }).click();
   await page.getByLabel('Your name').fill(name);
   await page.getByLabel('E-mail').fill(email);

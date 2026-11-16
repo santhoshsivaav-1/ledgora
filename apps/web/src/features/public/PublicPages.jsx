@@ -9,6 +9,7 @@ import './public.css';
 // server enforces (packages/contracts/src/plans.ts), so this page can never disagree with what an account gets.
 
 const LINKS = [
+  ['/', 'Home'],
   ['/pricing', 'Pricing'],
   ['/privacy', 'Privacy'],
   ['/terms', 'Terms'],
@@ -23,7 +24,7 @@ function Frame({ title, intro, children, path }) {
           {LINKS.map(([href, label]) => (
             <a key={href} href={href} aria-current={path === href ? 'page' : undefined}>{label}</a>
           ))}
-          <a className="pub-signin" href="/">Sign in</a>
+          <a className="pub-signin" href="/login">Sign in</a>
         </nav>
       </header>
       <main className="pub-main">
@@ -57,7 +58,7 @@ export function PricingPage() {
         ))}
       </div>
       <PlanMatrix plans={PLANS} features={FEATURES} interval={interval} choosable={false} />
-      <p className="pub-cta"><a className="btn btn-primary" href="/">Start your {TRIAL_DAYS}-day free trial</a></p>
+      <p className="pub-cta"><a className="btn btn-primary" href="/signup">Start your {TRIAL_DAYS}-day free trial</a></p>
       <p className="pub-note">Your data stays readable on every plan, and you can download it at any time.</p>
     </Frame>
   );

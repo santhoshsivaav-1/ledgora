@@ -86,7 +86,7 @@ check('the invitation e-mail links to the web app accept page', new URL(inviteUr
 // ---- invited person: 3.6 accept page, 3.22 permissions ----
 const guestCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
 const guest = await guestCtx.newPage();
-await guest.goto(APP);
+await guest.goto(`${APP}/login`);
 await guest.getByRole('tab', { name: 'Create account' }).click();
 await guest.getByLabel('Your name').fill('Sam Sales');
 await guest.getByLabel('E-mail').fill(salesEmail);

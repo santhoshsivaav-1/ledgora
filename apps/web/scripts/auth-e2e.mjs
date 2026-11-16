@@ -30,7 +30,7 @@ const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } })
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('pageerror:', e.message));
 
-await page.goto(APP);
+await page.goto(`${APP}/login`);
 await page.getByRole('heading', { name: 'Welcome back' }).waitFor();
 check('signed-out visitor sees the sign-in screen, not the app', true);
 await shot(page, '1-signin');
@@ -107,7 +107,7 @@ check('after logout the back button does not show the app', (await page.locator(
 check('the server session is gone', (await (await ctx.request.get(`${APP}/v1/me`)).status()) === 401);
 
 // sign in again: onboarding is not asked twice
-await page.goto(APP);
+await page.goto(`${APP}/login`);
 await page.getByLabel('E-mail').fill(email);
 await page.getByLabel('Password').fill(password);
 await page.getByRole('button', { name: 'Sign in', exact: true }).click();

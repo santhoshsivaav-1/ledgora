@@ -4,6 +4,7 @@ import { configureApiClient, forgetReads, rememberRead } from '../../lib/apiClie
 import { flushPrintSettings } from '../print/printSettingsStore';
 import { applyPrefs, clearMirroredPrefs, flushMirroredPrefs, startMirroring } from '../../utils/prefsMirror';
 import LoginScreen from './LoginScreen';
+import Landing from '../landing/Landing';
 import BusinessSetup from './BusinessSetup';
 import PlansScreen from './PlansScreen';
 import FirstInvoiceGuide from '../onboarding/FirstInvoiceGuide';
@@ -93,6 +94,11 @@ export default function AuthGate({ children }) {
 
   const value = useMemo(() => ({ me, signOut, refresh }), [me, signOut, refresh]);
 
+  // Someone already signed in who opens /login or /signup is taken to the app.
+  useEffect(() => {
+    if (phase === 'in' && /^\/(login|signin|signup|register|forgot-password)\/?$/.test(window.location.pathname)) window.history.replaceState({}, '', '/');
+  }, [phase]);
+
   if (phase === 'loading') return <div className="auth-shell"><div className="auth-card auth-muted">Loading…</div></div>;
   if (phase === 'error') {
     return (
@@ -105,7 +111,13 @@ export default function AuthGate({ children }) {
       </div>
     );
   }
-  if (phase === 'out') return <LoginScreen onSignedIn={refresh} initialMode={window.location.pathname.replace(/\/+$/, '') === '/forgot-password' ? 'forgot' : undefined} />;
+  if (phase === 'out') {
+    // The landing page is the front door at "/" (a plain visit, not a link carrying a reset or sign-in token); the sign-in,
+    // sign-up and forgot-password screens have their own addresses, and any other address someone was sent to asks them to sign in.
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/' && !window.location.search) return <Landing />;
+    return <LoginScreen onSignedIn={refresh} />;
+  }
   if (phase === 'plans' || phase === 'ended') {
     return (
       <SessionContext.Provider value={value}>

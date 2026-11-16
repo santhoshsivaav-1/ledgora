@@ -89,7 +89,7 @@ try {
   // ---- the CA ----------------------------------------------------------------------------------------------------
   const cc = await browser.newContext({ viewport: { width: 1280, height: 860 }, serviceWorkers: 'block' });
   const ca = await cc.newPage();
-  await ca.goto(APP);
+  await ca.goto(`${APP}/login`);
   await ca.getByRole('tab', { name: 'Create account' }).click();
   await ca.getByLabel('Your name').fill('CA Person');
   await ca.getByLabel('E-mail').fill(caEmail);

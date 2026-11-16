@@ -24,7 +24,7 @@ page.on('pageerror', (e) => errors.push(e.message.slice(0, 200)));
 const scripts = [];
 page.on('request', (r) => r.resourceType() === 'script' && scripts.push(r.url()));
 const email = `pdf${Date.now()}@example.com`;
-await page.goto(APP);
+await page.goto(`${APP}/login`);
 await page.getByRole('tab', { name: 'Create account' }).click();
 await page.getByLabel('Your name').fill('Pdf Check');
 await page.getByLabel('E-mail').fill(email);

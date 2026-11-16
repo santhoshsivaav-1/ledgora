@@ -66,7 +66,7 @@ const printKey = Object.keys(exported.meta).find((k) => k.startsWith('printSetti
 check('the first-run print choices were saved for this business on the server', !!printKey && exported.meta[printKey].onboardingComplete === true, JSON.stringify(Object.keys(exported.meta)));
 
 // ---- it shows on the dashboard, and survives reload and sign-out ----
-await page.goto(APP);
+await page.goto(`${APP}/login`);
 await page.getByText(bill.invoiceNumber).first().waitFor({ timeout: 15000 });
 check('the dashboard lists the invoice', true);
 await shot(page, 'billing-dashboard');
@@ -94,7 +94,7 @@ check('Settings shows it in the trash and Restore brings it back', (await bills(
 // ---- another organization sees none of it ----
 const b = await account(browser, 'B');
 check("another organization's invoice list is empty", (await bills(b.ctx)).length === 0);
-await b.page.goto(APP);
+await b.page.goto(`${APP}/login`);
 await b.page.waitForTimeout(1500);
 check("and its dashboard does not show the first organization's invoice", !(await b.page.locator('body').innerText()).includes(bill.invoiceNumber));
 const peek = await b.ctx.request.get(`${APP}/v1/workspace/collections/bills`, { headers: { 'x-org-id': '00000000-0000-4000-8000-000000000001' } });

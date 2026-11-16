@@ -28,13 +28,18 @@ function Msg({ error, notice }) {
 const PHONE_RE = /^\+\d{8,15}$/;
 
 // The sign-in landing page: e-mail or phone, sign up, forgot password and the two-factor step.
+// The screens that have an address of their own. Anywhere else (a deep link someone was sent) opens on sign-in and keeps its address.
+const PATH_MODES = { '/login': 'signin', '/signin': 'signin', '/signup': 'signup', '/register': 'signup', '/forgot-password': 'forgot' };
+const MODE_PATHS = { signin: '/login', phone: '/login', signup: '/signup', forgot: '/forgot-password' };
+const here = () => window.location.pathname.replace(/\/+$/, '') || '/';
+
 export default function LoginScreen({ onSignedIn, initialMode }) {
   // A password-reset e-mail comes back to /?reset=1&token=...
   const resetToken = (() => {
     const q = new URLSearchParams(window.location.search);
     return q.get('reset') && q.get('token') ? q.get('token') : '';
   })();
-  const [mode, setMode] = useState(resetToken ? 'reset' : initialMode || 'signin'); // signin | signup | phone | forgot | reset | twofactor
+  const [mode, setMode] = useState(resetToken ? 'reset' : initialMode || PATH_MODES[here()] || 'signin'); // signin | signup | phone | forgot | reset | twofactor
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -45,12 +50,11 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
   const tr = useT();
   const lang = useLang();
 
-  // The forgot-password step has an address of its own (/forgot-password) that follows the screen, so it can be linked to.
+  // On one of the auth addresses the address follows the screen, so each can be linked to and reloaded.
   const go = (m) => {
     setError(''); setMode(m);
-    const onForgot = window.location.pathname.replace(/\/+$/, '') === '/forgot-password';
-    if (m === 'forgot' && !onForgot) window.history.replaceState({}, '', '/forgot-password');
-    else if (m !== 'forgot' && m !== 'check-mail-reset' && onForgot) window.history.replaceState({}, '', '/');
+    const target = MODE_PATHS[m];
+    if (PATH_MODES[here()] && target && target !== here()) window.history.replaceState({}, '', target);
   };
 
   const run = async (fn) => {
@@ -60,10 +64,12 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
   };
 
   const goHome = () => {
-    // Drop ?reset=1&token=... from the address bar once used.
-    if (window.location.search || window.location.pathname.replace(/\/+$/, '') === '/forgot-password') window.history.replaceState({}, '', window.location.pathname.replace(/\/+$/, '') === '/forgot-password' ? '/' : window.location.pathname);
+    // Drop ?reset=1&token=... and the auth address (/login, /signup) from the address bar once used: the app opens at "/".
+    if (PATH_MODES[here()]) window.history.replaceState({}, '', '/');
+    else if (window.location.search) window.history.replaceState({}, '', window.location.pathname);
     onSignedIn();
   };
+
 
   const signIn = (e) => { e.preventDefault(); run(async () => {
     try {
