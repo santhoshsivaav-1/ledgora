@@ -112,6 +112,19 @@ the wrong version number.
 
 ---
 
+## Each assessment year (income-tax schemas, X2)
+
+When the Income Tax Department publishes the JSON schemas and validation-rules documents for a new assessment year:
+
+- [ ] Download the ITR-4 and ITR-3 schema files unchanged into `packages/tax-engine/schemas/itr4/` and `schemas/itr3/` as
+      `AY<year>.json`; register each in `src/itr4Schema.ts` / `src/itr3Schema.ts`.
+- [ ] `node scripts/gen-itr4-codes.mjs`, `node scripts/gen-itr3-skeleton.mjs` and `node scripts/gen-itr3-codes.mjs`
+      (from `packages/tax-engine`) regenerate the code lists and the ITR-3 field skeleton; review the diff.
+- [ ] Read the new validation-rules documents against `src/itr4Rules.ts` and `src/itr3Rules.ts`; add any new rule the builders
+      can break and extend the tests that break each rule on purpose.
+- [ ] Add the year's rules to `src/itrRules.ts` (slabs, rebate, due dates, late fee) with a confidence label on each figure.
+- [ ] `pnpm --filter @ledgora/tax-engine test` and the browser tests `apps/web/scripts/itr4-e2e.mjs` and `itr3-e2e.mjs` pass.
+
 ## Before you publish
 
 - [ ] `package.json` version bumped

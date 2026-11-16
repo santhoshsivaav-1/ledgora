@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ITR-3 for a proprietor with books (R2.5), and the fixed-asset register (R4.1).** Taxes › ITR-3 Filing builds the whole
+  return from your ledger and asset register: the trading and profit and loss accounts, the balance sheet, Schedule BP with
+  the depreciation schedules (DPM, DOA, DEP), the set-off schedules, Part B and the tax. It is checked against the
+  department's published AY 2026-27 JSON schema and **123 of its validation rules by number** before it can be saved as a
+  pack, reviewed by a CA and recorded with its 15-digit acknowledgement. A tax-audit return takes the later due date and the
+  auditor's details. Taxes › Fixed Assets holds the assets (cost, the day put to use, sales); it works out the income-tax
+  written-down-value blocks (half rate under 180 days, a sale taken off the block) and the Companies Act straight-line
+  depreciation, and posts the year's depreciation to the books as one replaceable journal. What it refuses, with a reason
+  and "file it on the portal": house property, capital gains (including a section 50 gain on a sold block), foreign assets,
+  directorships, partnerships, losses to carry forward, total income above ₹50 lakh, and the other cases listed in
+  `docs/DECISIONS.md` D-32. Not yet portal-proven (needs one real upload, X3). Migrations `0034`, `0035`.
+
 - **The new layout is now the default** for people who have not chosen one. Anyone who picked the classic layout keeps it; a deployment can start in the classic layout with `VITE_UI_VYAPAR=false`.
 
 - **Income tax from the books (ITR-4).** Taxes › ITR-4 Filing: taxpayer details (Aadhaar and bank accounts sealed at

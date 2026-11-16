@@ -20,3 +20,15 @@ The code is finished and tested. These steps need your accounts, the department,
 6. **Have a CA review** `docs/FEATURE_GAPS_2026-11.md` section R2 and the tax figures once, for the 2025 Act slabs and the
    presumptive rules, before you announce the feature.
 7. **Run migration 0033 in production** (`pnpm --filter @ledgora/db migrate`), after a backup.
+8. **Run migrations 0034 and 0035 in production** (the asset register, and the `itr3` pack kind), after a backup.
+9. **Do one real portal upload of an ITR-3** the same way as step 3 (build it from a pilot business's books, upload it on the
+   portal's "Upload JSON" step, screenshot the result into `docs/acceptance/`). The portal also runs its rules on upload; if it
+   refuses something this software passed, send me the message: it is a rule to add to `itr3Rules.ts`.
+10. **Have a CA review the ITR-3 mapping** once: how the ledger's accounts are placed under the form's heads
+    (`apps/api/src/modules/itr3Books.ts`: interest, dividend, rent, salaries and depreciation are found by account name; every
+    other account goes under "other"), the section 43B and 40A(3) items on the Business & return tab, and the block table in
+    `packages/tax-engine/src/depreciation.ts`. Additional depreciation (s.32(1)(iia)) and the 40% special-rate assets are not covered.
+11. **The ITR-3 business codes and the 45% block**: when the department publishes the schema for the next year, download it into
+    `packages/tax-engine/schemas/itr3/`, run `node scripts/gen-itr3-skeleton.mjs` and `node scripts/gen-itr3-codes.mjs`, register
+    it in `src/itr3Schema.ts`, and re-read its validation-rules document against `src/itr3Rules.ts` (`ITR3_RULES_CHECKED`).
+

@@ -32,7 +32,7 @@ upload of each is photographed into `docs/acceptance/`. GSTR-1 and GSTR-3B keep 
 Tests: `tax-engine/test/{filing,filingR1,filingR1b,gstReturnsGolden}.test.js`, `api/test/{filing,editLog}.test.ts`,
 browser `web/scripts/filing-e2e.mjs` (21 checks), golden capture `web/scripts/gst-golden-capture.mjs`.
 
-**R2 is complete except ITR-3 (R2.5, waits for R4's books).** Built, tested and in the app: Taxes › ITR-4 Filing.
+**R2 is complete, including ITR-3 (R2.5).** Built, tested and in the app: Taxes › ITR-4 Filing and Taxes › ITR-3 Filing.
 
 | Item | Status | Where |
 |---|---|---|
@@ -51,7 +51,28 @@ those need ITR-2 or ITR-3). The Return tab takes the 31 March financial particul
 Tests: `tax-engine/test/{itr4,itr4Property,advanceTax,aisTis}.test.js`, `api/test/incomeTax.test.ts` (26),
 browser `web/scripts/itr4-e2e.mjs` (12 checks).
 
-**Next: R3** (TDS and payroll). R2.5 ITR-3 follows R4.
+**R2.5 and R4.1 are done.**
+
+| Item | Status | Where |
+|---|---|---|
+| R2.5 ITR-3 JSON | **Done.** The whole return for a proprietor with books, from the ledger and the asset register: Part A (balance sheet, trading account, profit and loss account, other information), Schedule BP with the depreciation schedules DPM, DOA and DEP, Schedule S, Schedule OS, the set-off schedules CYLA and BFLA, Chapter VI-A, Part B-TI and B-TTI, the tax schedules and the verification. The department's AY 2026-27 schema and **123 of its validation rules by number** (`itr3Rules.ts`) are checked on every build and again when the pack is saved; 300 random returns are checked against an independent tax calculation. The tax-audit case takes the 31 October due date and the auditor's details | `itr3Return.ts`, `itr3Json.ts`, `itr3Rules.ts`, `modules/itr3Books.ts`, `POST …/build/itr3` |
+| R4.1 Fixed-asset register | **Done.** Assets, income-tax blocks (full rate at 180 days or more, half below, sales off the block, section 50), Schedule II straight-line depreciation for the books, opening block balances, and one replaceable depreciation journal per year | `depreciation.ts`, `modules/assets.ts`, `POST …/post-depreciation` |
+
+**ITR-3 honest limits:** the file has not been uploaded to the real portal (X3). It refuses, with a reason and "file it on the
+portal": house property, capital gains (including the section 50 gain or loss when a sale ends or exceeds an asset block),
+foreign assets or income, directorships, unlisted shares, partnerships, losses brought forward, a business loss that cannot
+be set off in full (Schedule CFL), total income above ₹50 lakh (Schedule AL), the seventh-proviso triggers, a manufacturing
+account, speculative or specified business, and non-residents. Additional depreciation (s.32(1)(iia)) and the 40% special-rate
+assets are not covered. The ledger's accounts are placed under the form's heads by their names (interest, dividend, rent,
+salaries, depreciation; everything else goes under "other"), and the sales account is split into goods and services by a figure
+the person gives. The 45% block can not be claimed under the new regime (rule 310). Dividend is shown as received in the last
+quarter because the books carry no dates. The department's own ITR-3 utility remains the fallback for everything above.
+
+Tests: `tax-engine/test/{depreciation,itr3Schema,itr3Return,itr3Property}.test.js`, `api/test/{assets,itr3}.test.ts`,
+browser `web/scripts/itr3-e2e.mjs` (16 checks).
+
+**Next: R3** (TDS and payroll). R4.2 (Schedule III statements) and R4.3 (tax-audit pre-fill) remain; the balance sheet the
+ITR-3 needs is built from the ledger already.
 
 ## 1. Where Ledgora stands
 
@@ -70,7 +91,7 @@ Checked in the code, not from the README.
 | Platform | Multi-tenant SaaS with row-level security, editable roles, multi-business, plans and trial, scheduled and Drive backups, Tally export, Hindi and Tamil, PWA, desktop app, offline local edition |
 
 **Confirmed absent:** manufacturing/BOM, godowns, payroll, job work, branches, payment links for customers, e-commerce
-sync, WhatsApp Business API, AIS import, fixed-asset register, Schedule III, TDS deductor returns, GSTR-1A, GSTR-9/9C.
+sync, WhatsApp Business API, Schedule III statements, TDS deductor returns. (Built since this table was written: AIS import, the fixed-asset register, GSTR-1A, GSTR-9/9C, ITR-3 and ITR-4.)
 
 ## 2. GSTR-3B JSON upload: still accepted
 
@@ -218,7 +239,7 @@ secrets only in the server's vault.
   feed 234B/C and the ITR's tax-paid schedule.
 - *Done when:* recorded challans reduce interest and appear in the ITR pack.
 
-**R2.5 ITR-3 JSON** — **L** (after R4)
+**R2.5 ITR-3 JSON** — **L** — **done, see Progress**
 - *Build:* Part A P&L and balance sheet from Schedule III data, depreciation schedule from R4, presumptive vs normal
   computation; same pipeline as ITR-4.
 
