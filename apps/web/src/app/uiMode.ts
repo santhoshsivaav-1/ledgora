@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 // The `ui.vyapar` flag (Vyapar parity, Phase 0): which shell and palette this person sees. A per-person preference
-// kept in localStorage like dark mode; the build default comes from VITE_UI_VYAPAR so a deploy can turn it on for
+// kept in localStorage like dark mode; the build default is the new layout; VITE_UI_VYAPAR=false makes a deploy start in the classic one for
 // everyone without touching anyone's saved choice. Off means the classic app, exactly as before.
 //
 // Brand (decision D-01): the new layout keeps Ledgora green for the primary button; data-brand="vyapar" swaps in
@@ -13,7 +13,7 @@ const BRAND_KEY = 'ledgora_brand';
 export type UiMode = 'classic' | 'vyapar';
 export type Brand = 'ledgora' | 'vyapar';
 
-const buildDefault = (): UiMode => (import.meta.env?.VITE_UI_VYAPAR === 'true' ? 'vyapar' : 'classic');
+const buildDefault = (): UiMode => (import.meta.env?.VITE_UI_VYAPAR === 'false' ? 'classic' : 'vyapar');
 
 // Holds a choice made in a private window, where localStorage throws.
 const memory = new Map<string, string>();

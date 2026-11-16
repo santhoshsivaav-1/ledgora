@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The new layout is now the default** for people who have not chosen one. Anyone who picked the classic layout keeps it; a deployment can start in the classic layout with `VITE_UI_VYAPAR=false`.
+
 - **Income tax from the books (ITR-4).** Taxes › ITR-4 Filing: taxpayer details (Aadhaar and bank accounts sealed at
   rest), the return's inputs, challans and an advance-tax plan, AIS / TIS import with a match against the books (beta), and
   the ITR-4 file built for upload. The file is checked against the department's published AY 2026-27 JSON schema and its

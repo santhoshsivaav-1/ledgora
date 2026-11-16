@@ -36,6 +36,7 @@ asks; the answer is written here before work continues.
 | D-27 | Return Register and CA Dashboard in the menus | new menu only / both | **Both menus carry Return Register; CA Dashboard shows to anyone who is a CA in a client organization**, from any organization (the classic-menu test was updated on purpose) | Owner (asked for the industry standard) | 2026-11-15 | Filing |
 | D-28 | Income tax in the app (R2) | file ITR on the portal for them / build the file for upload | **Build the ITR-4 file, check it against the department's own schema and rules, and let the person or CA upload it**; ITR-3 waits for R4 | Owner (no direct filing, see D-24) | 2026-11-16 | Income tax |
 | D-29 | Aadhaar and bank accounts | plain / sealed | **Sealed (AES-256-GCM, bound to the organization), shown by last digits only; kept out of the edit log and audit rows** | Industry standard for PII | 2026-11-16 | Income tax |
+| D-30 | Which layout the app starts in | classic / new | **New layout is the default; a saved personal choice wins; `VITE_UI_VYAPAR=false` starts a deploy in the classic layout.** New screens are built for the new layout first and also work in the classic one | Owner | 2026-11-16 | UI |
 
 ## Notes recorded during Phase 0 (2026-11-08)
 
