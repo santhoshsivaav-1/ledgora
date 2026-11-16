@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Public pages:** `/pricing`, `/privacy`, `/terms`, and `/forgot-password` (which used to show the sign-in screen). Set `VITE_COMPANY_NAME` and `VITE_SUPPORT_EMAIL`.
 
+- **Deployed app picks up the new version on its own, plus a "New version — reload" button bottom-right.** A signed-in tab is a single-page app: react-router changes screens without a full-page navigation, and the browser only asks the service worker whether a newer build exists on navigation — so a tab left open for days kept serving the old version (that is also why it looked right in incognito). The app now checks for a newer service worker every 10 minutes, and when the tab is refocused or the connection returns; when one appears it activates and the page reloads into it (immediately on a read-only screen, after 20 s if a form is being filled). The bottom-right button does the same check on demand and, if the service worker is somehow stuck, drops every cache and the worker itself, re-fetches the page past the HTTP cache and reloads — whatever the server has deployed is what comes up. It highlights green once an update is detected, and its tooltip shows the version this build was made from.
+
 - **ITR-3 for a proprietor with books (R2.5), and the fixed-asset register (R4.1).** Taxes › ITR-3 Filing builds the whole
   return from your ledger and asset register: the trading and profit and loss accounts, the balance sheet, Schedule BP with
   the depreciation schedules (DPM, DOA, DEP), the set-off schedules, Part B and the tax. It is checked against the

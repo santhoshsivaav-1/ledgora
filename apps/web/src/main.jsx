@@ -67,6 +67,41 @@ __updateSW = registerSW({
     // Prior console.log removed — production hygiene (v1.9.15 audit L1).
     window.dispatchEvent(new CustomEvent('fgsb-sw-offline-ready'));
   },
+  // v1.10.81 — Ask the server for a newer service worker on our own schedule.
+  // Reported after v1.10.35: "the website keeps using the old version" on a
+  // deployment. Root cause: a signed-in tab is a single-page app — react-router
+  // changes screens without a full-page navigation, and the browser only checks
+  // the SW for an update on navigation (or ~once a day by its own clock). A tab
+  // left open for days therefore never learned a deploy happened and kept
+  // serving the old precache, index.html included. The server already sends
+  // `Cache-Control: no-cache` for sw.js, so each check is a cheap revalidation
+  // (typically a 304). Now a check runs every 10 minutes, plus when the tab
+  // becomes visible again and when the connection comes back. The bottom-right
+  // reload button (app/UpdateReloadButton.jsx) does the same thing on demand.
+  onRegisteredSW(_swUrl, registration) {
+    if (!registration) return;
+    const check = () => {
+      // A hidden tab wasting an update-check every 10 minutes adds up across
+      // tabs; the visibilitychange below catches up the moment it returns.
+      if (document.visibilityState !== 'visible') return;
+      registration.update().catch(() => {});
+    };
+    const timer = setInterval(check, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('online', check);
+    window.addEventListener(
+      'pagehide',
+      () => {
+        clearInterval(timer);
+        document.removeEventListener('visibilitychange', check);
+        window.removeEventListener('online', check);
+      },
+      { once: true },
+    );
+    // The landing page usually brings one: the first check after a deploy
+    // puts the update in front of the user within seconds of opening the app.
+    check();
+  },
 });
 
 // Called by whichever UI component (or auto-defer logic) decides now is

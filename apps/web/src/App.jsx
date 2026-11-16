@@ -42,6 +42,7 @@ import TopBar from './app/TopBar';
 import AppShell from './app/AppShell';
 import CommandPalette from './app/CommandPalette';
 import ShortcutsHelp from './app/ShortcutsHelp';
+import UpdateReloadButton from './app/UpdateReloadButton';
 import { viewFromPath, pathForView, legacyViewRedirect, canonicalPath, pathsForView, LEGACY_REDIRECTS } from './app/router';
 import { FEATURES } from './config/featureFlags';
 import { buildClassicNav, NAV, visibleNav, findNavEntry, navScreens, leafPath } from './app/navigation';
@@ -937,17 +938,17 @@ function App() {
     }
   })();
 
+  // v1.10.81 — The pill used to fix itself at bottom-right on its own; the
+  // new-version reload button lives in the same corner, so both now share
+  // ONE fixed stack (pill above button) that lifts above the docked Save bar
+  // on Settings — the two can never overlap, and each other's variable width
+  // ("✨ Finish setup" / "New version — reload") never changes the anchor.
   const resumePill = showResumeSetupPill && (
     <button
       type="button"
       onClick={() => setShowWizard(true)}
       title="Come back to the setup wizard — pick a business type, paper size, and language."
       style={{
-        // Above the docked Save bar on Settings, so it never covers Save.
-        position: 'fixed',
-        bottom: currentView.startsWith('settings') ? '5.5rem' : '1.25rem',
-        right: '1.25rem',
-        zIndex: 9998,
         padding: '0.6rem 1rem',
         borderRadius: 999,
         background: 'var(--primary)',
@@ -960,10 +961,29 @@ function App() {
         display: 'flex',
         alignItems: 'center',
         gap: '0.4rem',
+        whiteSpace: 'nowrap',
       }}
     >
       ✨ Finish setup
     </button>
+  );
+  const updateCorner = (
+    <div
+      style={{
+        position: 'fixed',
+        // Above the docked Save bar on Settings, so it never covers Save.
+        bottom: currentView.startsWith('settings') ? '5.5rem' : '1.25rem',
+        right: '1.25rem',
+        zIndex: 9998,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        gap: '0.6rem',
+      }}
+    >
+      {resumePill}
+      <UpdateReloadButton />
+    </div>
   );
 
   // The screens, drawn inside whichever shell is on.
@@ -1295,7 +1315,7 @@ function App() {
     return (
       <AppShell vyapar rail={vyRail}>
         {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
-        {resumePill}
+        {updateCorner}
         <VySidebar
           nav={vyNav}
           activeId={vyHere?.leaf.id}
@@ -1358,7 +1378,7 @@ function App() {
   return (
     <AppShell autoHideSidebar={sidebarAutoHide}>
       {showWizard && <SetupWizard onClose={() => setShowWizard(false)} />}
-      {resumePill}
+      {updateCorner}
       <Sidebar
         me={me}
         signOut={signOut}
