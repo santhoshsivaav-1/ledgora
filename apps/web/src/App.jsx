@@ -250,32 +250,45 @@ function App() {
     // load it still says so straight away.
     let misses = 0;
 
+    // Reads the business profile once. A slow or failed read only means "try again at the next check"; it never says the
+    // server is down (the hosted database can take several seconds on a cold start).
+    let profileBusy = false;
+    const loadProfile = async () => {
+      if (profileBusy || profileLoaded.current) return;
+      profileBusy = true;
+      try {
+        const res = await fetch('/v1/workspace/profile');
+        if (cancelled || !res.ok || profileLoaded.current) return;
+        profileLoaded.current = true;
+        const p = await res.json();
+        setProfile(p);
+        // Not while someone opens an invitation: they are joining a business, not setting one up.
+        if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
+          setShowWelcome(true);
+        }
+      } catch {
+        /* next check tries again */
+      } finally {
+        profileBusy = false;
+      }
+    };
+
     const checkServer = async () => {
       try {
-        // The profile is read once (first load); after that the heartbeat only asks the cheap /health, so a slow database
-        // never queues a profile read behind every page change.
-        const res = await fetch(profileLoaded.current ? '/health' : '/v1/workspace/profile', { signal: AbortSignal.timeout(8000) });
-        // Any answer means the server is there. Only a gateway error (502-504: the host is restarting) counts as a miss; a
-        // 401 or 403 is somebody who is not signed in yet, which the sign-in screen handles, not a server that is down.
+        // Liveness is the cheap /health, never the profile, so a slow database cannot look like a dead server. Any answer
+        // means the server is there; only a gateway error (502-504: the host is restarting) counts as a miss.
+        const res = await fetch('/health', { signal: AbortSignal.timeout(20000) });
         if (res.status >= 502 && res.status <= 504) throw new Error('gateway');
         if (cancelled) return;
         misses = 0;
         setServerDown(false);
         setServerStatus('online');
-        if (res.ok && !profileLoaded.current) {
-          profileLoaded.current = true;
-          const p = await res.json();
-          setProfile(p);
-          // Not while someone opens an invitation: they are joining a business, not setting one up.
-          if (!p.businessName && !localStorage.getItem('freegstbill_onboarded') && !window.location.pathname.startsWith('/accept-invite/')) {
-            setShowWelcome(true);
-          }
-        }
+        loadProfile();
       } catch {
         if (cancelled) return;
         misses += 1;
         // A cold or restarting host can miss once or twice; two misses in a row before the first load, three after it.
-        if (misses >= (profileLoaded.current ? 3 : 2)) {
+        if (misses >= 3) {
           setServerDown(true);
           setServerStatus('offline');
         }
