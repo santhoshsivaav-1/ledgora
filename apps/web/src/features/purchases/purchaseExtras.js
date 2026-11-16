@@ -9,8 +9,7 @@ import {
   cleanCharges,
   getFinancialYearLabel,
   itcAging,
-  itcReversalsFor,
-  itcSplit,
+  itcInputsOf,
   overConversion,
   partyStatement,
   tdsDueDate,
@@ -368,23 +367,8 @@ export function tdsRegister(vouchers, { from = '', to = '9999-12-31', bills = []
 
 // ---- ITC 180-day rule on the web (P10-S4) -------------------------------------------------------------------------------
 
-/**
- * The bills and payments of the purchase documents in the engine's terms. Credit is the eligible GST (and cess) on the
- * bill's lines and charges; payable is the total less §194Q TDS; a payment counts on its own date (decision D-12: a
- * cheque counts on its date until Phase 5 records clearing).
- */
-export function itcInputsOf(purchases) {
-  const bills = [];
-  const payments = [];
-  for (const p of purchases || []) {
-    if (!p?.id || (p.docType && p.docType !== 'bill')) continue;
-    const e = itcSplit(p.items || [], { interstate: !!p.interstate, charges: p.charges }).eligible;
-    const itc = r2(e.cgst + e.sgst + e.igst + e.cess);
-    bills.push({ id: p.id, supplier: p.supplierName, number: p.invoiceNumber || p.number, date: p.date, payable: rcmSupplierDue({ total: p.totalAmount, reverseCharge: !!p.reverseCharge, tax: p.totalTax, cess: p.totalCess, tds: p.tdsAmount }), itc, _heads: e });
-    for (const x of p.payments || []) payments.push({ billId: p.id, amount: x.amount, date: x.date || p.date });
-  }
-  return { bills, payments };
-}
+// The 180-day helpers moved to the engine with the GST return builders (X1).
+export { itcInputsOf, itc180ForPeriod } from '@ledgora/tax-engine';
 
 /** Where every bill stands on `asOf`: credit at risk (150+ days, unpaid) and credit past the deadline. */
 export function itcAtRisk(purchases, asOf) {
@@ -392,31 +376,6 @@ export function itcAtRisk(purchases, asOf) {
   return itcAging(bills, payments, asOf);
 }
 
-const scaleHeads = (h, k) => ({ igst: r2(h.igst * k), cgst: r2(h.cgst * k), sgst: r2(h.sgst * k), cess: r2(h.cess * k) });
-const addHeads = (a, b) => ({ igst: a.igst + b.igst, cgst: a.cgst + b.cgst, sgst: a.sgst + b.sgst, cess: a.cess + b.cess });
-const zero = () => ({ igst: 0, cgst: 0, sgst: 0, cess: 0 });
-
-/**
- * What the return of one period shows for the rule: credit reversed (GSTR-3B 4(B)(2), with the bills to review) and
- * credit re-claimed after a late payment (4(A)(5), "Re-claimed ITC"), each split into the tax heads of its bill.
- * `inPeriod(date)` is the return screen's own period test.
- */
-export function itc180ForPeriod(purchases, inPeriod) {
-  const { bills, payments } = itcInputsOf(purchases);
-  const all = itcReversalsFor(bills, payments, '0000-01-01', '9999-12-31');
-  const byId = new Map(bills.map((b) => [b.id, b]));
-  const heads = (billId, amount) => {
-    const b = byId.get(billId);
-    return b && b.itc > 0 ? scaleHeads(b._heads, amount / b.itc) : zero();
-  };
-  let reversal = zero();
-  let reclaim = zero();
-  const reversals = all.reversals.filter((r) => inPeriod(r.date));
-  const reclaims = all.reclaims.filter((r) => inPeriod(r.paidOn));
-  for (const r of reversals) reversal = addHeads(reversal, heads(r.billId, r.itc));
-  for (const r of reclaims) reclaim = addHeads(reclaim, heads(r.billId, r.itc));
-  return { reversal, reclaim, reversals, reclaims };
-}
 
 /**
  * TDS payable (P10-S5) from the web documents: every Payment Out with TDS and every purchase bill with §194Q TDS in the

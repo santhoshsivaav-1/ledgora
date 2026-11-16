@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FILING_PACK_KINDS, FILING_PACK_STATUSES } from '@ledgora/contracts';
 import { FILING_KINDS, FILING_STATUSES, GSTIN_CHARS } from '@ledgora/tax-engine';
@@ -583,5 +584,241 @@ describe('R1 returns: GSTR-1A, GSTR-9, CMP-08', () => {
       periodFrom: '2026-10-01',
       periodTo: '2026-12-31',
     });
+  });
+});
+
+describe('X1: GSTR-1 and GSTR-3B built on the server', () => {
+  // The documents and the files the GST Returns screen downloaded for them before the builders moved
+  // (apps/web/scripts/gst-golden-capture.mjs).
+  const golden = (n: string) =>
+    JSON.parse(
+      readFileSync(
+        new URL(`../../../packages/tax-engine/test/golden/gst-returns/${n}.json`, import.meta.url),
+        'utf8',
+      ),
+    );
+
+  it('builds byte for byte what the screen builds, from the stored documents', async () => {
+    const t9 = await h.newTenant();
+    const input = golden('input');
+    expect(
+      (await t9.call('PATCH', `/v1/businesses/${t9.businessId}`, { gstin: input.profile.gstin }))
+        .status,
+    ).toBe(200);
+    expect((await t9.call('POST', '/v1/workspace/profile', input.profile)).status).toBeLessThan(
+      300,
+    );
+    for (const [collection, list] of [
+      ['bills', input.bills],
+      ['purchases', input.purchases],
+      ['expenses', input.expenses],
+    ] as const)
+      for (const doc of list) {
+        const r = await t9.call('POST', `/v1/workspace/collections/${collection}`, doc);
+        expect(r.status, r.text).toBeLessThan(300);
+      }
+    const build = (kind: string, period = '102026') =>
+      t9.call('POST', '/v1/filing-packs/build/gst', { businessId: t9.businessId, kind, period });
+    const r1 = await build('gstr1');
+    expect(r1.status, r1.text).toBe(200);
+    expect(JSON.stringify(r1.body.payload)).toBe(JSON.stringify(golden('gstr1')));
+    const r3 = await build('gstr3b');
+    expect(JSON.stringify(r3.body.payload)).toBe(JSON.stringify(golden('gstr3b')));
+    // Saved as packs they pass the server's own checks (the 3B is compared with the GSTR-1 just saved).
+    for (const b of [r1.body, r3.body]) {
+      const saved = await t9.call('POST', '/v1/filing-packs', {
+        businessId: t9.businessId,
+        kind: b.kind,
+        period: b.period,
+        payload: b.payload,
+      });
+      expect(saved.status, saved.text).toBe(201);
+      expect(saved.body.errors).toBe(0);
+    }
+    // A month with nothing in it: no file, and the person is told to file NIL.
+    const empty = await build('gstr1', '042026');
+    expect(empty.status).toBe(422);
+    expect(empty.body.error.message).toMatch(/NIL/);
+    // A biller can not build returns.
+    const biller = await h.addMember(t9, 'biller');
+    expect(
+      (
+        await biller.call('POST', '/v1/filing-packs/build/gst', {
+          businessId: t9.businessId,
+          kind: 'gstr1',
+          period: '102026',
+        })
+      ).status,
+    ).toBe(403);
+  });
+});
+
+describe('R1 completion: GSTR-4, GSTR-9C, pre-filing checks', () => {
+  const golden = (n: string) =>
+    JSON.parse(
+      readFileSync(
+        new URL(`../../../packages/tax-engine/test/golden/gst-returns/${n}.json`, import.meta.url),
+        'utf8',
+      ),
+    );
+  const filed = async (who: Tenant, kind: string, period: string, payload: unknown) => {
+    const p = await who.call('POST', '/v1/filing-packs', {
+      businessId: who.businessId,
+      kind,
+      period,
+      payload,
+    });
+    expect(p.status, p.text).toBe(201);
+    if (p.body.status === 'draft') {
+      const all = (await who.call('GET', `/v1/filing-packs/${p.body.id}`)).body.issues.map(
+        (i: any) => i.id,
+      );
+      await who.call('POST', `/v1/filing-packs/${p.body.id}/acknowledge`, { acknowledged: all });
+    }
+    const r = await who.call('POST', `/v1/filing-packs/${p.body.id}/record-filed`, {
+      arn: ARN,
+      filedOn: '2026-11-14',
+    });
+    expect(r.status, r.text).toBe(200);
+    return p.body.id as string;
+  };
+
+  it('GSTR-4 adds up the year’s filed CMP-08s and purchases; only for composition dealers', async () => {
+    const t = await h.newTenant();
+    await t.call('PATCH', `/v1/businesses/${t.businessId}`, { gstin: OWN });
+    const build4 = () =>
+      t.call('POST', '/v1/filing-packs/build/gstr4', { businessId: t.businessId, fy: 2025 });
+    expect((await build4()).status).toBe(422);
+    await t.call('PATCH', '/v1/settings', {
+      businessId: t.businessId,
+      values: { 'gst.regType': 'composition', 'gst.compRate': 1 },
+    });
+    for (const [period, turnover] of [
+      ['062025', 100000],
+      ['092025', 200000],
+    ] as const) {
+      const b = await t.call('POST', '/v1/filing-packs/build/cmp08', {
+        businessId: t.businessId,
+        period,
+        turnover,
+      });
+      await filed(t, 'cmp08', period, b.body.payload);
+    }
+    const g = await build4();
+    expect(g.status, g.text).toBe(200);
+    expect(g.body.payload.table6).toEqual([{ rate: 1, turnover: 300000, cgst: 1500, sgst: 1500 }]);
+    expect(g.body.payload.missing).toEqual(['122025', '032026']);
+    const saved = await t.call('POST', '/v1/filing-packs', {
+      businessId: t.businessId,
+      kind: 'gstr4',
+      period: g.body.period,
+      payload: g.body.payload,
+    });
+    expect(saved.body).toMatchObject({
+      kindLabel: 'GSTR-4',
+      status: 'draft',
+      periodFrom: '2025-04-01',
+      periodTo: '2026-03-31',
+    });
+  });
+
+  it('GSTR-9C reconciles the year’s books with GSTR-9; 3B is compared with the portal; e-invoice gaps are flagged', async () => {
+    const t = await h.newTenant();
+    const input = golden('input');
+    await t.call('PATCH', `/v1/businesses/${t.businessId}`, { gstin: input.profile.gstin });
+    // Above ₹5 crore last year: B2B invoices need IRNs.
+    await t.call('POST', '/v1/workspace/profile', { ...input.profile, prevFYTurnover: 6e7 });
+    for (const [c, list] of [
+      ['bills', input.bills],
+      ['purchases', input.purchases],
+      ['expenses', input.expenses],
+    ] as const)
+      for (const doc of list) await t.call('POST', `/v1/workspace/collections/${c}`, doc);
+    const b1 = await t.call('POST', '/v1/filing-packs/build/gst', {
+      businessId: t.businessId,
+      kind: 'gstr1',
+      period: '102026',
+    });
+    const r1 = await t.call('POST', '/v1/filing-packs', {
+      businessId: t.businessId,
+      kind: 'gstr1',
+      period: '102026',
+      payload: b1.body.payload,
+    });
+    const r1Issues = (await t.call('GET', `/v1/filing-packs/${r1.body.id}`)).body.issues.map(
+      (i: any) => i.code,
+    );
+    // INV 001 and 002, the credit note, and the export (exports are e-invoiced too: EXPWP / EXPWOP).
+    expect(r1Issues.filter((c: string) => c === 'EINV_MISSING').length).toBe(4);
+
+    const b3 = await t.call('POST', '/v1/filing-packs/build/gst', {
+      businessId: t.businessId,
+      kind: 'gstr3b',
+      period: '102026',
+    });
+    const r3 = await t.call('POST', '/v1/filing-packs', {
+      businessId: t.businessId,
+      kind: 'gstr3b',
+      period: '102026',
+      payload: b3.body.payload,
+    });
+    expect(r3.body.status).toBe('ready');
+    const osup = b3.body.payload.sup_details.osup_det;
+    const same = await t.call('POST', `/v1/filing-packs/${r3.body.id}/compare-portal`, {
+      txval: osup.txval,
+      camt: osup.camt,
+    });
+    expect(same.body).toMatchObject({ status: 'ready', differences: [] });
+    const off = await t.call('POST', `/v1/filing-packs/${r3.body.id}/compare-portal`, {
+      camt: osup.camt + 100,
+    });
+    expect(off.body.status).toBe('draft');
+    expect(off.body.differences.map((d: any) => d.path)).toEqual(['camt']);
+
+    const no9 = await t.call('POST', '/v1/filing-packs/build/gstr9c', {
+      businessId: t.businessId,
+      fy: 2026,
+    });
+    expect(no9.status).toBe(409);
+    const g9 = await t.call('POST', '/v1/filing-packs/build/gstr9', {
+      businessId: t.businessId,
+      fy: 2026,
+    });
+    await t.call('POST', '/v1/filing-packs', {
+      businessId: t.businessId,
+      kind: 'gstr9',
+      period: '032027',
+      payload: g9.body.payload,
+    });
+    const c = await t.call('POST', '/v1/filing-packs/build/gstr9c', {
+      businessId: t.businessId,
+      fy: 2026,
+      adjustments: [{ label: 'Rounding', amount: 0 }],
+    });
+    expect(c.status, c.text).toBe(200);
+    // Nothing of the year is filed yet, so GSTR-9 shows nothing and the whole of the books' turnover is unreconciled.
+    expect(c.body.payload.table5.A_turnover_in_books).toBeGreaterThan(0);
+    expect(c.body.payload.table5.Q_unreconciled).toBe(c.body.payload.table5.A_turnover_in_books);
+    const saved = await t.call('POST', '/v1/filing-packs', {
+      businessId: t.businessId,
+      kind: 'gstr9c',
+      period: '032027',
+      payload: c.body.payload,
+    });
+    expect(saved.body).toMatchObject({ kindLabel: 'GSTR-9C', status: 'draft' });
+  });
+
+  it('the calendar estimates the late fee of an overdue return', async () => {
+    const t = await h.newTenant();
+    await t.call('PATCH', `/v1/businesses/${t.businessId}`, { gstin: OWN });
+    await startedOn(t, '2026-01-01');
+    const cal = (await t.call('GET', `/v1/filing-calendar?businessId=${t.businessId}&fy=2026`))
+      .body;
+    const apr = cal.rows.find((r: any) => r.month === '2026-04' && r.form === 'GSTR-3B');
+    expect(apr.overdue).toBe(true);
+    expect(apr.lateFee).toMatchObject({ cap: 2000, fee: 2000 });
+    expect(
+      cal.rows.find((r: any) => r.month === '2027-01' && r.form === 'GSTR-3B').lateFee,
+    ).toBeNull();
   });
 });

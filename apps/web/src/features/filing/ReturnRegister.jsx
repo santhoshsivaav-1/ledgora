@@ -5,7 +5,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { StatusChip } from '../../components/ui/Display';
 import { listBusinesses } from '../../lib/data/accounting';
-import { buildCmp08, buildGstr9, filingCalendar, fyOf, KIND_LABELS, listPacks, periodLabel, savePack, setTrackFrom, STATUS_TONES } from '../../lib/data/filing';
+import { buildCmp08, buildGst, buildGstr4, buildGstr9, buildGstr9c, filingCalendar, fyOf, KIND_LABELS, listPacks, periodLabel, savePack, setTrackFrom, STATUS_TONES } from '../../lib/data/filing';
 import { promptAction } from '../../components/ui/ConfirmModal';
 import { toast } from '../../components/ui/Toast';
 import { useEntitlements } from '../billing/useEntitlements';
@@ -69,7 +69,7 @@ export default function ReturnRegister() {
     setBuilding(key);
     try {
       const b = await build();
-      const pack = await savePack({ businessId, kind: b.kind, period: b.period, quarterly: b.kind === 'cmp08', payload: b.payload });
+      const pack = await savePack({ businessId, kind: b.kind, period: b.period, quarterly: b.kind === 'cmp08' || !!b.quarterly, payload: b.payload });
       navigate(`/filing/${pack.id}`);
     } catch (e) {
       toast(err(e), 'error');
@@ -78,6 +78,26 @@ export default function ReturnRegister() {
     }
   };
   const prepareGstr9 = () => buildAndSave('gstr9', () => buildGstr9(businessId, fy));
+  // X1: GSTR-1 / GSTR-3B built on the server from the books, the same code as the GST Returns screen.
+  const prepareGst = (row) => buildAndSave(`${row.kind}:${row.period}`, () => buildGst(businessId, row.kind, row.period, row.quarterly));
+  const prepareGstr4 = () => buildAndSave('gstr4', () => buildGstr4(businessId, fy));
+  // GSTR-9C: the books against GSTR-9. Adjustments explain why the books' turnover differs ("Unbilled revenue = -5000").
+  const prepareGstr9c = async () => {
+    const v = await promptAction({
+      title: `GSTR-9C · FY ${fy}-${String(fy + 1).slice(2)}`,
+      message: 'Adjustments to the books’ turnover, if any, as “reason = amount; reason = amount” (negative to subtract). Leave empty for none.',
+      defaultValue: '',
+      confirmLabel: 'Prepare',
+    });
+    if (v === null || v === undefined) return;
+    const adjustments = [];
+    for (const part of String(v).split(';').map((x) => x.trim()).filter(Boolean)) {
+      const m = /^(.+?)\s*=\s*(-?[\d,.]+)$/.exec(part);
+      if (!m) { toast(`Could not read “${part}”: use reason = amount`, 'warning'); return; }
+      adjustments.push({ label: m[1].trim(), amount: Number(m[2].replace(/,/g, '')) });
+    }
+    buildAndSave('gstr9c', () => buildGstr9c(businessId, fy, adjustments));
+  };
   const prepareCmp08 = async (row) => {
     const v = await promptAction({
       title: `CMP-08 · ${periodLabel(row.period, true)}`,
@@ -133,9 +153,14 @@ export default function ReturnRegister() {
             })}
           </select>
           {can('filing:prepare') && cal?.regType !== 'composition' && (
-            <button type="button" className="btn btn-secondary" disabled={!!building || !businessId} onClick={prepareGstr9} title="The annual return, worked out from this year's filed GSTR-1 and GSTR-3B">
-              {building === 'gstr9' ? 'Preparing…' : `Prepare GSTR-9 (FY ${fy}-${String(fy + 1).slice(2)})`}
-            </button>
+            <>
+              <button type="button" className="btn btn-secondary" disabled={!!building || !businessId} onClick={prepareGstr9} title="The annual return, worked out from this year's filed GSTR-1 and GSTR-3B">
+                {building === 'gstr9' ? 'Preparing…' : `Prepare GSTR-9 (FY ${fy}-${String(fy + 1).slice(2)})`}
+              </button>
+              <button type="button" className="btn btn-secondary" disabled={!!building || !businessId} onClick={prepareGstr9c} title="Reconcile the year's books with GSTR-9 (self-certified)">
+                {building === 'gstr9c' ? 'Preparing…' : 'Prepare GSTR-9C'}
+              </button>
+            </>
           )}
         </div>
       }
@@ -194,7 +219,10 @@ export default function ReturnRegister() {
                   {r.kind && r.beforeTracking && r.status === 'not_started' ? (
                     <span className="ui-help">Before you started</span>
                   ) : r.kind ? (
-                    <Status status={r.status} overdue={r.overdue} />
+                    <>
+                      <Status status={r.status} overdue={r.overdue} />
+                      {r.lateFee?.fee > 0 && <div className="ui-help" title={`${r.lateFee.days} days late; capped at ₹${r.lateFee.cap}. Interest at 18% a year is extra on tax paid late in cash.`}>Late fee about ₹{r.lateFee.fee}</div>}
+                    </>
                   ) : (
                     <span className="ui-help">{r.optional ? 'Optional' : 'Pay or file on the portal'}</span>
                   )}
@@ -204,7 +232,15 @@ export default function ReturnRegister() {
                   {r.packId ? (
                     <Link className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }} to={`/filing/${r.packId}`}>Open</Link>
                   ) : r.kind ? (
-                    r.kind === 'cmp08' ? (
+                    r.kind === 'gstr1' || r.kind === 'gstr3b' ? (
+                      <button type="button" className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }} disabled={!!building || !can('filing:prepare')} onClick={() => prepareGst(r)} title="Build it from your books on the server">
+                        {building === `${r.kind}:${r.period}` ? 'Preparing…' : 'Prepare'}
+                      </button>
+                    ) : r.kind === 'gstr4' ? (
+                      <button type="button" className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }} disabled={!!building || !can('filing:prepare')} onClick={prepareGstr4}>
+                        {building === 'gstr4' ? 'Preparing…' : 'Prepare'}
+                      </button>
+                    ) : r.kind === 'cmp08' ? (
                       <button type="button" className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }} disabled={!!building || !can('filing:prepare')} onClick={() => prepareCmp08(r)}>
                         {building === r.period ? 'Preparing…' : 'Prepare'}
                       </button>

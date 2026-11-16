@@ -6,14 +6,7 @@
 import type { Numeric } from './types.ts';
 import { gstinChecksumOk } from './gstin.ts';
 import { compositionTax } from './gstDue.ts';
-import {
-  monthOfRetPeriod,
-  retPeriodMonths,
-  validatePack,
-  type FilingIssue,
-  type FilingKind,
-  type Gstr3bCompare,
-} from './filing.ts';
+import { monthOfRetPeriod, type FilingIssue } from './filing.ts';
 
 const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const n = (v: Numeric) => Number(v) || 0;
@@ -507,31 +500,4 @@ export function validateCmp08(
       );
   }
   return out;
-}
-
-// ---- one entry point for every pack kind ---------------------------------------------------------------------------
-
-/** Checks a pack of any kind: the R1 kinds here, GSTR-1 / 3B / IMS in filing.ts. */
-export function validateAnyPack(
-  kind: FilingKind,
-  payload: unknown,
-  ctx: { gstin?: string; retPeriod?: string; quarterly?: boolean } = {},
-  cmp: Gstr3bCompare = {},
-): FilingIssue[] {
-  if (kind === 'gstr1a') return validateGstr1a(payload, ctx);
-  if (kind === 'gstr9') return validateGstr9(payload, ctx);
-  if (kind === 'cmp08') return validateCmp08(payload, ctx);
-  return validatePack(kind, payload, ctx, cmp);
-}
-
-/** The months a pack covers: a quarter for CMP-08 and QRMP returns, the whole financial year for GSTR-9. */
-export function packMonths(kind: FilingKind, period: string, quarterly: boolean): string[] {
-  const month = monthOfRetPeriod(period);
-  if (!month) return [];
-  if (kind === 'gstr9') {
-    if (month.slice(5, 7) !== '03') return [];
-    const fy = Number(month.slice(0, 4)) - 1;
-    return fyRetPeriods(fy).map((p) => monthOfRetPeriod(p)!);
-  }
-  return retPeriodMonths(period, kind === 'cmp08' ? true : quarterly);
 }

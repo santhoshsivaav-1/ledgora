@@ -1,19 +1,11 @@
+import { purchaseBookTotals } from '@ledgora/tax-engine';
 // Helpers shared by the GST returns pages: tax splits, the GSTR-2B reconciliation, CSV download and the filing steps (change 3.17).
 import { useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { toCsvLine, splitLineTax } from '../../utils';
 
-export const GST_TYPES = ['tax-invoice', 'credit-note'];
 // GSTR-1 Table 13 "nature of document" codes.
-export const DOC_ISSUE_NATURE = { 'tax-invoice': 1, 'bill-of-supply': 1, composition: 1, 'credit-note': 5, 'delivery-challan': 12 };
-export const DOC_NATURE_LABEL = { 1: 'Invoices for outward supply', 5: 'Credit notes', 12: 'Delivery challans' };
 export const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-export const QUARTERS = [
-  { id: 'Q1', label: 'Q1 (Apr–Jun)', months: [3, 4, 5] },
-  { id: 'Q2', label: 'Q2 (Jul–Sep)', months: [6, 7, 8] },
-  { id: 'Q3', label: 'Q3 (Oct–Dec)', months: [9, 10, 11] },
-  { id: 'Q4', label: 'Q4 (Jan–Mar)', months: [0, 1, 2] },
-];
 
 // v1.10.6 — audit L4: local copy removed, imported from utils above.
 
@@ -38,10 +30,17 @@ export function readFilingStatus(key) {
 // The per-line split lives in utils.js (splitLineTax) so it can be tested;
 // see v1.10.77 (#89) there.
 export const computeItemTaxSplit = splitLineTax;
+// Moved to the engine with the GST return builders (X1); re-exported so the screens' imports stay as they were.
+export {
+  GST_TYPES,
+  DOC_ISSUE_NATURE,
+  DOC_NATURE_LABEL,
+  QUARTERS,
+  getTaxableAmount,
+  purchaseBookTotals,
+  billIsInterstate,
+} from '@ledgora/tax-engine';
 
-export function getTaxableAmount(totals) {
-  return totals?.taxableAmount ?? ((totals?.subtotal || 0) - (totals?.totalDiscount || 0));
-}
 
 // ========== GSTR-2B reconciliation helpers ==========
 // Normalises an invoice number for fuzzy matching: uppercase, strip non-alphanumeric.
@@ -50,14 +49,6 @@ export function normInv(s) { return String(s || '').toUpperCase().replace(/[^A-Z
 // A purchase bill's taxable value, tax and invoice value as booked. Cess is
 // part of the invoice value the supplier reports in 2B (`val`); leaving it
 // out flagged every bill with cess as an amount mismatch.
-export function purchaseBookTotals(p) {
-  return (p?.items || []).reduce((acc, it) => {
-    const amount = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
-    const tax = amount * (Number(it.taxPercent) || 0) / 100;
-    const cess = amount * (Number(it.cessPercent) || 0) / 100;
-    return { taxable: acc.taxable + amount, tax: acc.tax + tax, cess: acc.cess + cess, total: acc.total + amount + tax + cess };
-  }, { taxable: 0, tax: 0, cess: 0, total: 0 });
-}
 
 // Given the raw GSTR-2B JSON `data` block and the user's purchase records, return
 // a flat array of reconciliation rows with status: matched | amount_mismatch |
@@ -167,18 +158,6 @@ export function buildReconciliation(twoBData, purchases, periodPurchases = purch
 // engine works from codes — a client known only by GSTIN, or a client abroad —
 // and filed IGST for an invoice that charged CGST + SGST. The name comparison
 // below remains only for bills saved before the flag existed.
-export function billIsInterstate(bill) {
-  const saved = bill.data?.totals?.isInterstate;
-  if (typeof saved === 'boolean') return saved;
-  const prof = bill.data?.profile;
-  const client = bill.data?.client;
-  const details = bill.data?.details;
-  if (client?.isSEZ) return true;
-  const sellerState = (prof?.state || '').trim().toLowerCase();
-  const placeOfSupply = (details?.placeOfSupply || client?.state || '').trim().toLowerCase();
-  if (!sellerState || !placeOfSupply) return false;
-  return sellerState !== placeOfSupply;
-}
 
 // ========== Filing Guide Steps ==========
 export const GSTR1_STEPS = [

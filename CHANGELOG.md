@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **GST returns built on the server, and the rest of the GST set.** The GSTR-1 and GSTR-3B builders moved from the
+  browser screen into the shared engine, checked against the files the screen produced before (byte for byte), so the
+  server, the screen and bulk actions for CAs all build the same return. New packs: GSTR-9C (books against GSTR-9) and
+  GSTR-4 (composition annual). New checks: e-invoice coverage, GSTR-3B against the portal's locked figures, and an
+  estimated late fee on every overdue return in the Return Register.
 - **Edit Log (Companies Act audit trail).** Every insert, change and delete in the books is written by the database to
   an append-only log, with who, when, from where and the values before and after. Nobody, not even the owner, can
   change, delete or switch it off. Utilities › Edit Log shows it with filters and exports a CSV for the auditor.

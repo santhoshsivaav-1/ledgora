@@ -13,17 +13,27 @@ file-ready phases 2–6 of [FILE_READY_PLAN.md](./FILE_READY_PLAN.md) map onto R
 
 ## Progress
 
+**R1 is complete.** Everything below is built, tested and in the app.
+
 | Item | Status | Where |
 |---|---|---|
-| R1.1 GSTR-1A | **Built.** Server compares today's GSTR-1 with the filed one, only inside the 1A window; 3B is then checked against GSTR-1 + 1A | `tax-engine/src/filingR1.ts`, `POST /v1/filing-packs/build/gstr1a`, GSTR-1 screen › GSTR-1A |
-| R1.2 GSTR-9 | **Built (worksheet).** Tables 4, 5, 6A, 7, 8, 9, 17 from the year's filed GSTR-1 and 3B; missing months are errors; what only the person knows is listed. Offline-tool JSON pending a portal sample (X3) | `buildGstr9`, `POST /v1/filing-packs/build/gstr9`, Return Register › Prepare GSTR-9 |
-| R1.3 GSTR-9C | Not started | |
-| R1.4 CMP-08 | **Built.** At the business's composition rate; GSTR-4 not started | `buildCmp08`, register CMP-08 rows |
-| R1.5 Edit log | **Built.** Database triggers on 29 book tables, append-only, unreadable across tenants, impossible to change or switch off; screen and auditor CSV | migration `0030_edit_log.sql`, `GET /v1/edit-log`, Utilities › Edit Log |
-| R1.6 more checks, X1–X5, R2–R8 | Not started | |
+| X1 Server-side builders | **Done.** The GSTR-1 and GSTR-3B tables and JSON moved from the browser screen into the engine. A golden test holds the engine to the files the screen downloaded before the move (a real browser, real documents), and the rewired screen was re-captured and is byte-identical. The server builds the same files | `packages/tax-engine/src/gstReturnsModel.js`, `POST /v1/filing-packs/build/gst`, `test/gstReturnsGolden.test.js` |
+| R1.1 GSTR-1A | **Done.** Compares today's GSTR-1 with the filed one, only inside the 1A window; 3B is then checked against the amended figures | `filingR1.ts`, `POST …/build/gstr1a` |
+| R1.2 GSTR-9 | **Done (worksheet).** Tables 4, 5, 6A, 7, 8, 9, 17 from the year's filed returns; missing months are errors | `buildGstr9`, `POST …/build/gstr9` |
+| R1.3 GSTR-9C | **Done (worksheet).** The year's books against GSTR-9 with the person's adjustments; unreconciled turnover, tax and ITC listed | `filingR1b.ts`, `POST …/build/gstr9c` |
+| R1.4 CMP-08 and GSTR-4 | **Done.** CMP-08 at the composition rate; GSTR-4 from the year's filed CMP-08s and purchases | `POST …/build/cmp08`, `…/build/gstr4` |
+| R1.5 Edit log | **Done.** Database triggers on 29 book tables, append-only, impossible to change or switch off; screen and auditor CSV | migration `0030`, Utilities › Edit Log |
+| R1.6 Pre-filing checks | **Done.** E-invoice coverage (above ₹5 crore; 30-day window at ₹10 crore), GSTR-3B against the portal's locked 3.1(a), late fee estimate on every overdue return, 18% interest helper | `einvoiceChecks`, `comparePortal3b`, `gstLateFee`, `gstInterest` |
 
-Tests for the built items: `tax-engine/test/filingR1.test.js`, `api/test/editLog.test.ts`, `api/test/filing.test.ts`
-(R1 block), browser `web/scripts/filing-e2e.mjs`.
+**Still needs a real upload (X3), so these are labelled worksheets, not portal files:** GSTR-9, GSTR-9C, GSTR-4, CMP-08 and
+GSTR-1A. The portal's offline tools take their own formats; a worksheet is what the person types in until one real
+upload of each is photographed into `docs/acceptance/`. GSTR-1 and GSTR-3B keep their JSON upload.
+
+Tests: `tax-engine/test/{filing,filingR1,filingR1b,gstReturnsGolden}.test.js`, `api/test/{filing,editLog}.test.ts`,
+browser `web/scripts/filing-e2e.mjs` (21 checks), golden capture `web/scripts/gst-golden-capture.mjs`.
+
+**Next: R2** (income tax from the books): year-versioned rules for the 2025 Act, AIS/TIS import, ITR-4 JSON, advance tax
+and challans, ITR-3.
 
 ## 1. Where Ledgora stands
 

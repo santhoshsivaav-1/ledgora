@@ -225,6 +225,13 @@
       "when": 1794760819736,
       "tag": "0031_filing_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794760820736,
+      "tag": "0032_filing_kinds_annual",
+      "breakpoints": true
     }
   ]
 }

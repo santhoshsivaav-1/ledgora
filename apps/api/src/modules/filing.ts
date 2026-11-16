@@ -17,7 +17,11 @@ import {
   requestChangesBody,
   reviewNoteBody,
   trackFromBody,
+  buildGstBody,
   buildGstr1aBody,
+  buildGstr4Body,
+  buildGstr9cBody,
+  portal3bBody,
   buildGstr9Body,
   buildCmp08Body,
   uuid,
@@ -35,6 +39,14 @@ import {
   retPeriodOf,
   validateAnyPack,
   packMonths,
+  buildGstReturnFiles,
+  periodOfReturn,
+  gstReturnsModel,
+  buildGstr4,
+  buildGstr9c,
+  comparePortal3b,
+  einvoiceChecks,
+  gstLateFee,
   buildGstr9,
   buildCmp08,
   gstr1aPack,
@@ -51,6 +63,7 @@ import { rulesOfRole } from '../middleware/permission.ts';
 import { sendMail } from '../mail/index.ts';
 import { loadBusiness } from './businesses.ts';
 import { settingValue } from './settingsStore.ts';
+import { DEFAULT_PROFILE, SORT, getKv, listDocs, type Doc } from './workspace/store.ts';
 
 const { filingPacks, filingEvents, businesses, businessSettings, member, user, organizations } =
   schema;
@@ -245,6 +258,35 @@ async function mailReviewers(deps: Deps, a: OrgContext, pack: Pack, businessName
 
 // ---- R1 builders --------------------------------------------------------------------------------------------------
 
+/** Aggregate turnover of the previous year from the business profile (the GSTR-1 `gt`), or the "above ₹5 crore" flag. */
+const aatoOf = (profile: Doc) =>
+  Number(profile.prevFYTurnover) || (profile.aatoAbove5Cr ? 5e7 + 1 : 0);
+
+/**
+ * The business's documents as the GST Returns screen loads them (X1): its workspace profile (the active one, or the
+ * saved profile with the business's GSTIN), bills, purchases, expenses and other income (one collection, `kind`),
+ * money received (receipts without the payment-out vouchers), each in the screen's own order, since the order of the
+ * invoices is the order of the rows in the file.
+ */
+async function returnDocsOf(tx: Tx, gstin: string) {
+  const sorted = async (c: 'bills' | 'purchases' | 'expenses' | 'receipts' | 'profiles') =>
+    (await listDocs(tx, c)).sort(SORT[c]);
+  const active = (await getKv<Doc>(tx, 'profile')) ?? DEFAULT_PROFILE;
+  const sameGstin = (p: Doc) => String(p.gstin ?? '').toUpperCase() === gstin.toUpperCase();
+  const profile = sameGstin(active)
+    ? active
+    : ((await sorted('profiles')).find(sameGstin) ?? active);
+  const money = await sorted('expenses');
+  return {
+    profile,
+    bills: await sorted('bills'),
+    purchases: await sorted('purchases'),
+    expenses: money.filter((e) => e.kind !== 'income'),
+    otherIncome: money.filter((e) => e.kind === 'income'),
+    receipts: (await sorted('receipts')).filter((r) => r.direction !== 'out'),
+  };
+}
+
 /** The live pack of a return, or undefined. */
 async function packOf(tx: Tx, businessId: string, kind: FilingKind, period: string) {
   const [p] = await tx
@@ -260,6 +302,24 @@ async function packOf(tx: Tx, businessId: string, kind: FilingKind, period: stri
       ),
     );
   return p;
+}
+
+/** The live packs of some kinds whose period ends in the financial year starting `fy`, recorded as filed. */
+async function filedOfYear(tx: Tx, businessId: string, kinds: FilingKind[], fy: number) {
+  return tx
+    .select({ kind: filingPacks.kind, payload: filingPacks.payload })
+    .from(filingPacks)
+    .where(
+      and(
+        eq(filingPacks.businessId, businessId),
+        eq(filingPacks.status, 'filed'),
+        inArray(filingPacks.kind, kinds),
+        isNull(filingPacks.supersededAt),
+        isNull(filingPacks.deletedAt),
+        gte(filingPacks.periodTo, `${fy}-04-01`),
+        lte(filingPacks.periodTo, `${fy + 1}-03-31`),
+      ),
+    );
 }
 
 /** GSTR-1A is open only after the period's GSTR-1 is filed and until its GSTR-3B is filed. */
@@ -296,6 +356,7 @@ const FORM_KIND: Record<string, FilingKind> = {
   'GSTR-1': 'gstr1',
   'GSTR-3B': 'gstr3b',
   'CMP-08': 'cmp08',
+  'GSTR-4': 'gstr4',
 };
 
 /** Every GST return due in the financial year starting `fy`, with the pack (if any) and whether it is overdue. */
@@ -316,6 +377,7 @@ async function calendarOf(tx: Tx, businessId: string, fy: number) {
     );
   const byKey = new Map(packs.map((p) => [`${p.kind}:${p.period}`, p]));
   const now = today();
+  const aato = biz.gstin ? aatoOf((await returnDocsOf(tx, biz.gstin)).profile) : 0;
   // Returns of months before the business started using the app were most likely filed elsewhere: they are listed,
   // never counted as overdue. Tracking starts with the month before the business was added.
   const added = new Date(biz.createdAt.getTime() + 5.5 * 3_600_000);
@@ -347,6 +409,11 @@ async function calendarOf(tx: Tx, businessId: string, fy: number) {
         filedOn: pack?.filedOn ?? null,
         beforeTracking: month < tracked,
         overdue: !due.optional && month >= tracked && due.due < now && status !== 'filed',
+        // R1.6: what being late costs (filed late, or not filed and past due); null when not late or not estimated.
+        lateFee:
+          month >= tracked && !due.optional && (pack?.filedOn ?? now) > due.due
+            ? gstLateFee(due.form, due.due, pack?.filedOn ?? now, { aato: aato ?? 0 })
+            : null,
       });
     }
   }
@@ -497,6 +564,15 @@ export function filingModule({ route }: Registrar) {
           itc2b: body.itc2b ?? null,
         },
       );
+      // R1.6: e-invoice coverage of the period's B2B invoices (above ₹5 crore; 30-day window at ₹10 crore and above).
+      if (body.kind === 'gstr1') {
+        const docs = await returnDocsOf(tx, biz.gstin);
+        const inPeriod = docs.bills.filter(
+          (b) =>
+            String(b.invoiceDate ?? '') >= bounds.from && String(b.invoiceDate ?? '') <= bounds.to,
+        );
+        issues.push(...einvoiceChecks(inPeriod, { aato: aatoOf(docs.profile), asOf: today() }));
+      }
       const ids = new Set(issues.map((i) => i.id));
       const acknowledged = [...new Set(body.acknowledged)].filter((id) => ids.has(id));
       const [prev] = await tx
@@ -815,6 +891,177 @@ export function filingModule({ route }: Registrar) {
         after: { status: to, reason: body.reason },
       });
       return summary(row!);
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/filing-packs/build/gst',
+    tag: 'Filing',
+    summary:
+      'GSTR-1 or GSTR-3B built on the server from the business’s documents (the same engine code as the GST Returns screen). Returns the file to save',
+    permission: 'filing:prepare',
+    body: buildGstBody,
+    handler: async ({ tx, body }) => {
+      const biz = await loadBusiness(tx, body.businessId);
+      if (!biz.gstin)
+        throw new AppError(
+          'unprocessable',
+          'Add the GSTIN of this business before preparing returns',
+        );
+      const docs = await returnDocsOf(tx, biz.gstin);
+      const files = buildGstReturnFiles(docs, periodOfReturn(body.period, body.quarterly));
+      if (body.kind === 'gstr1') {
+        if (files.gstr1.empty)
+          throw new AppError(
+            'unprocessable',
+            'No invoices in this period: file a NIL GSTR-1 on the portal',
+          );
+        if (files.gstr1.blocked.length)
+          throw new AppError(
+            'unprocessable',
+            `The portal would refuse this file: ${files.gstr1.blocked.join(' · ')}`,
+            {
+              blocked: files.gstr1.blocked,
+            },
+          );
+        return {
+          kind: 'gstr1',
+          period: body.period,
+          quarterly: body.quarterly,
+          payload: files.gstr1.json,
+          warnings: files.gstr1.warnings,
+        };
+      }
+      if (!files.gstr3b)
+        throw new AppError(
+          'unprocessable',
+          'Nothing to report in this period: file a NIL GSTR-3B on the portal',
+        );
+      return {
+        kind: 'gstr3b',
+        period: body.period,
+        quarterly: body.quarterly,
+        payload: files.gstr3b,
+        warnings: [],
+      };
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/filing-packs/build/gstr4',
+    tag: 'Filing',
+    summary:
+      'GSTR-4 (composition, annual) from the year’s filed CMP-08 packs and purchase bills. Returns the file to save',
+    permission: 'filing:prepare',
+    body: buildGstr4Body,
+    handler: async ({ tx, body }) => {
+      const biz = await loadBusiness(tx, body.businessId);
+      if ((await settingValue(tx, biz.id, 'gst.regType')) !== 'composition')
+        throw new AppError(
+          'unprocessable',
+          'GSTR-4 is for composition dealers (Settings › GST › Registration type)',
+        );
+      const cmp = await filedOfYear(tx, biz.id, ['cmp08'], body.fy);
+      const docs = await returnDocsOf(tx, biz.gstin ?? '');
+      return {
+        kind: 'gstr4',
+        period: `03${body.fy + 1}`,
+        payload: buildGstr4({
+          gstin: biz.gstin ?? '',
+          fy: body.fy,
+          cmp08: cmp.map((p) => p.payload),
+          purchases: docs.purchases,
+        }),
+      };
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/filing-packs/build/gstr9c',
+    tag: 'Filing',
+    summary:
+      'GSTR-9C: the year’s books (from the documents) against the saved GSTR-9, with the person’s adjustments. Returns the file to save',
+    permission: 'filing:prepare',
+    body: buildGstr9cBody,
+    handler: async ({ tx, body }) => {
+      const biz = await loadBusiness(tx, body.businessId);
+      const g9 = await packOf(tx, biz.id, 'gstr9', `03${body.fy + 1}`);
+      if (!g9)
+        throw new AppError(
+          'conflict',
+          'Prepare GSTR-9 for the year first; GSTR-9C reconciles the books with it',
+        );
+      const docs = await returnDocsOf(tx, biz.gstin ?? '');
+      const m = gstReturnsModel(docs, {
+        mode: 'fy',
+        fy: { value: String(body.fy), from: `${body.fy}-04-01`, to: `${body.fy + 1}-03-31` },
+      });
+      const a = m.supplies31a;
+      // table4.net is built key by key in the engine's JavaScript, so its shape is stated here.
+      const net = m.table4.net as { igst: number; cgst: number; sgst: number; cess: number };
+      const z = m.zeroRated31b;
+      const books = {
+        turnover: a.taxable + z.taxable + m.exempt31c + m.nonGst31e,
+        taxable: a.taxable,
+        tax: { iamt: a.igst + z.igst, camt: a.cgst, samt: a.sgst, csamt: a.cess + z.cess },
+        itc: {
+          iamt: net.igst,
+          camt: net.cgst,
+          samt: net.sgst,
+          csamt: net.cess,
+        },
+      };
+      return {
+        kind: 'gstr9c',
+        period: `03${body.fy + 1}`,
+        payload: buildGstr9c({
+          gstin: biz.gstin ?? '',
+          fy: body.fy,
+          gstr9: g9.payload,
+          books,
+          adjustments: body.adjustments,
+        }),
+      };
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/filing-packs/:id/compare-portal',
+    tag: 'Filing',
+    summary:
+      'GSTR-3B: compare the pack with the 3.1(a) figures the portal auto-filled (and locked); differences become warnings to accept',
+    permission: 'filing:prepare',
+    params: idParams,
+    body: portal3bBody,
+    handler: async ({ tx, auth, params, body }) => {
+      const p = await loadPack(tx, params.id, auth);
+      if (p.kind !== 'gstr3b')
+        throw new AppError('unprocessable', 'Only GSTR-3B is compared with the portal');
+      if (!isCurrent(p) || !['draft', 'ready', 'changes_requested'].includes(p.status))
+        throw new AppError('conflict', 'Compare before the pack goes for review or is filed');
+      const kept = (p.issues as FilingIssue[]).filter((i) => i.code !== 'PORTAL_3B_DIFFERS');
+      const found = comparePortal3b(p.payload, body);
+      const issues = [...kept, ...found];
+      const isReady = readiness(issues, p.acknowledged as string[]).ready;
+      const status = p.status === 'changes_requested' ? p.status : initialStatus(isReady);
+      const [row] = await tx
+        .update(filingPacks)
+        .set({ issues, status, updatedAt: new Date() })
+        .where(eq(filingPacks.id, p.id))
+        .returning();
+      await event(tx, auth, row!, {
+        kind: 'status',
+        from: p.status,
+        to: status,
+        body: found.length
+          ? `Compared with the portal: ${found.length} figure(s) differ`
+          : 'Compared with the portal: every figure matches',
+      });
+      return { ...summary(row!), differences: found };
     },
   });
 

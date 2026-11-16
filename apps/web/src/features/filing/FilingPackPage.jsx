@@ -54,6 +54,16 @@ const CMP08_STEPS = [
   { title: 'Enter the figures', details: 'Outward supplies (turnover) with the CGST and SGST of this pack, and tax on inward supplies under reverse charge.' },
   { title: 'Pay and file', details: 'Pay the tax from the cash ledger, file with EVC or DSC, and record the ARN here.' },
 ];
+const GSTR4_STEPS = [
+  { title: 'Open GSTR-4', details: 'Services → Returns → Annual Return → the financial year → GSTR-4 → Prepare Online.' },
+  { title: 'Compare with this pack', details: 'Table 5 (tax paid with each CMP-08) is filled by the portal: it should match this pack. Enter Table 4 (inward supplies by supplier, reverse charge, import of services) and Table 6 (outward supplies by rate) from this pack.' },
+  { title: 'Fill the rest and file', details: 'TDS/TCS credit (Table 7) if any; the portal works out Table 8. File with EVC or DSC by 30 April and record the ARN here.' },
+];
+const GSTR9C_STEPS = [
+  { title: 'File GSTR-9 first', details: 'GSTR-9C reconciles your books with the GSTR-9 already filed for the year.' },
+  { title: 'Prepare in the GSTR-9C offline tool', details: 'Download the GSTR-9C offline utility from the portal (Downloads › Offline tools), import the GSTR-9 the portal gives you, and enter Tables 5, 7, 9 and 12 from this pack with the reasons for every difference.' },
+  { title: 'Sign, upload and record', details: 'Generate the JSON, sign it with DSC or EVC (self-certified), upload it on the portal and record the ARN here.' },
+];
 const IMS_STEPS = [
   { title: 'Open IMS', details: 'gst.gov.in → Services → Returns → Invoice Management System (IMS) → Inward supplies.' },
   { title: 'Act on each invoice', details: 'For each supplier invoice below, choose Accept, Reject or Pending as listed. Reject only what you never bought: rejecting removes the credit.' },
@@ -185,6 +195,23 @@ export default function FilingPackPage() {
     if (!reason) return;
     act(() => api.reopenPack(pack.id, reason), 'Reopened');
   };
+  // R1.6: 3.1(a) is auto-filled on the portal from GSTR-1/1A and locked; the person types what the portal shows.
+  const comparePortal = async () => {
+    const v = await promptAction({
+      title: 'Compare with the portal',
+      message: 'GSTR-3B 3.1(a) as the portal shows it: taxable value, IGST, CGST, SGST (and cess), separated by commas',
+      defaultValue: '',
+      confirmLabel: 'Compare',
+    });
+    if (!v) return;
+    const nums = String(v).split(',').map((x) => x.trim()).map((x) => (x === '' ? undefined : Number(x.replace(/[₹\s]/g, ''))));
+    if (nums.some((x) => x !== undefined && !Number.isFinite(x))) { toast('Use numbers separated by commas', 'warning'); return; }
+    const [txval, iamt, camt, samt, csamt] = nums;
+    act(async () => {
+      const r = await api.comparePortal(pack.id, { txval, iamt, camt, samt, csamt });
+      toast(r.differences.length ? `${r.differences.length} figure(s) differ from the portal — see the warnings` : 'Every figure matches the portal', r.differences.length ? 'warning' : 'success');
+    }, null);
+  };
   const saveAcks = () => act(() => api.acknowledge(pack.id, [...picked]), 'Saved');
   const postComment = () => {
     if (!comment.trim()) return;
@@ -192,7 +219,7 @@ export default function FilingPackPage() {
   };
 
   const canFile = current && can('filing:record') && (pack.status === 'approved' || (pack.status === 'ready' && !pack.reviewRequired));
-  const steps = { gstr1: GSTR1_UPLOAD_STEPS, gstr3b: GSTR3B_UPLOAD_STEPS, gstr1a: GSTR1A_STEPS, gstr9: GSTR9_STEPS, cmp08: CMP08_STEPS }[pack.kind] ?? IMS_STEPS;
+  const steps = { gstr1: GSTR1_UPLOAD_STEPS, gstr3b: GSTR3B_UPLOAD_STEPS, gstr1a: GSTR1A_STEPS, gstr9: GSTR9_STEPS, cmp08: CMP08_STEPS, gstr4: GSTR4_STEPS, gstr9c: GSTR9C_STEPS }[pack.kind] ?? IMS_STEPS;
   // A CA sends its own work to the business for approval; anyone else sends it to the CA.
   const reviewer = role === 'ca' ? 'the business' : 'your CA';
 
@@ -234,6 +261,9 @@ export default function FilingPackPage() {
                 <button className="btn btn-primary" onClick={approve} disabled={busy}><ClipboardCheck size={15} /> Approve</button>
                 <button className="btn btn-secondary" onClick={sendBack} disabled={busy}>Send back</button>
               </>
+            )}
+            {current && pack.kind === 'gstr3b' && can('filing:prepare') && ['draft', 'ready', 'changes_requested'].includes(pack.status) && (
+              <button className="btn btn-secondary" onClick={comparePortal} disabled={busy} title="Check the pack against the figures the portal auto-filled">Compare with portal</button>
             )}
             {canFile && <button className="btn btn-primary" onClick={() => setRecording(true)} disabled={busy}>{pack.kind === 'ims' ? 'Record as done' : 'Record as filed'}</button>}
             {pack.status === 'filed' && (role === 'owner' || role === 'admin') && (

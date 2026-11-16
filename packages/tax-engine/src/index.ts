@@ -48,3 +48,6 @@ export * from './einvoice.ts';
 export * from './itr3.ts';
 export * from './filing.ts';
 export * from './filingR1.ts';
+export * from './gstReturnTables.js';
+export * from './gstReturnsModel.js';
+export * from './filingR1b.ts';

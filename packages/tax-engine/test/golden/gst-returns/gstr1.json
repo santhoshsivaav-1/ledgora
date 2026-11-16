@@ -1,0 +1,261 @@
+{
+  "gstin": "33ABCDE1234F1Z7",
+  "fp": "102026",
+  "gt": 0,
+  "cur_gt": 0,
+  "version": "GST3.1.6",
+  "hash": "hash",
+  "b2b": [
+    {
+      "ctin": "29AABCU9603R1ZJ",
+      "inv": [
+        {
+          "inum": "INV/2026/002",
+          "idt": "05-10-2026",
+          "val": 42480,
+          "pos": "29",
+          "rchrg": "N",
+          "inv_typ": "R",
+          "itms": [
+            {
+              "num": 1,
+              "itm_det": {
+                "rt": 18,
+                "txval": 36000,
+                "iamt": 6480,
+                "camt": 0,
+                "samt": 0,
+                "csamt": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "33AABCU9603R1ZU",
+      "inv": [
+        {
+          "inum": "INV/2026/001",
+          "idt": "03-10-2026",
+          "val": 120240,
+          "pos": "33",
+          "rchrg": "N",
+          "inv_typ": "R",
+          "itms": [
+            {
+              "num": 1,
+              "itm_det": {
+                "rt": 12,
+                "txval": 2000,
+                "iamt": 0,
+                "camt": 120,
+                "samt": 120,
+                "csamt": 0
+              }
+            },
+            {
+              "num": 2,
+              "itm_det": {
+                "rt": 18,
+                "txval": 100000,
+                "iamt": 0,
+                "camt": 9000,
+                "samt": 9000,
+                "csamt": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "b2cs": [
+    {
+      "sply_ty": "INTRA",
+      "pos": "33",
+      "rt": 18,
+      "txval": 2500,
+      "iamt": 0,
+      "camt": 225,
+      "samt": 225,
+      "csamt": 0
+    }
+  ],
+  "b2cl": [
+    {
+      "pos": "32",
+      "inv": [
+        {
+          "inum": "INV/2026/004",
+          "idt": "10-10-2026",
+          "val": 212400,
+          "itms": [
+            {
+              "num": 1,
+              "itm_det": {
+                "rt": 18,
+                "txval": 180000,
+                "iamt": 32400,
+                "csamt": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "cdnr": [
+    {
+      "ctin": "33AABCU9603R1ZU",
+      "nt": [
+        {
+          "ntty": "C",
+          "nt_num": "CN/2026/001",
+          "nt_dt": "20-10-2026",
+          "val": 1120,
+          "pos": "33",
+          "rchrg": "N",
+          "inv_typ": "R",
+          "itms": [
+            {
+              "num": 1,
+              "itm_det": {
+                "rt": 12,
+                "txval": 1000,
+                "iamt": 0,
+                "camt": 60,
+                "samt": 60,
+                "csamt": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "exp": [
+    {
+      "exp_typ": "WPAY",
+      "inv": [
+        {
+          "inum": "INV/2026/005",
+          "idt": "12-10-2026",
+          "val": 118000,
+          "itms": [
+            {
+              "txval": 100000,
+              "rt": 18,
+              "iamt": 18000,
+              "csamt": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nil": {
+    "inv": [
+      {
+        "sply_ty": "INTRAB2C",
+        "expt_amt": 1000,
+        "nil_amt": 600,
+        "ngsup_amt": 0
+      }
+    ]
+  },
+  "hsn": {
+    "data": [
+      {
+        "num": 1,
+        "hsn_sc": "4202",
+        "desc": "Bag",
+        "uqc": "OTH",
+        "qty": 1,
+        "rt": 12,
+        "txval": 1000,
+        "iamt": 0,
+        "camt": 60,
+        "samt": 60,
+        "csamt": 0
+      },
+      {
+        "num": 2,
+        "hsn_sc": "998314",
+        "desc": "Software",
+        "uqc": "NA",
+        "qty": 0,
+        "rt": 18,
+        "txval": 100000,
+        "iamt": 18000,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "num": 3,
+        "hsn_sc": "8471",
+        "desc": "Server",
+        "uqc": "OTH",
+        "qty": 8,
+        "rt": 18,
+        "txval": 282500,
+        "iamt": 32400,
+        "camt": 9225,
+        "samt": 9225,
+        "csamt": 0
+      },
+      {
+        "num": 4,
+        "hsn_sc": "8528",
+        "desc": "Monitor",
+        "uqc": "OTH",
+        "qty": 3,
+        "rt": 18,
+        "txval": 36000,
+        "iamt": 6480,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      }
+    ]
+  },
+  "doc_issue": {
+    "doc_det": [
+      {
+        "doc_num": 1,
+        "docs": [
+          {
+            "num": 1,
+            "from": "BOS/2026/001",
+            "to": "BOS/2026/001",
+            "totnum": 1,
+            "cancel": 0,
+            "net_issue": 1
+          },
+          {
+            "num": 2,
+            "from": "INV/2026/001",
+            "to": "INV/2026/006",
+            "totnum": 6,
+            "cancel": 1,
+            "net_issue": 5
+          }
+        ]
+      },
+      {
+        "doc_num": 5,
+        "docs": [
+          {
+            "num": 1,
+            "from": "CN/2026/001",
+            "to": "CN/2026/001",
+            "totnum": 1,
+            "cancel": 0,
+            "net_issue": 1
+          }
+        ]
+      }
+    ]
+  }
+}

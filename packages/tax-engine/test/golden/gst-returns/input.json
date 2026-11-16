@@ -1,0 +1,966 @@
+{
+  "profile": {
+    "pan": "",
+    "pin": "",
+    "city": "",
+    "ifsc": "",
+    "logo": "",
+    "email": "golden1794761889470@example.com",
+    "gstin": "33ABCDE1234F1Z7",
+    "phone": "",
+    "state": "Tamil Nadu",
+    "upiId": "",
+    "address": "",
+    "country": "India",
+    "bankName": "",
+    "signature": "",
+    "businessName": "Golden Traders",
+    "accountNumber": "",
+    "googleClientId": "",
+    "googleDriveFolder": "GST Billing Invoices"
+  },
+  "bills": [
+    {
+      "id": "BOS/2026/001",
+      "data": {
+        "items": [
+          {
+            "hsn": "1209",
+            "name": "Seeds",
+            "rate": 250,
+            "unit": "NOS",
+            "quantity": 4,
+            "taxPercent": 0
+          }
+        ],
+        "client": {
+          "name": "Farmer",
+          "gstin": "",
+          "state": "Tamil Nadu",
+          "address": "Farmer street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 0,
+          "igst": 0,
+          "sgst": 0,
+          "lines": [
+            {
+              "qty": 4,
+              "tax": 0,
+              "cess": 0,
+              "disc": 0,
+              "rate": 250,
+              "gross": 1000,
+              "taxPct": 0,
+              "cessPct": 0,
+              "taxable": 1000,
+              "afterDisc": 1000
+            }
+          ],
+          "total": 1000,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 1000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": false,
+          "taxInclusive": false,
+          "netReceivable": 1000,
+          "taxableAmount": 1000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 0,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-22",
+          "invoiceNumber": "BOS/2026/001",
+          "placeOfSupply": "Tamil Nadu"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "bill-of-supply",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Farmer",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-22",
+      "invoiceType": "bill-of-supply",
+      "totalAmount": 1000,
+      "invoiceNumber": "BOS/2026/001",
+      "totalTaxAmount": 0
+    },
+    {
+      "id": "CN/2026/001",
+      "data": {
+        "items": [
+          {
+            "hsn": "4202",
+            "name": "Bag",
+            "rate": 1000,
+            "unit": "NOS",
+            "quantity": 1,
+            "taxPercent": 12
+          }
+        ],
+        "client": {
+          "name": "Chennai Retail Pvt Ltd",
+          "gstin": "33AABCU9603R1ZU",
+          "state": "Tamil Nadu",
+          "address": "Chennai Retail Pvt Ltd street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 60,
+          "igst": 0,
+          "sgst": 60,
+          "lines": [
+            {
+              "qty": 1,
+              "tax": 120,
+              "cess": 0,
+              "disc": 0,
+              "rate": 1000,
+              "gross": 1000,
+              "taxPct": 12,
+              "cessPct": 0,
+              "taxable": 1000,
+              "afterDisc": 1000
+            }
+          ],
+          "total": 1120,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 1000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": false,
+          "taxInclusive": false,
+          "netReceivable": 1120,
+          "taxableAmount": 1000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 120,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-20",
+          "invoiceNumber": "CN/2026/001",
+          "placeOfSupply": "Tamil Nadu"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "credit-note",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Chennai Retail Pvt Ltd",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-20",
+      "invoiceType": "credit-note",
+      "totalAmount": 1120,
+      "invoiceNumber": "CN/2026/001",
+      "totalTaxAmount": 120
+    },
+    {
+      "id": "INV/2026/006",
+      "data": {
+        "items": [
+          {
+            "hsn": "8471",
+            "name": "Laptop",
+            "rate": 50000,
+            "unit": "NOS",
+            "quantity": 1,
+            "taxPercent": 18
+          }
+        ],
+        "client": {
+          "name": "Chennai Retail Pvt Ltd",
+          "gstin": "33AABCU9603R1ZU",
+          "state": "Tamil Nadu",
+          "address": "Chennai Retail Pvt Ltd street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 4500,
+          "igst": 0,
+          "sgst": 4500,
+          "lines": [
+            {
+              "qty": 1,
+              "tax": 9000,
+              "cess": 0,
+              "disc": 0,
+              "rate": 50000,
+              "gross": 50000,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 50000,
+              "afterDisc": 50000
+            }
+          ],
+          "total": 59000,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 50000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": false,
+          "taxInclusive": false,
+          "netReceivable": 59000,
+          "taxableAmount": 50000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 9000,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-15",
+          "invoiceNumber": "INV/2026/006",
+          "placeOfSupply": "Tamil Nadu"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "cancelled",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Chennai Retail Pvt Ltd",
+      "paidAmount": 0,
+      "cancelledAt": "2026-10-15T10:00:00.000Z",
+      "invoiceDate": "2026-10-15",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 59000,
+      "invoiceNumber": "INV/2026/006",
+      "totalTaxAmount": 9000
+    },
+    {
+      "id": "INV/2026/005",
+      "data": {
+        "items": [
+          {
+            "hsn": "998314",
+            "name": "Software",
+            "rate": 100000,
+            "unit": "NOS",
+            "quantity": 1,
+            "taxPercent": 18
+          }
+        ],
+        "client": {
+          "name": "Acme Inc",
+          "gstin": "",
+          "state": "",
+          "address": "Acme Inc street",
+          "country": "United States"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 0,
+          "igst": 18000,
+          "sgst": 0,
+          "lines": [
+            {
+              "qty": 1,
+              "tax": 18000,
+              "cess": 0,
+              "disc": 0,
+              "rate": 100000,
+              "gross": 100000,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 100000,
+              "afterDisc": 100000
+            }
+          ],
+          "total": 118000,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 100000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": true,
+          "taxInclusive": false,
+          "netReceivable": 118000,
+          "taxableAmount": 100000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 18000,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-12",
+          "invoiceNumber": "INV/2026/005",
+          "placeOfSupply": ""
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Acme Inc",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-12",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 118000,
+      "invoiceNumber": "INV/2026/005",
+      "totalTaxAmount": 18000
+    },
+    {
+      "id": "INV/2026/004",
+      "data": {
+        "items": [
+          {
+            "hsn": "8471",
+            "name": "Server",
+            "rate": 180000,
+            "unit": "NOS",
+            "quantity": 1,
+            "taxPercent": 18
+          }
+        ],
+        "client": {
+          "name": "Kochi Buyer",
+          "gstin": "",
+          "state": "Kerala",
+          "address": "Kochi Buyer street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 0,
+          "igst": 32400,
+          "sgst": 0,
+          "lines": [
+            {
+              "qty": 1,
+              "tax": 32400,
+              "cess": 0,
+              "disc": 0,
+              "rate": 180000,
+              "gross": 180000,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 180000,
+              "afterDisc": 180000
+            }
+          ],
+          "total": 212400,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 180000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": true,
+          "taxInclusive": false,
+          "netReceivable": 212400,
+          "taxableAmount": 180000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 32400,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-10",
+          "invoiceNumber": "INV/2026/004",
+          "placeOfSupply": "Kerala"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Kochi Buyer",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-10",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 212400,
+      "invoiceNumber": "INV/2026/004",
+      "totalTaxAmount": 32400
+    },
+    {
+      "id": "INV/2026/003",
+      "data": {
+        "items": [
+          {
+            "hsn": "8471",
+            "name": "Mouse",
+            "rate": 500,
+            "unit": "NOS",
+            "quantity": 5,
+            "taxPercent": 18
+          },
+          {
+            "hsn": "1006",
+            "name": "Rice",
+            "rate": 60,
+            "unit": "NOS",
+            "quantity": 10,
+            "supplyKind": "nil",
+            "taxPercent": 0
+          }
+        ],
+        "client": {
+          "name": "Walk-in",
+          "gstin": "",
+          "state": "Tamil Nadu",
+          "address": "Walk-in street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 225,
+          "igst": 0,
+          "sgst": 225,
+          "lines": [
+            {
+              "qty": 5,
+              "tax": 450,
+              "cess": 0,
+              "disc": 0,
+              "rate": 500,
+              "gross": 2500,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 2500,
+              "afterDisc": 2500
+            },
+            {
+              "qty": 10,
+              "tax": 0,
+              "cess": 0,
+              "disc": 0,
+              "rate": 60,
+              "gross": 600,
+              "taxPct": 0,
+              "cessPct": 0,
+              "taxable": 600,
+              "afterDisc": 600
+            }
+          ],
+          "total": 3550,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 3100,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": false,
+          "taxInclusive": false,
+          "netReceivable": 3550,
+          "taxableAmount": 3100,
+          "totalDiscount": 0,
+          "totalTaxAmount": 450,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-08",
+          "invoiceNumber": "INV/2026/003",
+          "placeOfSupply": "Tamil Nadu"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Walk-in",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-08",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 3550,
+      "invoiceNumber": "INV/2026/003",
+      "totalTaxAmount": 450
+    },
+    {
+      "id": "INV/2026/002",
+      "data": {
+        "items": [
+          {
+            "hsn": "8528",
+            "name": "Monitor",
+            "rate": 12000,
+            "unit": "NOS",
+            "quantity": 3,
+            "taxPercent": 18
+          }
+        ],
+        "client": {
+          "name": "Bengaluru Tech LLP",
+          "gstin": "29AABCU9603R1ZJ",
+          "state": "Karnataka",
+          "address": "Bengaluru Tech LLP street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 0,
+          "igst": 6480,
+          "sgst": 0,
+          "lines": [
+            {
+              "qty": 3,
+              "tax": 6480,
+              "cess": 0,
+              "disc": 0,
+              "rate": 12000,
+              "gross": 36000,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 36000,
+              "afterDisc": 36000
+            }
+          ],
+          "total": 42480,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 36000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": true,
+          "taxInclusive": false,
+          "netReceivable": 42480,
+          "taxableAmount": 36000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 6480,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-05",
+          "invoiceNumber": "INV/2026/002",
+          "placeOfSupply": "Karnataka"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Bengaluru Tech LLP",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-05",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 42480,
+      "invoiceNumber": "INV/2026/002",
+      "totalTaxAmount": 6480
+    },
+    {
+      "id": "INV/2026/001",
+      "data": {
+        "items": [
+          {
+            "hsn": "8471",
+            "name": "Laptop",
+            "rate": 50000,
+            "unit": "NOS",
+            "quantity": 2,
+            "taxPercent": 18
+          },
+          {
+            "hsn": "4202",
+            "name": "Bag",
+            "rate": 1000,
+            "unit": "NOS",
+            "quantity": 2,
+            "taxPercent": 12
+          }
+        ],
+        "client": {
+          "name": "Chennai Retail Pvt Ltd",
+          "gstin": "33AABCU9603R1ZU",
+          "state": "Tamil Nadu",
+          "address": "Chennai Retail Pvt Ltd street",
+          "country": "India"
+        },
+        "totals": {
+          "cess": 0,
+          "cgst": 9120,
+          "igst": 0,
+          "sgst": 9120,
+          "lines": [
+            {
+              "qty": 2,
+              "tax": 18000,
+              "cess": 0,
+              "disc": 0,
+              "rate": 50000,
+              "gross": 100000,
+              "taxPct": 18,
+              "cessPct": 0,
+              "taxable": 100000,
+              "afterDisc": 100000
+            },
+            {
+              "qty": 2,
+              "tax": 240,
+              "cess": 0,
+              "disc": 0,
+              "rate": 1000,
+              "gross": 2000,
+              "taxPct": 12,
+              "cessPct": 0,
+              "taxable": 2000,
+              "afterDisc": 2000
+            }
+          ],
+          "total": 120240,
+          "utgst": 0,
+          "roundOff": 0,
+          "subtotal": 102000,
+          "warnings": [],
+          "isIntraUT": false,
+          "tcsAmount": 0,
+          "tdsAmount": 0,
+          "isInterstate": false,
+          "taxInclusive": false,
+          "netReceivable": 120240,
+          "taxableAmount": 102000,
+          "totalDiscount": 0,
+          "totalTaxAmount": 18240,
+          "needsProfileFix": false,
+          "isUnionTerritory": false,
+          "invoiceDiscountType": "fixed",
+          "invoiceDiscountValue": 0,
+          "invoiceDiscountAmount": 0
+        },
+        "details": {
+          "invoiceDate": "2026-10-03",
+          "invoiceNumber": "INV/2026/001",
+          "placeOfSupply": "Tamil Nadu"
+        },
+        "profile": {
+          "pan": "",
+          "pin": "",
+          "city": "",
+          "ifsc": "",
+          "logo": "",
+          "email": "golden1794761889470@example.com",
+          "gstin": "33ABCDE1234F1Z7",
+          "phone": "",
+          "state": "Tamil Nadu",
+          "upiId": "",
+          "address": "",
+          "country": "India",
+          "bankName": "",
+          "signature": "",
+          "businessName": "Golden Traders",
+          "accountNumber": "",
+          "googleClientId": "",
+          "googleDriveFolder": "GST Billing Invoices"
+        },
+        "invoiceType": "tax-invoice",
+        "taxInclusive": false,
+        "invoiceOptions": {}
+      },
+      "status": "unpaid",
+      "currency": "INR",
+      "payments": [],
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "clientName": "Chennai Retail Pvt Ltd",
+      "paidAmount": 0,
+      "invoiceDate": "2026-10-03",
+      "invoiceType": "tax-invoice",
+      "totalAmount": 120240,
+      "invoiceNumber": "INV/2026/001",
+      "totalTaxAmount": 18240
+    }
+  ],
+  "purchases": [
+    {
+      "id": "p3",
+      "date": "2026-10-11",
+      "items": [
+        {
+          "hsn": "998211",
+          "name": "Legal fees",
+          "rate": 10000,
+          "unit": "NOS",
+          "quantity": 1,
+          "taxPercent": 18
+        }
+      ],
+      "docType": "bill",
+      "totalTax": 1800,
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "interstate": false,
+      "supplierName": "Advocate",
+      "invoiceNumber": "L-1",
+      "reverseCharge": true,
+      "supplierGstin": "",
+      "taxableAmount": 10000
+    },
+    {
+      "id": "p2",
+      "date": "2026-10-09",
+      "items": [
+        {
+          "hsn": "8544",
+          "name": "Cables",
+          "rate": 300,
+          "unit": "NOS",
+          "quantity": 20,
+          "taxPercent": 18
+        }
+      ],
+      "docType": "bill",
+      "totalTax": 1080,
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "interstate": true,
+      "supplierName": "Delhi Wholesale",
+      "invoiceNumber": "DW-12",
+      "supplierGstin": "07AAACD1234K1ZY",
+      "taxableAmount": 6000
+    },
+    {
+      "id": "p1",
+      "date": "2026-10-04",
+      "items": [
+        {
+          "hsn": "8473",
+          "name": "Parts",
+          "rate": 2000,
+          "unit": "NOS",
+          "quantity": 10,
+          "taxPercent": 18
+        }
+      ],
+      "docType": "bill",
+      "totalTax": 3600,
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "interstate": false,
+      "supplierName": "Hosur Components",
+      "invoiceNumber": "HC-88",
+      "supplierGstin": "33AAACH1234K1ZZ",
+      "taxableAmount": 20000
+    }
+  ],
+  "expenses": [
+    {
+      "id": "e2",
+      "date": "2026-10-18",
+      "amount": 1180,
+      "vendor": "Hotel",
+      "category": "Food",
+      "gstAmount": 180,
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "interstate": false,
+      "itcEligible": false
+    },
+    {
+      "id": "e1",
+      "date": "2026-10-06",
+      "amount": 23600,
+      "vendor": "Landlord",
+      "category": "Rent",
+      "gstAmount": 3600,
+      "_createdBy": "cb40647f-1388-4043-b3f1-a4abc041460e",
+      "interstate": false,
+      "itcEligible": true
+    }
+  ],
+  "receipts": [],
+  "otherIncome": [],
+  "period": {
+    "mode": "month",
+    "year": 2026,
+    "month": 9
+  }
+}

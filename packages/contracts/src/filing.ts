@@ -5,7 +5,16 @@ import { uuid } from './common.ts';
 // upload format. The app checks it, a CA may approve it, and a person uploads it on the portal and records the ARN.
 
 // Same lists as FILING_KINDS / FILING_STATUSES in @ledgora/tax-engine (filing.ts); the API test checks they agree.
-export const FILING_PACK_KINDS = ['gstr1', 'gstr3b', 'ims', 'gstr1a', 'gstr9', 'cmp08'] as const;
+export const FILING_PACK_KINDS = [
+  'gstr1',
+  'gstr3b',
+  'ims',
+  'gstr1a',
+  'gstr9',
+  'cmp08',
+  'gstr4',
+  'gstr9c',
+] as const;
 export const FILING_PACK_STATUSES = [
   'draft',
   'ready',
@@ -86,6 +95,13 @@ const heads = z.object({
   samt: z.number().optional(),
   csamt: z.number().optional(),
 });
+/** X1: GSTR-1 or GSTR-3B built on the server from the business's documents. */
+export const buildGstBody = z.object({
+  businessId: uuid,
+  kind: z.enum(['gstr1', 'gstr3b']),
+  period: retPeriod,
+  quarterly: z.boolean().default(false),
+});
 export const buildGstr1aBody = z.object({
   businessId: uuid,
   period: retPeriod,
@@ -106,4 +122,25 @@ export const buildCmp08Body = z.object({
   /** Outward supplies of the quarter, exempt excluded. */
   turnover: z.number().min(0),
   rcm: heads.nullish(),
+});
+export const buildGstr4Body = z.object({
+  businessId: uuid,
+  fy: z.number().int().min(2017).max(2100),
+});
+export const buildGstr9cBody = z.object({
+  businessId: uuid,
+  fy: z.number().int().min(2017).max(2100),
+  /** Why the books' turnover differs from the return; each amount is added to the books' turnover. */
+  adjustments: z
+    .array(z.object({ label: z.string().trim().min(2).max(200), amount: z.number() }))
+    .max(50)
+    .default([]),
+});
+/** GSTR-3B 3.1(a) as the portal shows it (auto-filled from GSTR-1/1A and locked). */
+export const portal3bBody = z.object({
+  txval: z.number().optional(),
+  iamt: z.number().optional(),
+  camt: z.number().optional(),
+  samt: z.number().optional(),
+  csamt: z.number().optional(),
 });

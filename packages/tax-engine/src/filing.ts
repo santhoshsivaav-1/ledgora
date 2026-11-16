@@ -11,7 +11,16 @@ const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const n = (v: Numeric) => Number(v) || 0;
 
 /** The returns a pack can hold. Phase 1: GST. Later phases add GSTR-9, ITR, TDS (see the plan). */
-export const FILING_KINDS = ['gstr1', 'gstr3b', 'ims', 'gstr1a', 'gstr9', 'cmp08'] as const;
+export const FILING_KINDS = [
+  'gstr1',
+  'gstr3b',
+  'ims',
+  'gstr1a',
+  'gstr9',
+  'cmp08',
+  'gstr4',
+  'gstr9c',
+] as const;
 export type FilingKind = (typeof FILING_KINDS)[number];
 export const FILING_KIND_LABELS: Record<FilingKind, string> = {
   gstr1: 'GSTR-1',
@@ -20,6 +29,8 @@ export const FILING_KIND_LABELS: Record<FilingKind, string> = {
   gstr1a: 'GSTR-1A',
   gstr9: 'GSTR-9',
   cmp08: 'CMP-08',
+  gstr4: 'GSTR-4',
+  gstr9c: 'GSTR-9C',
 };
 
 export const FILING_STATUSES = [

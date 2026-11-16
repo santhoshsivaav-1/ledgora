@@ -1,5 +1,9 @@
 {
   "extends": "@ledgora/config/tsconfig.base.json",
-  "compilerOptions": { "types": ["node"] },
+  "compilerOptions": {
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": false
+  },
   "include": ["src", "test", "rehearsal", "*.ts"]
 }

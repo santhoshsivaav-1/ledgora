@@ -1,0 +1,135 @@
+{
+  "gstin": "33ABCDE1234F1Z7",
+  "ret_period": "102026",
+  "version": "GST3.0.4",
+  "hash": "hash",
+  "sup_details": {
+    "osup_det": {
+      "txval": 319500,
+      "iamt": 38880,
+      "camt": 9285,
+      "samt": 9285,
+      "csamt": 0
+    },
+    "osup_zero": {
+      "txval": 100000,
+      "iamt": 18000,
+      "csamt": 0
+    },
+    "osup_nil_exmp": {
+      "txval": 1600
+    },
+    "isup_rev": {
+      "txval": 10000,
+      "iamt": 0,
+      "camt": 900,
+      "samt": 900,
+      "csamt": 0
+    },
+    "osup_nongst": {
+      "txval": 0
+    }
+  },
+  "inter_sup": {
+    "unreg_details": [
+      {
+        "pos": "32",
+        "txval": 180000,
+        "iamt": 32400
+      }
+    ],
+    "comp_details": [],
+    "uin_details": []
+  },
+  "itc_elg": {
+    "itc_avl": [
+      {
+        "ty": "IMPG",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "ty": "IMPS",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "ty": "ISRC",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "ty": "ISD",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "ty": "OTH",
+        "iamt": 1080,
+        "camt": 3690,
+        "samt": 3690,
+        "csamt": 0
+      }
+    ],
+    "itc_rev": [
+      {
+        "ty": "RUL",
+        "iamt": 0,
+        "camt": 90,
+        "samt": 90,
+        "csamt": 0
+      },
+      {
+        "ty": "OTH",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      }
+    ],
+    "itc_net": {
+      "iamt": 1080,
+      "camt": 3600,
+      "samt": 3600,
+      "csamt": 0
+    },
+    "itc_inelg": [
+      {
+        "ty": "RUL",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      },
+      {
+        "ty": "OTH",
+        "iamt": 0,
+        "camt": 0,
+        "samt": 0,
+        "csamt": 0
+      }
+    ]
+  },
+  "inward_sup": {
+    "isup_details": [
+      {
+        "ty": "GST",
+        "inter": 0,
+        "intra": 0
+      },
+      {
+        "ty": "NONGST",
+        "inter": 0,
+        "intra": 0
+      }
+    ]
+  }
+}

@@ -57,7 +57,8 @@ try {
   check('the register lists October GSTR-1 as ready', /Ready to file/.test(await row.innerText()), await row.innerText());
   check('past returns with nothing filed show as overdue', (await owner.locator('tr', { hasText: 'Overdue' }).count()) > 0);
   await shot(owner, 'filing-register');
-  check('the register offers to prepare GSTR-9 for the year', await owner.getByRole('button', { name: /Prepare GSTR-9/ }).isVisible());
+  check('the register offers to prepare GSTR-9 and GSTR-9C for the year', (await owner.getByRole('button', { name: /^Prepare GSTR-9 \(FY/ }).isVisible()) && (await owner.getByRole('button', { name: 'Prepare GSTR-9C' }).isVisible()));
+  check('GSTR-1 and GSTR-3B rows can be built on the server from the books', (await owner.getByTitle('Build it from your books on the server').count()) > 0);
   // R1.5: the database wrote the pack into the edit log; the screen shows it and offers the auditor's CSV.
   await owner.goto(`${APP}/utilities/edit-log`);
   await owner.getByRole('heading', { name: 'Edit Log' }).waitFor({ timeout: 15000 });
