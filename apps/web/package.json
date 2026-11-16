@@ -16,7 +16,7 @@
   "dependencies": {
     "@ledgora/contracts": "workspace:^",
     "@ledgora/tax-engine": "workspace:*",
-    "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query": "^5.107.1",
     "dompurify": "^3.4.17",
     "fflate": "^0.8.3",
     "html2canvas": "^1.4.1",
