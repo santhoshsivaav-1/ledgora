@@ -237,6 +237,7 @@ export default defineConfig({
     proxy: {
       // P9 public share links are served by the API too.
       '^/s/.*': { target: `http://localhost:${accountApiPort}`, changeOrigin: true },
+      '/health': { target: `http://localhost:${accountApiPort}`, changeOrigin: true },
       '/v1': {
         target: `http://localhost:${accountApiPort}`,
         changeOrigin: true,

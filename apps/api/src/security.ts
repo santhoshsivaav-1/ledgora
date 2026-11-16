@@ -135,7 +135,7 @@ const appCsp = (env: AppEnv) =>
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     // Browsers PUT uploads straight to the bucket with a signed URL, so its origin must be allowed to connect.
-    `connect-src 'self'${safeOrigin(env.S3_ENDPOINT) ? ` ${safeOrigin(env.S3_ENDPOINT)}` : ''}`,
+    `connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com${safeOrigin(env.S3_ENDPOINT) ? ` ${safeOrigin(env.S3_ENDPOINT)}` : ''}`,
     "worker-src 'self' blob:",
     "frame-src 'self' blob: data:",
     "object-src 'none'",

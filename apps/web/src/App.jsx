@@ -252,7 +252,9 @@ function App() {
 
     const checkServer = async () => {
       try {
-        const res = await fetch('/v1/workspace/profile', { signal: AbortSignal.timeout(8000) });
+        // The profile is read once (first load); after that the heartbeat only asks the cheap /health, so a slow database
+        // never queues a profile read behind every page change.
+        const res = await fetch(profileLoaded.current ? '/health' : '/v1/workspace/profile', { signal: AbortSignal.timeout(8000) });
         // Any answer means the server is there. Only a gateway error (502-504: the host is restarting) counts as a miss; a
         // 401 or 403 is somebody who is not signed in yet, which the sign-in screen handles, not a server that is down.
         if (res.status >= 502 && res.status <= 504) throw new Error('gateway');
@@ -276,19 +278,22 @@ function App() {
         if (misses >= (profileLoaded.current ? 3 : 2)) {
           setServerDown(true);
           setServerStatus('offline');
-        } else {
-          setTimeout(checkServer, 1500); // look again soon rather than in 5 s
         }
       }
     };
 
-    checkServer();
-    // Keep checking every 5 seconds (fast when down, normal heartbeat when up)
-    retryTimer.current = setInterval(checkServer, 5000);
+    // One check at a time: the next is scheduled only after the last one answered, so a slow reply can never pile up
+    // requests and starve page navigation of connections. Quick re-check while down or unsure, relaxed when healthy.
+    const loop = async () => {
+      await checkServer();
+      if (cancelled) return;
+      retryTimer.current = setTimeout(loop, misses > 0 ? 1500 : 30000);
+    };
+    loop();
 
     return () => {
       cancelled = true;
-      if (retryTimer.current) clearInterval(retryTimer.current);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
     };
   }, []);
 
