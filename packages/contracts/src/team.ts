@@ -11,6 +11,8 @@ export const me = z.object({
     twoFactorEnabled: z.boolean(),
   }),
   organization: z.object({ id: uuid, name: z.string() }),
+  /** True only for the people listed in PLATFORM_ADMIN_EMAILS: they see the Platform admin page. */
+  platformAdmin: z.boolean().optional(),
   role,
   permissions: z.array(z.string()),
   /** Account Access rules of the role beyond permissions. */

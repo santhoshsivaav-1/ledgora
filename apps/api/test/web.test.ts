@@ -100,4 +100,16 @@ describe('serving the web app', () => {
     expect(fallbackRaw.headers.get('content-encoding')).toBeNull();
     expect((await fallbackRaw.text()).includes('<div id="root">')).toBe(true);
   });
+
+  it('publishes robots.txt and a sitemap of the public pages, with absolute addresses', async () => {
+    const robots = await app.request('/robots.txt');
+    const txt = await robots.text();
+    expect(txt).toContain('Disallow: /v1/');
+    expect(txt).toMatch(/Sitemap: https?:\/\//);
+    const map = await (await app.request('/sitemap.xml')).text();
+    expect(map).toContain('/pricing</loc>');
+    expect(map).toContain('/switch/vyapar</loc>');
+    expect(map).not.toContain('/v1/');
+    expect(map).toMatch(/<loc>https?:\/\//);
+  });
 });

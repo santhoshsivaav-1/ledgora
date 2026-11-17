@@ -161,3 +161,7 @@
 @media (prefers-reduced-motion: reduce) {
   .vy-sidebar, .vy-chevron { transition: none; }
 }
+
+/* Every page fills the column (centred up to its own max-width). Without this a page with margin auto in this flex column
+   shrinks to its content and sits inset from the trial banner above it (audit: Home, Salesman). */
+.vy-shell .vy-main > .main-content > :where(div, section, main) { width: 100%; box-sizing: border-box; }

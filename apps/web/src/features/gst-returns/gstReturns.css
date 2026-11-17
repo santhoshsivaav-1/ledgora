@@ -1,0 +1,15 @@
+/* GST Returns header and tabs: one aligned toolbar that wraps as whole groups (audit U4). */
+.gr-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem 1rem; margin-bottom: 1rem; }
+.gr-title { display: grid; gap: 0.1rem; margin-right: 0.25rem; }
+.gr-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap; }
+.gr-head .form-input { width: auto; min-width: 0; flex: none; padding: 0.4rem 1.7rem 0.4rem 0.65rem; font-size: 0.88rem; }
+.gr-status { display: flex; align-items: center; gap: 0.4rem; }
+.gr-head::after { content: ''; order: 1; flex-basis: 100%; height: 0; }
+.gr-controls, .gr-status { order: 2; }
+.gr-actions { order: 0; margin-left: auto; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.gr-pill { font-size: 0.75rem; font-weight: 600; line-height: 1; padding: 0.35rem 0.65rem; border-radius: 999px; border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+.gr-pill-ok { background: #ecfdf5; color: #166534; border-color: #bbf7d0; }
+.gr-pill-pending { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.gr-tabs { display: flex; gap: 0.35rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.btn-sm { font-size: 0.82rem; padding: 0.4rem 0.75rem; white-space: nowrap; }
+@media (max-width: 700px) { .gr-controls { flex-wrap: wrap; } .gr-actions { margin-left: 0; } .gr-head::after { display: none; } }

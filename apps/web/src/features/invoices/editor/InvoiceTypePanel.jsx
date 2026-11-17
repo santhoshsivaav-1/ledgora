@@ -1,5 +1,5 @@
 import { getAppSetting } from '../../../lib/appSettings';
-import { Settings } from 'lucide-react';
+import { Settings, Package, Clock, Shuffle, Lightbulb } from 'lucide-react';
 import { getRegionMode } from '../../../lib/data';
 import { sectionsWith } from '@ledgora/tax-engine';
 import { INVOICE_TYPES, getCountriesForRegion, TDS_SECTIONS, TCS_SECTIONS, REMOVED_TCS_SECTIONS, getActiveAccounts, getAccountById, PAPER_SIZES, getPaperSize, invoiceOptionOn, DEFAULT_DECLARATION, localToday, toLocalIsoDate, parseLocalDate } from '../../../utils';
@@ -56,21 +56,21 @@ export default function InvoiceTypePanel({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginRight: '0.25rem' }}>This invoice is for:</span>
               {[
-                { id: 'goods',    label: '📦 Goods',    desc: 'Physical products — defaults to Nos / Kg / Pcs units' },
-                { id: 'services', label: '⏱ Services', desc: 'Time / work-based — defaults to Hrs and surfaces Session / Visit / Month units' },
-                { id: 'mixed',    label: '🔀 Mixed',   desc: 'Both — full unit list available, no filtering' },
+                { id: 'goods',    Icon: Package, label: 'Goods',    desc: 'Physical products — defaults to Nos / Kg / Pcs units' },
+                { id: 'services', Icon: Clock, label: 'Services', desc: 'Time / work-based — defaults to Hrs and surfaces Session / Visit / Month units' },
+                { id: 'mixed',    Icon: Shuffle, label: 'Mixed',   desc: 'Both — full unit list available, no filtering' },
               ].map(opt => (
                 <button key={opt.id} type="button"
                   className={`type-chip ${(invoiceOptions.invoiceMode || 'goods') === opt.id ? 'type-chip-active' : ''}`}
                   onClick={() => setInvoiceOptions(prev => ({ ...prev, invoiceMode: opt.id }))}
                   title={opt.desc}
-                  style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem' }}>
-                  {opt.label}
+                  style={{ fontSize: '0.78rem', padding: '0.3rem 0.6rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <opt.Icon size={14} aria-hidden="true" />{opt.label}
                 </button>
               ))}
               {invoiceOptions.invoiceMode === 'services' && (
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  💡 Use a <strong>SAC code</strong> (services accounting code) in the HSN field
+                  <Lightbulb size={12} aria-hidden="true" style={{ verticalAlign: '-2px' }} /> Use a <strong>SAC code</strong> (services accounting code) in the HSN field
                 </span>
               )}
             </div>

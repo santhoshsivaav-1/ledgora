@@ -66,3 +66,10 @@ export const fyRange = (label) => {
   const y = Number(String(label).slice(0, 4));
   return { from: `${y}-04-01`, to: `${y + 1}-03-31` };
 };
+
+// R3: the deductor's TDS register and the "what to deduct" helper (apps/api/src/modules/tdsDeductor.ts).
+export const getTdsStatement = (businessId, fy, quarter, filedOn) =>
+  apiClient.get(`/v1/tds/statement?businessId=${businessId}&fy=${fy}&quarter=${quarter}${filedOn ? `&filedOn=${filedOn}` : ''}`);
+export const getTdsCompute = (q) => apiClient.get(`/v1/tds/compute?${new URLSearchParams(q).toString()}`);
+export const depositTds = (id, body) => apiClient.post(`/v1/tds/${id}/deposit`, body);
+export const listParties = async (businessId) => (await apiClient.get(`/v1/parties?businessId=${businessId}&limit=200`)).data;

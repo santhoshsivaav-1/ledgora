@@ -27,7 +27,7 @@ export default function PlanBanner() {
   } else if (e.expired && !e.needsPlan) text = 'You are on the Free plan. Paid features are locked. Your data is safe.';
   if (!text) return null;
   return (
-    <div role={e.locked ? 'alert' : 'status'} className={`notice ${tone}`} style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', margin: 0, borderRadius: 0 }}>
+    <div role={e.locked ? 'alert' : 'status'} className={`notice ${tone}`} style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 1rem', borderRadius: 10 }}>
       <span>{text}</span>
       {owner && <Link to="/settings/billing" className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.2rem 0.7rem' }}>{e.locked ? 'Choose a plan' : 'See plans'}</Link>}
     </div>

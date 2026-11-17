@@ -4,7 +4,7 @@ import { INDIAN_STATES, getStateCode, decodeGstin } from '../../utils';
 import { getProfile, saveProfile } from '../../lib/data';
 import { apiClient } from '../../lib/apiClient';
 import { ApiError, saveOnboarding } from '../../services/session';
-import { STEPS, stepProblem, settingsFrom, profileFrom } from './setupRules';
+import { STEPS, stepProblem, settingsFrom, profileFrom, BIZ_DEFAULTS, applyBizDefaults } from './setupRules';
 import { useT } from '../../i18n';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -28,7 +28,7 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
     name: business.name || '', gstin: business.gstin || '', state: business.state || '', regType: business.gstin ? 'regular' : 'unregistered', compRate: '1', bizType: 'retail', bizCategory: '',
     address: business.address || '', city: business.city || '', pin: business.pin || '', phone: business.phone || me?.user?.phoneNumber || '', email: business.email || me?.user?.email || '',
     bankName: '', accountNumber: '', ifsc: '', upiId: '', fyStart: '4',
-    defaultGst: '18', taxInclusive: false, terms: 'Goods once sold will not be taken back.\nPayment is due within the agreed days.',
+    defaultGst: '18', taxInclusive: false, terms: BIZ_DEFAULTS.retail.terms, defaultUnit: BIZ_DEFAULTS.retail.unit,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -117,7 +117,7 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
                 </select>
               </Field>
               <Field f={f} set={set} errors={errors} id="bizType" label="Type of business">
-                <select id="bs-bizType" className="form-input" value={f.bizType} onChange={set('bizType')}>
+                <select id="bs-bizType" className="form-input" value={f.bizType} onChange={(e) => setF((s) => applyBizDefaults(s, e.target.value))}>
                   <option value="retail">Retail shop</option>
                   <option value="wholesale">Wholesale</option>
                   <option value="distributor">Distributor</option>
@@ -149,9 +149,9 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
         {id === 'money' && (
           <>
             <h1 className="auth-title">How you get paid, and your year</h1>
-            <p className="auth-muted">Bank details and a UPI id print on invoices with a pay-by-UPI QR. You can add more accounts later.</p>
+            <p className="auth-muted">Optional. Bank details and a UPI id print on invoices with a pay-by-UPI QR. Add them now, or skip and do it any time in Settings.</p>
             <div className="auth-grid">
-              <Field f={f} set={set} errors={errors} id="bankName" label="Bank name" autoFocus />
+              <Field f={f} set={set} errors={errors} id="bankName" label="Bank name" />
               <Field f={f} set={set} errors={errors} id="accountNumber" label="Account number" inputMode="numeric" />
               <Field f={f} set={set} errors={errors} id="ifsc" label="IFSC" maxLength={11} />
               <Field f={f} set={set} errors={errors} id="upiId" label="UPI id" placeholder="name@bank" />
@@ -191,7 +191,10 @@ export default function BusinessSetup({ me, business, onDone, onSignOut }) {
           {/* Separate keys: reusing one element turned "Next" into the submit button during its own click, which saved
               the form and skipped the last step. */}
           {step < STEPS.length - 1
-            ? <button key="next" type="button" className="btn btn-primary" onClick={next}>{tr('setup.next', 'Next')} <ArrowRight size={14} /></button>
+            ? <>
+                {id === 'money' && <button key="skip" type="button" className="btn btn-ghost" onClick={() => { setErrors({}); setStep((n) => n + 1); }}>Skip for now</button>}
+                <button key="next" type="button" className="btn btn-primary" onClick={next}>{tr('setup.next', 'Next')} <ArrowRight size={14} /></button>
+              </>
             : <button key="finish" type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : tr('setup.finish', 'Finish setup')}</button>}
         </div>
       </form>

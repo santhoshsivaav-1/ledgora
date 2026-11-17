@@ -1,6 +1,6 @@
 // SaaS billing: the plan in force, usage against its limits, checkout and cancel (owner only), and Razorpay's webhook.
 // Plans and features are contracts/plans.ts; enforcement is middleware/feature.ts.
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { schema, withTenant } from '@ledgora/db';
@@ -10,13 +10,36 @@ import { AppError } from '../errors.ts';
 import type { Deps, Registrar } from '../http.ts';
 import { forgetPlan, usageOf } from '../middleware/feature.ts';
 import {
+  invoiceNumber,
+  subscriptionInvoiceFromTotal,
+  subscriptionInvoiceFigures,
+} from '../billing/invoice.ts';
+import { paymentReceiptMail } from '../mail/templates.ts';
+import { sendMail } from '../mail/index.ts';
+import {
   razorpayProvider,
   subscriptionUpdate,
   verifyWebhook,
   type BillingProvider,
 } from '../billing/provider.ts';
 
-const { subscriptions } = schema;
+const { subscriptions, subscriptionInvoices, businesses, organizations, member, user } = schema;
+const invoiceJson = (r: typeof subscriptionInvoices.$inferSelect) => ({
+  id: r.id,
+  number: r.number,
+  issuedAt: r.issuedAt.toISOString(),
+  plan: r.plan,
+  interval: r.interval,
+  periodStart: r.periodStart?.toISOString() ?? null,
+  periodEnd: r.periodEnd?.toISOString() ?? null,
+  taxable: r.taxable,
+  cgst: r.cgst,
+  sgst: r.sgst,
+  igst: r.igst,
+  total: r.total,
+  buyer: r.buyer,
+  seller: r.seller,
+});
 const providerOf = (deps: Deps): BillingProvider => deps.billing ?? razorpayProvider(deps.env);
 const ownerOnly = (role: string) => {
   if (role !== 'owner') throw new AppError('forbidden', 'Only the owner can change the plan');
@@ -151,21 +174,32 @@ export function billingModule({ route }: Registrar) {
     body: z.object({ plan: z.enum(['silver', 'gold']), interval: z.enum(['month', 'year']) }),
     handler: async ({ tx, orgId, auth, body, deps }) => {
       ownerOnly(auth.role);
+      const [current] = await tx
+        .select()
+        .from(subscriptions)
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+      // Upgrading, downgrading or switching between monthly and yearly while a paid plan is running: the new plan is paid for
+      // first; the old one is cancelled at its period end only once the new one is active (the webhook does that).
+      const paid = current?.status === 'active' && !!current.providerSubscriptionId;
+      if (paid && current.plan === body.plan && current.billingInterval === body.interval)
+        throw new AppError('conflict', 'You are already on this plan');
       const { id, checkoutUrl } = await providerOf(deps).createSubscription({
         orgId,
         plan: body.plan,
         interval: body.interval,
         email: auth.user.email,
       });
-      const [sub] = await tx
-        .select()
-        .from(subscriptions)
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      const sub = current;
       if (sub)
         await tx
           .update(subscriptions)
-          .set({ provider: 'razorpay', providerSubscriptionId: id, billingInterval: body.interval })
+          .set({
+            provider: 'razorpay',
+            providerSubscriptionId: id,
+            billingInterval: body.interval,
+            replacesSubscriptionId: paid ? sub.providerSubscriptionId : null,
+          })
           .where(eq(subscriptions.id, sub.id));
       else
         await tx.insert(subscriptions).values({
@@ -177,9 +211,47 @@ export function billingModule({ route }: Registrar) {
           billingInterval: body.interval,
         });
       await audit(tx, orgId, 'subscription.checkout', 'subscription', null, {
-        after: { plan: body.plan, interval: body.interval },
+        after: { plan: body.plan, interval: body.interval, change: paid },
       });
-      return { checkoutUrl };
+      return { checkoutUrl, change: paid };
+    },
+  });
+
+  route({
+    method: 'get',
+    path: '/v1/billing/invoices',
+    tag: 'Billing',
+    summary:
+      'The GST invoices issued to this organization for its Ledgora subscription (owner only)',
+    permission: null,
+    handler: async ({ tx, auth }) => {
+      ownerOnly(auth.role);
+      const rows = await tx
+        .select()
+        .from(subscriptionInvoices)
+        .orderBy(desc(subscriptionInvoices.issuedAt))
+        .limit(200);
+      return { invoices: rows.map(invoiceJson) };
+    },
+  });
+
+  route({
+    method: 'get',
+    path: '/v1/billing/invoices/:id',
+    tag: 'Billing',
+    summary:
+      'One subscription invoice, with the buyer and seller as they were on the day (owner only)',
+    permission: null,
+    params: z.object({ id: z.string().uuid() }),
+    handler: async ({ tx, auth, params }) => {
+      ownerOnly(auth.role);
+      const [row] = await tx
+        .select()
+        .from(subscriptionInvoices)
+        .where(eq(subscriptionInvoices.id, params.id))
+        .limit(1);
+      if (!row) throw new AppError('not_found', 'No such invoice');
+      return { invoice: invoiceJson(row) };
     },
   });
 
@@ -223,10 +295,12 @@ export function billingWebhook(app: Hono, deps: Deps) {
           entity?: {
             id?: string;
             status?: string;
+            current_start?: number | null;
             current_end?: number | null;
             notes?: Record<string, string>;
           };
         };
+        payment?: { entity?: { id?: string; amount?: number } };
       };
     };
     try {
@@ -239,6 +313,7 @@ export function billingWebhook(app: Hono, deps: Deps) {
     const orgId = entity?.notes?.orgId as string | undefined;
     if (!upd || !orgId || !/^[0-9a-f-]{36}$/i.test(orgId))
       return c.json({ ok: true, ignored: true });
+    let receipt: { number: string; total: number; id: string } | null = null;
     const applied = await withTenant(deps.db, orgId, async (tx) => {
       const [sub] = await tx
         .select()
@@ -259,9 +334,147 @@ export function billingWebhook(app: Hono, deps: Deps) {
       await audit(tx, orgId, `subscription.${upd.status}`, 'subscription', null, {
         after: { event: evt.event, plan: upd.plan },
       });
+      // A plan change: the old subscription stops at its period end now that the new one is paid and active.
+      if (upd.status === 'active' && sub.replacesSubscriptionId) {
+        try {
+          await providerOf(deps).cancelSubscription(sub.replacesSubscriptionId);
+        } catch (e) {
+          console.error(
+            '[billing] could not cancel the replaced subscription',
+            e instanceof Error ? e.message : e,
+          );
+        }
+        await tx
+          .update(subscriptions)
+          .set({ replacesSubscriptionId: null })
+          .where(eq(subscriptions.id, sub.id));
+      }
+      if (evt.event === 'subscription.charged') {
+        const paymentId = evt.payload?.payment?.entity?.id;
+        if (paymentId)
+          receipt = await issueInvoice(deps, tx, orgId, {
+            plan: upd.plan ?? sub.plan,
+            interval: entity!.notes?.interval ?? sub.billingInterval ?? 'year',
+            paymentId,
+            amountPaise: evt.payload?.payment?.entity?.amount,
+            periodStart: entity!.current_start ? new Date(entity!.current_start * 1000) : null,
+            periodEnd: upd.currentPeriodEnd,
+          });
+      }
       return true;
     });
+    if (receipt) await mailReceipt(deps, orgId, receipt);
     forgetPlan(orgId);
     return c.json({ ok: true, applied });
   });
+}
+
+type Tx = Parameters<Parameters<typeof withTenant>[2]>[0];
+
+/**
+ * One GST tax invoice for one successful charge. The charge is taken as GST-inclusive (the Razorpay plan amount is the price plus
+ * GST); without an amount the catalogue price plus GST is used. Same state as the seller = CGST and SGST, else IGST. Idempotent on
+ * the payment id: Razorpay repeats webhooks.
+ */
+async function issueInvoice(
+  deps: Deps,
+  tx: Tx,
+  orgId: string,
+  o: {
+    plan: string;
+    interval: string;
+    paymentId: string;
+    amountPaise?: number;
+    periodStart: Date | null;
+    periodEnd: Date | null;
+  },
+) {
+  const [dup] = await tx
+    .select({ id: subscriptionInvoices.id })
+    .from(subscriptionInvoices)
+    .where(eq(subscriptionInvoices.providerPaymentId, o.paymentId))
+    .limit(1);
+  if (dup) return null;
+  const [biz] = await tx.select().from(businesses).orderBy(businesses.createdAt).limit(1);
+  const [org] = await deps.db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  const rate = deps.env.SELLER_GST_RATE;
+  const sellerState = deps.env.SELLER_STATE.trim().toLowerCase();
+  const sameState = !!biz?.state && biz.state.trim().toLowerCase() === sellerState;
+  const plan = PLANS.find((p) => p.id === o.plan);
+  const price = o.interval === 'month' ? plan?.priceMonthly : plan?.priceYearly;
+  const f = o.amountPaise
+    ? subscriptionInvoiceFromTotal(o.amountPaise / 100, rate, sameState)
+    : subscriptionInvoiceFigures(price ?? 0, rate, sameState);
+  const now = new Date();
+  const seq = Number(
+    (
+      (await tx.execute(sql`select nextval('subscription_invoice_seq') as n`)) as unknown as {
+        n: string;
+      }[]
+    )[0]?.n ?? 1,
+  );
+  const [row] = await tx
+    .insert(subscriptionInvoices)
+    .values({
+      orgId,
+      number: invoiceNumber(now, seq),
+      issuedAt: now,
+      plan: o.plan,
+      interval: o.interval,
+      periodStart: o.periodStart,
+      periodEnd: o.periodEnd,
+      providerPaymentId: o.paymentId,
+      ...f,
+      buyer: {
+        name: biz?.name || org?.name || '',
+        gstin: biz?.gstin ?? '',
+        state: biz?.state ?? '',
+        address: biz?.address ?? '',
+      },
+      seller: {
+        name: deps.env.SELLER_NAME,
+        gstin: deps.env.SELLER_GSTIN ?? '',
+        state: deps.env.SELLER_STATE,
+        address: deps.env.SELLER_ADDRESS,
+        sac: '998431',
+        rate: String(rate),
+      },
+    })
+    .returning();
+  await audit(tx, orgId, 'subscription.invoice', 'subscription_invoice', row!.id, {
+    after: { number: row!.number, total: f.total },
+  });
+  return { id: row!.id, number: row!.number, total: f.total };
+}
+
+async function mailReceipt(
+  deps: Deps,
+  orgId: string,
+  r: { id: string; number: string; total: number },
+) {
+  try {
+    const [owner] = await deps.db
+      .select({ email: user.email, name: user.name })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(and(eq(member.organizationId, orgId), eq(member.role, 'owner')))
+      .limit(1);
+    if (owner)
+      await sendMail(
+        deps.env,
+        paymentReceiptMail(
+          owner.email,
+          owner.name,
+          r.number,
+          r.total,
+          `${deps.env.APP_URL}/settings/billing`,
+        ),
+      );
+  } catch (e) {
+    console.error('[billing] receipt mail', e instanceof Error ? e.message : e);
+  }
 }

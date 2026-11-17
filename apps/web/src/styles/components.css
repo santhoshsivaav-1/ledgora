@@ -295,3 +295,17 @@
 @media (max-width: 720px) {
   .sale-payment-row, .sale-charge-row, .sale-charge-row:not(:has(select)) { grid-template-columns: 1fr 1fr; }
 }
+
+/* A setting's control gets room for its value (audit U5): text boxes and selects fill a 320px column instead of the browser default. */
+.ui-setting-control { flex: 0 1 320px; min-width: min(220px, 100%); }
+.ui-setting-control > .ui-input:not([type='checkbox']):not([type='radio']):not([type='number']), .ui-setting-control > .ui-select { width: 100%; }
+@media (max-width: 640px) { .ui-setting-row { flex-wrap: wrap; } .ui-setting-control { flex-basis: 100%; } }
+/* A button label never wraps onto a second line, and a squeezed flex row does not squash it. */
+@media (min-width: 641px) { .btn { white-space: nowrap; flex-shrink: 0; } }
+
+/* Invoice and bill lists: the filter bar wraps into two tidy rows (search on its own, then the filters and Columns), and a wide
+   table scrolls sideways inside its card instead of being cut off (audit U3). */
+@media (max-width: 1500px) { .filters-bar .search-box { flex: 1 1 100%; } }
+.filter-date { min-width: 0; width: 9.5rem; }
+.table-scroll .data-table th, .table-scroll .data-table td { padding-left: 0.4rem; padding-right: 0.4rem; }
+.table-scroll .data-table td { font-size: 0.82rem; }

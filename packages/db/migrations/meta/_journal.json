@@ -253,6 +253,34 @@
       "when": 1794840512785,
       "tag": "0035_itr3_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794841512785,
+      "tag": "0036_subscription_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794842512785,
+      "tag": "0037_platform_overview",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794843512785,
+      "tag": "0038_platform_businesses",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794844512785,
+      "tag": "0039_gsp_upload",
+      "breakpoints": true
     }
   ]
 }

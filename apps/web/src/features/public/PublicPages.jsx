@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PLANS, FEATURES, TRIAL_DAYS } from '@ledgora/contracts';
 import PlanMatrix from '../billing/PlanMatrix';
 import { COMPANY, LEGAL_UPDATED } from '../../config/company';
@@ -11,11 +11,27 @@ import './public.css';
 const LINKS = [
   ['/', 'Home'],
   ['/pricing', 'Pricing'],
+  ['/security', 'Security'],
+  ['/switch', 'Switch to Ledgora'],
+  ['/contact', 'Contact'],
   ['/privacy', 'Privacy'],
   ['/terms', 'Terms'],
 ];
 
-function Frame({ title, intro, children, path }) {
+// Each public page sets its own title and description, so a search result or a shared link says what the page is.
+function usePageMeta(title, description) {
+  useEffect(() => {
+    const before = { title: document.title, desc: document.querySelector('meta[name="description"]')?.getAttribute('content') };
+    document.title = `${title} | ${COMPANY.name}`;
+    let tag = document.querySelector('meta[name="description"]');
+    if (!tag) { tag = document.createElement('meta'); tag.setAttribute('name', 'description'); document.head.appendChild(tag); }
+    tag.setAttribute('content', description);
+    return () => { document.title = before.title; if (before.desc != null) tag.setAttribute('content', before.desc); };
+  }, [title, description]);
+}
+
+function Frame({ title, intro, children, path, description }) {
+  usePageMeta(title, description || intro || title);
   return (
     <div className="pub-shell">
       <header className="pub-head">
@@ -115,10 +131,100 @@ export function TermsPage() {
   );
 }
 
-const PAGES = { '/pricing': PricingPage, '/privacy': PrivacyPage, '/terms': TermsPage };
+const SWITCH = {
+  vyapar: {
+    name: 'Vyapar',
+    steps: [
+      ['Export your data from Vyapar', 'In Vyapar, open Reports and export the party list, the item list and the party-wise outstanding as Excel or CSV. Keep your last Tally or Excel backup too.'],
+      ['Import parties and items', 'In Ledgora, go to Parties and Items and use Import. Match the columns once; GSTIN, state, opening balance and HSN come across.'],
+      ['Bring the opening balances', 'Opening balances for parties, items (stock) and bank are posted straight to the ledger, so your books start where Vyapar left off.'],
+      ['Check, then switch', 'Run Verify My Data, compare the receivable and stock totals with Vyapar, and raise your next invoice here. Keep Vyapar read-only for the rest of the year.'],
+    ],
+  },
+  tally: {
+    name: 'Tally',
+    steps: [
+      ['Export masters and balances', 'From Tally, export the ledger list, the stock items and the trial balance as Excel.'],
+      ['Import parties and items', 'Import the debtor and creditor ledgers as parties and the stock items as items. Opening balances go to the ledger.'],
+      ['Set up the chart of accounts', 'Accounting setup creates a standard chart of accounts; map your Tally groups to it once.'],
+      ['Check the trial balance', 'Open the trial balance here and compare it with Tally. You can also export from Ledgora back to Tally if your CA still works in it.'],
+    ],
+  },
+  zoho: {
+    name: 'Zoho Books',
+    steps: [
+      ['Export from Zoho Books', 'Export contacts, items and the opening balances report as CSV.'],
+      ['Import contacts and items', 'Contacts become parties and items stay items; GSTIN and place of supply are kept.'],
+      ['Post the opening balances', 'Enter the closing balances of your last period as opening balances so the ledger starts correct.'],
+      ['Run both for a month, then switch', 'Raise new invoices here, and compare the month-end GST totals with Zoho before you stop using it.'],
+    ],
+  },
+};
+
+export function SwitchPage({ which }) {
+  const g = SWITCH[which];
+  if (!g) {
+    return (
+      <Frame path="/switch" title="Switch to Ledgora" intro="Moving from another app takes an afternoon, not a project. Pick where you are coming from.">
+        <ul className="pub-cards">
+          {Object.entries(SWITCH).map(([k, v]) => <li key={k}><a href={`/switch/${k}`}><b>From {v.name}</b><span>Export, import, check.</span></a></li>)}
+        </ul>
+        <p className="pub-note">A one-click import straight from other billing apps is on our roadmap. Until then the steps use the files they export.</p>
+      </Frame>
+    );
+  }
+  return (
+    <Frame path="/switch" title={`Switch from ${g.name} to Ledgora`}
+      intro={`Four steps, using the files ${g.name} already exports. Your history stays in ${g.name}; Ledgora starts from the balances you bring.`}>
+      <ol className="pub-steps">{g.steps.map(([t, x]) => <li key={t}><h2>{t}</h2><p>{x}</p></li>)}</ol>
+      <p className="pub-cta"><a className="btn btn-primary" href="/signup">Start your {TRIAL_DAYS}-day free trial</a></p>
+      <p className="pub-note">Not sure about a step? Write to us through the <a href="/contact">contact page</a>.</p>
+    </Frame>
+  );
+}
+
+export function SecurityPage() {
+  return (
+    <Frame path="/security" title="Security and your data"
+      intro="What protects your books, and where they live. Plain statements, no badges we have not earned.">
+      <h2>Your organization&rsquo;s data is separated by the database</h2>
+      <p>Every row carries your organization, and the database itself refuses to show it to anyone else, even if a request were wrong. This is row-level security, not only application code.</p>
+      <h2>Sensitive numbers are encrypted</h2>
+      <p>Aadhaar and bank account numbers are sealed with AES-256-GCM using a key tied to your organization and are shown by their last digits only.</p>
+      <h2>Sign-in</h2>
+      <p>Passwords are hashed, sign-in can use two-step verification, you can see and end your own sessions, and a new device sends you an alert.</p>
+      <h2>An edit log nobody can switch off</h2>
+      <p>Changes to accounting records are written to an append-only log: who, what, when. Periods you lock stay locked.</p>
+      <h2>Backups and exit</h2>
+      <p>Encrypted, scheduled backups with an optional copy to your Google Drive; a 30-day trash for deleted records; and a full export at any time. Your data is yours when you leave.</p>
+      <h2>Where it runs</h2>
+      <p>The application and its database run in one cloud region chosen by the operator of this installation. Ask us for the current region and sub-processors before you sign up if your policy needs them.</p>
+      <h2>Reporting a problem</h2>
+      <p>If you find a security issue, please tell us through the contact page before telling anyone else, and we will respond quickly.</p>
+      <Contact />
+    </Frame>
+  );
+}
+
+export function ContactPage() {
+  return (
+    <Frame path="/contact" title="Contact" intro="Questions before you start, help while you use it, or a request about your data.">
+      <h2>Write to us</h2>
+      <Contact />
+      <h2>Your data</h2>
+      <p>To see, correct or erase your personal data, sign in and use Settings, Data and privacy. We answer within 30 days.</p>
+      <h2>Before you sign up</h2>
+      <p>The <a href="/pricing">pricing page</a> and the <a href="/switch">switching guides</a> answer most questions.</p>
+    </Frame>
+  );
+}
+
+const PAGES = { '/pricing': PricingPage, '/privacy': PrivacyPage, '/terms': TermsPage, '/security': SecurityPage, '/contact': ContactPage };
 
 /** The page for a public address (app/providers.tsx draws it outside the sign-in gate). */
 export default function PublicPages({ path }) {
+  const m = /^\/switch(?:\/([a-z]+))?$/.exec(path);
+  if (m) return <SwitchPage which={m[1]} />;
   const Page = PAGES[path] ?? PricingPage;
   return <Page />;
 }

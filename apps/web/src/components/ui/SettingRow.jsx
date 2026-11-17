@@ -23,7 +23,7 @@ export function SettingRow({ label, help, htmlFor, children }) {
         )}
         {help && <div className="ui-setting-help">{help}</div>}
       </div>
-      <div>{children}</div>
+      <div className="ui-setting-control">{children}</div>
     </div>
   );
 }

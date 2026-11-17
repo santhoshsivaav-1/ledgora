@@ -35,6 +35,32 @@ export function stepProblem(stepId, f, gstinOk) {
   return null;
 }
 
+/**
+ * What a business type starts with: the terms printed on invoices, the usual GST rate and the unit a new item gets. Chosen once
+ * on the first step; the person can change every one of them on the last step or in Settings.
+ */
+export const BIZ_DEFAULTS = {
+  retail: { gst: '18', unit: 'PCS', terms: 'Goods once sold will not be taken back or exchanged without the bill.\nPrices include GST where marked.' },
+  wholesale: { gst: '18', unit: 'PCS', terms: 'Payment is due within the agreed credit days.\nInterest at 18% a year may be charged on overdue bills.\nGoods once sold will not be taken back.' },
+  distributor: { gst: '18', unit: 'BOX', terms: 'Payment is due within the agreed credit days.\nClaims for damage must be made within 3 days of delivery.\nSubject to local jurisdiction.' },
+  service: { gst: '18', unit: 'NOS', terms: 'Payment is due within 15 days of the invoice date.\nLate payment may attract interest.\nTDS, if deducted, must be supported by a certificate.' },
+  manufacturing: { gst: '18', unit: 'NOS', terms: 'Payment is due within the agreed credit days.\nGoods are dispatched at the buyer\'s risk.\nSubject to local jurisdiction.' },
+  other: { gst: '18', unit: 'NOS', terms: 'Payment is due within the agreed days.\nGoods once sold will not be taken back.' },
+};
+
+/** Starts the form's terms, GST rate and unit from the business type, leaving alone anything the person has already typed. */
+export function applyBizDefaults(f, bizType) {
+  const was = BIZ_DEFAULTS[f.bizType] || BIZ_DEFAULTS.retail;
+  const next = BIZ_DEFAULTS[bizType] || BIZ_DEFAULTS.other;
+  return {
+    ...f,
+    bizType,
+    terms: f.terms === was.terms || !f.terms.trim() ? next.terms : f.terms,
+    defaultGst: f.defaultGst === was.gst ? next.gst : f.defaultGst,
+    defaultUnit: f.defaultUnit === was.unit || !f.defaultUnit ? next.unit : f.defaultUnit,
+  };
+}
+
 /** The answers that become settings (only keys the registry knows, so a typo can not slip through). */
 export function settingsFrom(f) {
   const out = {
@@ -44,6 +70,7 @@ export function settingsFrom(f) {
     'item.defaultGst': Number(f.defaultGst),
     'tax.priceInclusive': !!f.taxInclusive,
     'txn.terms.text': f.terms.trim().slice(0, 1000),
+    'item.defaultUnit': f.defaultUnit || BIZ_DEFAULTS[f.bizType]?.unit || 'PCS',
     'biz.type': f.bizType || 'retail',
     'biz.category': (f.bizCategory || '').trim().slice(0, 60),
   };

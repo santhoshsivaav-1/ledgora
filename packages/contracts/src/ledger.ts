@@ -283,3 +283,23 @@ export const itcAtRisk = z.object({
     }),
   ),
 });
+
+// R3: the deductor's quarterly register and the "what should I deduct" helper (apps/api/src/modules/tdsDeductor.ts).
+export const tdsStatementQuery = z.object({
+  businessId: uuid,
+  /** Financial year start, 2026 for FY 2026-27. */
+  fy: z.coerce.number().int().min(2017).max(2100),
+  quarter: z.enum(['Q1', 'Q2', 'Q3', 'Q4']),
+  /** The day the statement was (or is to be) filed, for the section 234E fee; empty = not filed yet. */
+  filedOn: isoDate.optional(),
+});
+export const tdsComputeQuery = z.object({
+  businessId: uuid,
+  section: z.string().trim().min(2).max(12),
+  amount: z.coerce.number().positive().max(1_000_000_000),
+  date: isoDate,
+  partyId: uuid.optional(),
+  /** Used when no party is picked or the party has none on file. */
+  pan: z.string().trim().toUpperCase().max(10).optional(),
+  lowerRate: z.coerce.number().min(0).max(100).optional(),
+});

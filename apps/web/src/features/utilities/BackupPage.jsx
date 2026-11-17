@@ -6,6 +6,8 @@ import { confirmAction } from '../../components/ui/ConfirmModal';
 import { toast } from '../../components/ui/Toast';
 import { backupDelete, backupList, backupNow, backupSaveSettings, downloadBackup, driveConnectUrl, driveDisconnect, fileToBase64, restoreBackup } from '../../lib/data/utilities';
 import { Dialog, errText, fmtDate, fmtSize } from './shared';
+import { useEntitlements } from '../billing/useEntitlements';
+import './backup.css';
 
 // Vyapar parity P7-S4: Backup, restore and the schedule. A backup is a snapshot file of the whole account (every
 // business), optionally encrypted with a password you keep: lose the password and nobody can open it. Restore asks for
@@ -19,6 +21,7 @@ const LOCK = { none: 'No', password: 'Your password', server: 'Server key' };
 const CHOICES = [['off', 'Off'], ['daily', 'Daily'], ['weekly', 'Weekly']];
 
 export default function BackupPage() {
+  const { role } = useEntitlements();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [encrypt, setEncrypt] = useState(false);
@@ -104,7 +107,7 @@ export default function BackupPage() {
 
       <div className="glass-panel p-4 mt-4" aria-label="Google Drive">
         <h3 className="section-title" style={{ marginTop: 0 }}>Google Drive</h3>
-        {!data.drive.available ? <p className="field-hint" style={{ margin: 0 }}>Not set up on this server. The server needs a Google client (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) with the Drive API enabled.</p>
+        {!data.drive.available ? <p className="field-hint" style={{ margin: 0 }}>Google Drive backup is not available on this server. Ask your administrator to switch it on.{role === 'owner' && ' (Owner: the server needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET with the Drive API enabled.)'}</p>
           : data.drive.connected ? (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span>Connected{data.drive.email ? ` as ${data.drive.email}` : ''}. Backups are saved in a “Ledgora Backups” folder.</span>
@@ -131,7 +134,7 @@ export default function BackupPage() {
       <div className="glass-panel p-4 mt-4">
         <h3 className="section-title" style={{ marginTop: 0 }}>Restore</h3>
         <p className="field-hint">Replaces nothing. It adds the backup's businesses and documents to an account that has no business data yet, after taking a copy of what is there. Owner only.</p>
-        <input type="file" accept=".ledgora" aria-label="Choose a backup file" onChange={(e) => choose(e.target.files?.[0])} />
+        <input className="file-input" type="file" accept=".ledgora" aria-label="Choose a backup file" onChange={(e) => choose(e.target.files?.[0])} />
       </div>
 
       <div className="glass-panel p-4 mt-4">

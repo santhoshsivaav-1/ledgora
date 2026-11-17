@@ -15,6 +15,7 @@ import PrintSettings from '../print/PrintSettings';
 import HelpButton from '../../components/ui/HelpButton';
 import InvoiceNumberSettings from './numbering/InvoiceNumberSettings';
 import { TAB_OF } from './tabs';
+import PrivacyRequests from './PrivacyRequests';
 import { getTrashedBills, restoreTrashedBill, purgeTrashedBill, saveBill, applyStockChanges } from '../../lib/data';
 
 // v1.10.36 — Section order for the jump-nav pill bar. Keeping this at
@@ -1590,6 +1591,8 @@ export default function SettingsView({ onSaved, me, branches, canManageBranches,
            immediately after the Company Details form. Placeholder here
            kept as a comment so a code search for "Multi-Business
            Profiles" still lands somewhere sensible. */}
+
+      {(tab === 'all' || tab === 'data') && <PrivacyRequests />}
 
       <div id="section-data" data-settings-tab="data" className="glass-panel p-6 mb-6" style={{ order: 10 }}>
         <h3 className="section-title">Data Management</h3>

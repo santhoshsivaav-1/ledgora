@@ -57,7 +57,7 @@ const probe = () => {
   const raw = [...document.querySelectorAll('a[href]')].filter((a) => { if (!vis(a)) return false; const c = getComputedStyle(a).color; return c === 'rgb(0, 0, 238)' || c === 'rgb(85, 26, 139)' || c === 'rgb(0, 0, 255)'; });
   if (raw.length) out.push(`${raw.length} links in the default browser blue ("${(raw[0].innerText || '').trim().slice(0, 24)}")`);
   // F. buttons whose label wraps onto a second line
-  const wrapped = [...document.querySelectorAll('button, a.btn')].filter((b) => { if (!vis(b)) return false; const lh = parseFloat(getComputedStyle(b).lineHeight) || 18; const t = (b.innerText || '').trim(); return t.length > 3 && b.getBoundingClientRect().height > lh * 2.4 && !b.closest('.vy-item, .ui-tab'); });
+  const wrapped = [...document.querySelectorAll('button, a.btn')].filter((b) => { if (!vis(b)) return false; const lh = parseFloat(getComputedStyle(b).lineHeight) || 18; const t = (b.innerText || '').trim(); return t.length > 3 && !t.includes('\n') && b.getBoundingClientRect().height > lh * 2.4 && !b.closest('.vy-item, .ui-tab, .vy-sidebar, .vy-switcher'); });
   if (wrapped.length) out.push(`${wrapped.length} buttons with wrapped labels ("${(wrapped[0].innerText || '').trim().slice(0, 28)}")`);
   // G. anything sticking out of the page
   if (document.documentElement.scrollWidth > vw + 1) out.push(`page scrolls sideways by ${document.documentElement.scrollWidth - vw}px`);

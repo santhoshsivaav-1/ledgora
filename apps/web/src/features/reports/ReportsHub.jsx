@@ -1,3 +1,4 @@
+import './reportsHub.css';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { BarChart3, Lock, Star } from 'lucide-react';
@@ -144,7 +145,7 @@ export default function ReportsHub() {
                           <span className="field-hint">{why}</span>
                         </span>
                       ) : (
-                        <Link to={to(r)} style={{ flex: 1 }}>
+                        <Link to={to(r)} className="rh-link" style={{ flex: 1 }}>
                           <strong>{r.title}</strong>
                         </Link>
                       )}
@@ -171,7 +172,7 @@ export default function ReportsHub() {
           <h3 className="section-title" style={{ marginTop: 0 }}>
             Analytics
           </h3>
-          <Link to="/reports/classic">
+          <Link to="/reports/classic" className="rh-link rh-link-quiet">
             <strong>Sales analytics</strong>
           </Link>
           <div className="field-hint">

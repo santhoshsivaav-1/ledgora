@@ -2,6 +2,7 @@ import { getAppSetting } from '../../lib/appSettings';
 import { duplicatePhone } from './partyFields';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, FolderTree } from 'lucide-react';
+import { useUiMode } from '../../app/uiMode';
 import HelpButton from '../../components/ui/HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../../lib/data';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../../utils';
@@ -42,6 +43,7 @@ const STATUS_COLORS = {
 };
 
 export default function ClientsView({ onEdit, onDuplicate, onNew }) {
+  const newLook = useUiMode() === 'vyapar';
   const [clients, setClients] = useState([]);
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
@@ -752,7 +754,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div>
-            <h1 className="page-title">Clients</h1>
+            <h1 className="page-title">{newLook ? 'Parties' : 'Clients'}</h1>
             <p className="page-subtitle">Client-wise invoice ledger and outstanding</p>
           </div>
           <HelpButton title="Clients — how to use" doc="clients">

@@ -7,6 +7,7 @@ import { createApp } from '../src/app.ts';
 import { loadEnv } from '../src/env.ts';
 import { createStorage } from '../src/storage.ts';
 import type { Providers } from '../src/messaging/providers.ts';
+import type { GspProvider } from '../src/gsp/provider.ts';
 import type { BillingProvider } from '../src/billing/provider.ts';
 
 const url = () => {
@@ -21,6 +22,8 @@ export interface HarnessOptions {
   providers?: Providers;
   /** SaaS billing: a fake provider (tests never call Razorpay). */
   billing?: BillingProvider;
+  /** Phase 2: a GST service provider stand-in. */
+  gsp?: GspProvider;
 }
 
 export function makeHarness(opts: HarnessOptions = {}) {
@@ -32,6 +35,8 @@ export function makeHarness(opts: HarnessOptions = {}) {
     // Most tests are about billing, not sign-up: no mail round trip, no throttling. auth.test.ts turns both back on.
     REQUIRE_EMAIL_VERIFICATION: 'false',
     RATE_LIMIT_ENABLED: 'false',
+    // Existing tests start from a bare account; onboardingDefaults.test.ts checks the real default.
+    LEDGER_ON_SIGNUP: 'false',
     ...opts.env,
   });
   const { db, sql, close } = createDb(url(), { max: 12 });
@@ -41,6 +46,7 @@ export function makeHarness(opts: HarnessOptions = {}) {
     storage: createStorage(env),
     providers: opts.providers,
     billing: opts.billing,
+    gsp: opts.gsp,
   });
 
   /** A caller bound to one session cookie. */

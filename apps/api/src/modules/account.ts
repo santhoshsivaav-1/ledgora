@@ -17,6 +17,7 @@ import { listPage, type Deps, type Registrar } from '../http.ts';
 import type { AuthContext } from '../middleware/context.ts';
 import { rulesOfRole } from '../middleware/permission.ts';
 
+import { isPlatformAdmin } from './platform.ts';
 const { member, organizations, session, memberBusinesses, subscriptions, auditLog } = schema;
 
 /** Who the person is, their organizations, role, permissions and plan: `/v1/me`, and the first part of `/v1/bootstrap`. */
@@ -50,6 +51,7 @@ export async function buildMe(deps: Deps, auth: AuthContext) {
       twoFactorEnabled: auth.user.twoFactorEnabled,
     },
     organization: { id: current.id, name: current.name },
+    platformAdmin: isPlatformAdmin(deps.env, auth.user),
     role,
     ...(await (async () => {
       const rules = await rulesOfRole(deps.db, current.id, role);

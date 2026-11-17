@@ -121,6 +121,7 @@ const RolesPage = lazyView(() => import('./features/settings/team/RolesPage'));
 const SecurityPage = lazyView(() => import('./features/settings/security/SecurityPage'));
 const AcceptInvitePage = lazyView(() => import('./features/auth/AcceptInvitePage'));
 const ClientsView = lazyView(() => import('./features/parties/ClientsView'), 'clients');
+const AdminPage = lazy(() => import('./features/admin/AdminPage'));
 const InventoryView = lazyView(() => import('./features/items/InventoryView'), 'inventory');
 const BarcodePage = lazyView(() => import('./features/utilities/BarcodePage'), 'barcode');
 const TallyPage = lazyView(() => import('./features/utilities/TallyPage'), 'tally');
@@ -140,6 +141,7 @@ const FilingPackPage = lazyView(() => import('./features/filing/FilingPackPage')
 const PracticePage = lazyView(() => import('./features/filing/PracticePage'), 'practice');
 const Itr4Page = lazyView(() => import('./features/filing/Itr4Page'), 'itr4');
 const Itr3Page = lazyView(() => import('./features/filing/Itr3Page'), 'itr3');
+const TdsDeductedPage = lazyView(() => import('./features/tds/TdsDeductedPage'), 'tdsdeducted');
 const AssetsPage = lazyView(() => import('./features/assets/AssetsPage'), 'assets');
 const EditLogPage = lazyView(() => import('./features/filing/EditLogPage'), 'edit-log');
 const CatalogSettingsPage = lazyView(() => import('./features/catalog/CatalogSettingsPage'), 'catalog');
@@ -1131,6 +1133,7 @@ function App() {
                 <Route path={pathForView('itr4')} element={<Itr4Page key={businessKey} />} />
                 <Route path={pathForView('itr3')} element={<Itr3Page key={businessKey} />} />
                 <Route path={pathForView('assets')} element={<AssetsPage key={businessKey} />} />
+                <Route path={pathForView('tdsdeducted')} element={<TdsDeductedPage key={businessKey} />} />
                 <Route path={pathForView('edit-log')} element={<EditLogPage key={businessKey} />} />
                 <Route path="/practice" element={<Navigate to={pathForView('practice')} replace />} />
                 <Route path={pathForView('catalog')} element={<CatalogSettingsPage key={businessKey} />} />
@@ -1212,6 +1215,7 @@ function App() {
                     </SettingsLayout>
                   }
                 />
+                <Route path="/admin" element={<AdminPage />} />
                 <Route path="/accept-invite/:id" element={<AcceptInvitePage />} />
                 {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
                   <Route key={from} path={from} element={<Navigate to={to} replace />} />

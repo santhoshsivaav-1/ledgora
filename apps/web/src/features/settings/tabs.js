@@ -9,6 +9,6 @@ export const TAB_OF = {
   'section-company': 'business', 'section-profiles': 'business', 'section-region': 'business',
   'section-terms': 'documents', 'section-print': 'documents',
   'section-modules': 'features', 'section-stock': 'features',
-  'section-backups': 'data', 'section-data': 'data',
+  'section-backups': 'data', 'section-data': 'data', 'section-privacy': 'data',
 };
 

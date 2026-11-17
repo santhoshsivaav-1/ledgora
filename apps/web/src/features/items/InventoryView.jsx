@@ -8,6 +8,7 @@ import { getAllProducts, saveProduct, deleteProduct, getProfile, getStockAlertSe
 import { getAllUnits, getCountryConfig, formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction } from '../../components/ui/ConfirmModal';
+import { useUiMode } from '../../app/uiMode';
 import HelpButton from '../../components/ui/HelpButton';
 import ProductBulkEdit from './ProductBulkEdit';
 import TableExport from '../import-export/TableExport';
@@ -51,6 +52,8 @@ export default function InventoryView() {
   const extra = itemExtraVisibility(appSettings); // MRP, wholesale, secondary unit, image, barcode, batch, serial
   const hideCost = useEntitlements().restrictions.hideCost; // Account Access: this role never sees purchase prices
   const startForm = () => ({ ...emptyForm, ...newItemDefaults(appSettings) });
+  // The new layout calls these Items everywhere (menu, breadcrumb, page); the classic layout keeps its old word.
+  const newLook = useUiMode() === 'vyapar';
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   // v1.10.77 (#85) - edit many products at once (see ProductBulkEdit).
@@ -257,7 +260,7 @@ export default function InventoryView() {
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div>
-            <h1 className="page-title">Products</h1>
+            <h1 className="page-title">{newLook ? 'Items' : 'Products'}</h1>
             <p className="page-subtitle">Manage your products and services catalog</p>
           </div>
           <HelpButton title="Products — how to use" doc="products">

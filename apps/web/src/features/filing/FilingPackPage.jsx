@@ -13,6 +13,7 @@ import { useEntitlements } from '../billing/useEntitlements';
 import { useSession } from '../auth/SessionContext';
 import { StepList } from '../gst-returns/gstHelpers';
 import * as api from '../../lib/data/filing';
+import { getGspStatus, gspGstnStatus, gspGstnUpload } from '../../lib/data/gsp';
 import { localToday } from '../../utils';
 
 // File-ready returns: one filing pack. What the app checked, what is still open, the CA's review, the file to upload
@@ -148,6 +149,8 @@ export default function FilingPackPage() {
     api.getPack(id).then((p) => { setPack(p); setPicked(new Set(p.acknowledged)); }, setError);
   }, [id]);
   useEffect(() => { load(); }, [load]);
+  const [gsp, setGsp] = useState(null);
+  useEffect(() => { getGspStatus().then(setGsp, () => setGsp({ connected: false })); }, []);
 
   const errors = useMemo(() => (pack?.issues ?? []).filter((i) => i.severity === 'error'), [pack]);
   const warnings = useMemo(() => (pack?.issues ?? []).filter((i) => i.severity === 'warning'), [pack]);
@@ -265,11 +268,18 @@ export default function FilingPackPage() {
             {current && pack.kind === 'gstr3b' && can('filing:prepare') && ['draft', 'ready', 'changes_requested'].includes(pack.status) && (
               <button className="btn btn-secondary" onClick={comparePortal} disabled={busy} title="Check the pack against the figures the portal auto-filled">Compare with portal</button>
             )}
+            {gsp?.connected && current && can('filing:record') && ['gstr1', 'gstr3b'].includes(pack.kind) && ['ready', 'approved'].includes(pack.status) && (!pack.gspReference || pack.gspStatus === 'error') && (!pack.reviewRequired || approvalValid) && (
+              <button className="btn btn-primary" onClick={() => act(() => gspGstnUpload(pack.id), gsp.sandbox ? 'Sent to the sandbox' : 'Sent to the GST portal. Check its status in a minute.')} disabled={busy}>Upload to GST portal</button>
+            )}
+            {pack.gspReference && pack.status !== 'filed' && can('filing:record') && (
+              <button className="btn btn-secondary" onClick={() => act(async () => { const r = await gspGstnStatus(pack.id); if (r.errors?.length) throw new Error(r.errors[0]); }, 'Status updated')} disabled={busy}>Check status{pack.gspStatus ? ` (${pack.gspStatus})` : ''}</button>
+            )}
             {canFile && <button className="btn btn-primary" onClick={() => setRecording(true)} disabled={busy}>{pack.kind === 'ims' ? 'Record as done' : 'Record as filed'}</button>}
             {pack.status === 'filed' && (role === 'owner' || role === 'admin') && (
               <button className="btn btn-secondary" onClick={reopen} disabled={busy}>Reopen</button>
             )}
           </div>
+          {pack.gspReference && <p className="ui-help">Sent through your GST service provider{gsp?.sandbox ? ' (sandbox: nothing reached the real portal)' : ''}, reference <code>{pack.gspReference}</code>. When the portal says it is filed, the ARN is recorded for you.</p>}
           {pack.status === 'ready' && pack.reviewRequired && (
             <p className="ui-help">This return went to review once, so it needs the CA's approval before it is recorded as filed.</p>
           )}

@@ -193,6 +193,7 @@ export const NAV: NavEntry[] = [
     children: [
       { id: 'gst-returns', label: 'GST Returns', view: 'filing', icon: BookOpen, module: 'gstReturns', perm: 'report:read' },
       { id: 'tds-tcs', label: 'TDS / TCS', path: '/gst-returns/tds', module: 'gstReturns', perm: 'report:read' },
+      { id: 'tds-deducted', label: 'TDS Deducted', view: 'tdsdeducted', icon: ClipboardList, perm: 'payment:read' },
       { id: 'income-tax', label: 'Income Tax', view: 'incometax', module: 'incomeTax', perm: 'report:read' },
       { id: 'itr4', label: 'ITR-4 Filing', view: 'itr4', icon: Calculator, perm: 'filing:prepare' },
       { id: 'itr3', label: 'ITR-3 Filing', view: 'itr3', icon: Calculator, perm: 'filing:prepare' },

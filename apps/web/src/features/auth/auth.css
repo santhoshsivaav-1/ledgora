@@ -115,3 +115,6 @@
   .auth-hero { display: none; }
   .auth-card-brand { display: block; }
 }
+.auth-consent { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.85rem; margin: 0.25rem 0 0.75rem; color: var(--text-secondary); }
+.auth-consent input { margin-top: 0.2rem; flex: none; }
+.auth-consent-note { font-size: 0.8rem; margin: 0.25rem 0 0.75rem; }

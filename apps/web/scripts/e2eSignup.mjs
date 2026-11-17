@@ -6,6 +6,7 @@ export async function signUpAndSetUp(page, { app, name, email, password, busines
   await page.getByLabel('Your name').fill(name);
   await page.getByLabel('E-mail').fill(email);
   await page.getByLabel(/Password/).fill(password);
+  await page.getByLabel(/I agree to the/).check();
   await page.getByRole('button', { name: 'Create account' }).click();
   const verify = page.getByRole('heading', { name: 'Check your e-mail' });
   const plans = page.getByRole('heading', { name: 'Choose how to start' });

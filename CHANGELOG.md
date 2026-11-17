@@ -9,8 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 1 of the product audit ("sell it").** GST tax invoices for subscription payments (numbered, CGST/SGST or IGST, one per charge, listed and printable under Settings, Plan & billing); paying for a plan change before the old plan stops; trial-ending and trial-ended e-mails, each sent once; a landing page at `/` with features, comparison, plans and FAQ; their own addresses for sign-in, sign-up and forgot-password; public Security, Contact and "switch from Vyapar, Tally or Zoho" pages; robots.txt and a sitemap; terms and privacy acceptance recorded at sign-up; a form in Settings to ask for access, correction or erasure of personal data; the accounting ledger and Cash & Bank on for new businesses; an optional bank step and business-type starting defaults in setup.
+
+- **TDS Deducted** page (Taxes): what to deduct on a payment, using the year's payments to the same payee (limits, 20% without PAN, lower-deduction certificate), the quarter's register by payee and challan with interest and the 234E late fee, marking a deduction deposited, and a CSV to prepare the statement from. It is data, not an FVU file.
+
+- **GST service provider layer** (`GSP_MODE=off|sandbox|http`, see `docs/GSP_INTEGRATION.md`): Generate IRN from the e-invoice dialog, upload GSTR-1 / GSTR-3B to the portal with the ARN recorded from the status check, and e-way bill generate / Part-B / cancel on the API. A built-in sandbox stands in for the portals (its output is marked sandbox). Not run against a real portal.
+
 ### Changed
 
+- One page header and one Settings navigation list; the GST Returns header is two aligned rows and each tab has its own title; the trial banner leaves a gap above the page; Parties and Items are called that on their pages; the Reports hub, Backup page and invoice-type buttons use the app's own styles.
 - **Much faster first load and reload on a deployed host (Railway free plan included).** The build now writes a Brotli and a gzip twin beside every text file it makes, and the server serves them (`Content-Encoding: br` / `gzip`) — the first-load essentials shrink from 1,339 KB of raw JavaScript/CSS to 358 KB on the wire (76% less; the whole offline precache from 3.2 MB to 0.9 MB), with nothing compressed at request time, so the free plan's shared CPU pays nothing. Screen data is compressed too: JSON answers above 1 KB are gzipped, and uploaded/downloaded files are left alone. On a weak link the app also stops pre-fetching the four busiest screens' code in the background (Data Saver on, or 2G), leaving the network to the screen you actually opened. The precache itself is unchanged — offline still works exactly as before.
 
 - **Much faster navigation and sign-in.** A page used to make 36–44 API calls (the whole bills, parties and items lists downloaded on every screen, the businesses fetched seven times, sign-in as three calls one after another); it now makes 8–11, and moving between screens 0–3. Open Anything and the notification bell ask the server instead of downloading everything; repeated reads are shared for ten seconds and forgotten on any change. New `GET /v1/bootstrap`, `/v1/workspace/search` and `/v1/workspace/notifications`; every API answer carries `Server-Timing` and calls over `SLOW_REQUEST_MS` are logged. See `docs/AUDIT_2026-11.md` section 12.

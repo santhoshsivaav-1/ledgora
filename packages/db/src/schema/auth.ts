@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -192,4 +193,40 @@ export const subscriptions = pgTable('subscriptions', {
   provider: text('provider'),
   providerSubscriptionId: text('provider_subscription_id'),
   billingInterval: text('billing_interval'),
+  /** A plan change in progress: the subscription being replaced, cancelled at its period end once the new one is active. */
+  replacesSubscriptionId: text('replaces_subscription_id'),
+  /** Trial and renewal mails already sent ('trial_3d', 'trial_1d', 'trial_ended', ...), so each goes once. */
+  notices: jsonb('notices').$type<string[]>().notNull().default([]),
 });
+
+/** What a customer was charged for Ledgora itself: a GST tax invoice per successful charge (Phase 1, "sell it"). */
+export const subscriptionInvoices = pgTable(
+  'subscription_invoices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: uuid('org_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** LS/2026-27/000001, numbered across all customers. */
+    number: text('number').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    plan: text('plan').notNull(),
+    interval: text('interval').notNull(),
+    periodStart: timestamp('period_start', { withTimezone: true }),
+    periodEnd: timestamp('period_end', { withTimezone: true }),
+    /** The provider's payment id; one invoice per payment, so a repeated webhook adds nothing. */
+    providerPaymentId: text('provider_payment_id').notNull(),
+    taxable: numeric('taxable', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    cgst: numeric('cgst', { precision: 14, scale: 2, mode: 'number' }).notNull().default(0),
+    sgst: numeric('sgst', { precision: 14, scale: 2, mode: 'number' }).notNull().default(0),
+    igst: numeric('igst', { precision: 14, scale: 2, mode: 'number' }).notNull().default(0),
+    total: numeric('total', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    /** The buyer and the seller as they were on the day, so a later edit never changes an issued invoice. */
+    buyer: jsonb('buyer').$type<Record<string, string>>().notNull(),
+    seller: jsonb('seller').$type<Record<string, string>>().notNull(),
+  },
+  (t) => [
+    unique('subscription_invoices_payment').on(t.providerPaymentId),
+    unique('subscription_invoices_number').on(t.number),
+    index('subscription_invoices_org').on(t.orgId, t.issuedAt),
+  ],
+);

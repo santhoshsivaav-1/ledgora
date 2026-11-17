@@ -47,6 +47,7 @@ await page.getByRole('tab', { name: 'Create account' }).click();
 await page.getByLabel('Your name').fill('Asha Sharma');
 await page.getByLabel('E-mail').fill(email);
 await page.getByLabel(/Password/).fill(password);
+await page.getByLabel(/I agree to the/).check();
 await page.getByRole('button', { name: 'Create account' }).click();
 await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
 check('sign-up asks the user to confirm their e-mail', true);

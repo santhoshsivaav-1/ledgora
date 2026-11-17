@@ -5,6 +5,9 @@
 // icon badge + title + subtitle + optional meta chip + right-side
 // action slot.
 //
+// One look for every page (audit U6): the same height, the same 16px gap below, actions always on the right and wrapping as a unit.
+// The styles are in pageHeader.css, so no screen can drift from them.
+//
 // Props:
 //   icon        emoji / string / element rendered inside the 44px badge
 //   title       page title (h1)
@@ -17,12 +20,14 @@
 //   breadcrumb  Vyapar parity P0-S2: [{ label, to? }] shown small above the title ("Sale › Invoices").
 //   actions     the page's primary action (top right); the same slot as children, named for new screens.
 
+import './pageHeader.css';
+
 function Breadcrumb({ items }) {
   if (!items?.length) return null;
   return (
     <nav className="ui-crumbs" aria-label="Breadcrumb">
       {items.map((b, i) => (
-        <span key={b.label} style={{ display: 'inline-flex', gap: 4 }}>
+        <span key={b.label} className="ui-crumb">
           {i > 0 && <span aria-hidden="true">›</span>}
           {b.to ? <a href={b.to}>{b.label}</a> : <span aria-current={i === items.length - 1 ? 'page' : undefined}>{b.label}</span>}
         </span>
@@ -35,57 +40,28 @@ export default function PageHeader({ icon, title, subtitle, meta, children, acti
   const slot = actions ? <>{children}{actions}</> : children;
   if (compact) {
     return (
-      <div className="page-header page-header-compact" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
-        {breadcrumb && <div style={{ flexBasis: '100%' }}><Breadcrumb items={breadcrumb} /></div>}
-        <h1 className="page-title" style={{ margin: 0, fontSize: '1.3rem' }}>{title}</h1>
-        {meta && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{meta}</span>}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{slot}</div>
+      <div className="page-header ph ph-compact">
+        {breadcrumb && <div className="ph-crumbs"><Breadcrumb items={breadcrumb} /></div>}
+        <h1 className="page-title ph-title">{title}</h1>
+        {meta && <span className="ph-meta-plain">{meta}</span>}
+        {slot && <div className="ph-actions">{slot}</div>}
       </div>
     );
   }
   return (
-    <div className="page-header" style={{
-      padding: '1.1rem 1.35rem',
-      background: 'linear-gradient(135deg, rgba(var(--primary-rgb), 0.12), var(--card-bg))',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      marginBottom: '1.25rem',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-        {icon !== undefined && (
-          <div style={{
-            width: 44, height: 44,
-            borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--primary), var(--primary-darker))',
-            color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(var(--primary-rgb), 0.35)',
-            flexShrink: 0,
-          }}>{icon}</div>
+    <div className="page-header ph">
+      {icon !== undefined && <div className="ph-icon" aria-hidden="true">{icon}</div>}
+      <div className="ph-text">
+        <Breadcrumb items={breadcrumb} />
+        <h1 className="page-title ph-title">{title}</h1>
+        {(subtitle || meta) && (
+          <p className="page-subtitle ph-sub">
+            {subtitle && <span>{subtitle}</span>}
+            {meta && <span className="ph-meta">{meta}</span>}
+          </p>
         )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Breadcrumb items={breadcrumb} />
-          <h1 className="page-title" style={{ margin: 0 }}>{title}</h1>
-          {(subtitle || meta) && (
-            <p className="page-subtitle" style={{ margin: '0.15rem 0 0', display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-              {subtitle && <span>{subtitle}</span>}
-              {meta && (
-                <span style={{
-                  fontSize: '0.7rem',
-                  padding: '0.1rem 0.5rem',
-                  borderRadius: 999,
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  fontWeight: 600,
-                  color: 'var(--text)',
-                }}>{meta}</span>
-              )}
-            </p>
-          )}
-        </div>
-        {slot}
       </div>
+      {slot && <div className="ph-actions">{slot}</div>}
     </div>
   );
 }

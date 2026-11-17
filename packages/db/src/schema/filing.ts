@@ -35,6 +35,10 @@ export const filingPacks = pgTable(
     /** draft | ready | in_review | changes_requested | approved | filed */
     status: text('status').notNull(),
     payload: jsonb('payload').notNull(),
+    /** Uploaded through a GST service provider: its reference, the last status it gave and when we asked. */
+    gspReference: text('gsp_reference'),
+    gspStatus: text('gsp_status'),
+    gspCheckedAt: timestamp('gsp_checked_at', { withTimezone: true }),
     /** SHA-256 of the canonical JSON of `payload`. */
     sha256: text('sha256').notNull(),
     sizeBytes: integer('size_bytes').notNull().default(0),

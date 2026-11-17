@@ -45,13 +45,13 @@ function ThemeProvider({ children }: { children: ReactNode }) {
 const publicSlug = typeof window !== 'undefined' ? /^\/c\/([a-z0-9-]{3,40})\/?$/i.exec(window.location.pathname)?.[1] : undefined;
 
 // So are the pricing page and the two legal pages: anyone, signed in or not, can open them.
-const PUBLIC_PATHS = ['/pricing', '/privacy', '/terms'];
+const PUBLIC_PATHS = ['/pricing', '/privacy', '/terms', '/security', '/contact', '/switch'];
 const publicPath = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') : '';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
   if (publicSlug) return <PublicCatalogPage slug={publicSlug.toLowerCase()} />;
-  if (PUBLIC_PATHS.includes(publicPath))
+  if (PUBLIC_PATHS.includes(publicPath) || /^\/switch\/[a-z]+$/.test(publicPath))
     return (
       <ThemeProvider>
         <Suspense fallback={null}>

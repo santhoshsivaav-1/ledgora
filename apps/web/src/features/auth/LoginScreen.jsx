@@ -28,6 +28,10 @@ function Msg({ error, notice }) {
 const PHONE_RE = /^\+\d{8,15}$/;
 
 // The sign-in landing page: e-mail or phone, sign up, forgot password and the two-factor step.
+// Accepting the terms is recorded on the account the first time the person is signed in (AuthGate posts it).
+import { CONSENT_KEY, CONSENT_VERSION } from '../../config/company';
+const rememberConsent = () => { try { localStorage.setItem(CONSENT_KEY, CONSENT_VERSION); } catch { /* private window: not recorded */ } };
+
 // The screens that have an address of their own. Anywhere else (a deep link someone was sent) opens on sign-in and keeps its address.
 const PATH_MODES = { '/login': 'signin', '/signin': 'signin', '/signup': 'signup', '/register': 'signup', '/forgot-password': 'forgot' };
 const MODE_PATHS = { signin: '/login', phone: '/login', signup: '/signup', forgot: '/forgot-password' };
@@ -84,6 +88,8 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
 
   const signUp = (e) => { e.preventDefault(); run(async () => {
     if (f.password.length < 8) throw new ApiError('Use a password of at least 8 characters.');
+    if (!f.agree) throw new ApiError('Please accept the terms and the privacy policy to create an account.');
+    rememberConsent();
     await signUpEmail({ name: f.name.trim() || f.email.split('@')[0], email: f.email.trim(), password: f.password });
     // E-mail confirmation is off: sign-up starts a session, so go straight on (the app opens onboarding).
     goHome();
@@ -93,6 +99,7 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
 
   const askCode = (e) => { e?.preventDefault(); run(async () => {
     if (!PHONE_RE.test(f.phone.trim())) throw new ApiError('Enter the number with country code, like +919876543210.');
+    rememberConsent();
     await sendPhoneCode(f.phone.trim());
     setCodeSent(true); setNotice(`We sent a 6-digit code to ${f.phone.trim()}.`);
   }); };
@@ -123,6 +130,8 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
     <button type="button" className="auth-link auth-back" onClick={() => { go('signin'); setNotice(''); setCodeSent(false); setUseBackup(false); }}><ArrowLeft size={14} /> Back to sign in</button>
   );
 
+  // /admin is the owner's own door: sign in only, no sign-up, and it opens the subscriber list.
+  const ownerLogin = here() === '/admin';
   return (
     <div className="auth-shell auth-split">
       <aside className="auth-hero" aria-label="About Ledgora">
@@ -144,7 +153,7 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
           </select>
         </div>
 
-        {(mode === 'signin' || mode === 'signup' || mode === 'phone') && (
+        {(mode === 'signin' || mode === 'signup' || mode === 'phone') && !ownerLogin && (
           <div className="auth-tabs" role="tablist">
             <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'on' : ''} onClick={() => go('signin')}><Mail size={14} /> {tr('auth.signIn', 'Sign in')}</button>
             <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'on' : ''} onClick={() => go('signup')}>{tr('auth.createAccount', 'Create account')}</button>
@@ -154,7 +163,7 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
 
         {mode === 'signin' && (
           <form onSubmit={signIn}>
-            <h1 className="auth-title">{tr('auth.welcome', 'Welcome back')}</h1>
+            <h1 className="auth-title">{ownerLogin ? 'Owner sign-in' : tr('auth.welcome', 'Welcome back')}</h1>
             <p className="auth-muted">{tr('auth.signInHint', 'Sign in to your business.')}</p>
             <Field f={f} set={set} id="email" label="E-mail" type="email" autoComplete="email" autoFocus />
             <Field f={f} set={set} id="password" label="Password" type="password" autoComplete="current-password" />
@@ -171,6 +180,10 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
             <Field f={f} set={set} id="name" label="Your name" autoComplete="name" required={false} />
             <Field f={f} set={set} id="email" label="E-mail" type="email" autoComplete="email" />
             <Field f={f} set={set} id="password" label="Password (8+ characters)" type="password" autoComplete="new-password" minLength={8} />
+            <label className="auth-consent">
+              <input type="checkbox" checked={!!f.agree} onChange={(e) => setF((s) => ({ ...s, agree: e.target.checked }))} />
+              <span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms of use</a> and the <a href="/privacy" target="_blank" rel="noreferrer">Privacy policy</a>.</span>
+            </label>
             <Msg error={error} notice={notice} />
             <button className="btn btn-primary auth-wide" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
           </form>
@@ -183,6 +196,7 @@ export default function LoginScreen({ onSignedIn, initialMode }) {
             <Field f={f} set={set} id="phone" label="Mobile number" type="tel" autoComplete="tel" placeholder="+919876543210" disabled={codeSent} />
             {codeSent && <Field f={f} set={set} id="code" label="6-digit code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus />}
             <Msg error={error} notice={notice} />
+            {!codeSent && <p className="auth-muted auth-consent-note">By continuing you agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms</a> and the <a href="/privacy" target="_blank" rel="noreferrer">Privacy policy</a>.</p>}
             <button className="btn btn-primary auth-wide" disabled={busy}>{busy ? 'Please wait…' : codeSent ? 'Confirm code' : 'Send code'}</button>
             {codeSent && <button type="button" className="auth-link" onClick={askCode}>Send a new code</button>}
           </form>

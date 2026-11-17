@@ -78,7 +78,8 @@ export function createAuth(db: Database, env: AppEnv) {
             },
           }),
           // 2.6: workspace, first business and trial exist before the first session does.
-          after: async (u) => void (await onboardNewUser(db, u)),
+          after: async (u) =>
+            void (await onboardNewUser(db, u, { ledgerOn: env.LEDGER_ON_SIGNUP })),
         },
       },
       session: {

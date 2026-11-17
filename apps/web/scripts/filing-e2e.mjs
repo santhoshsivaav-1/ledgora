@@ -94,6 +94,7 @@ try {
   await ca.getByLabel('Your name').fill('CA Person');
   await ca.getByLabel('E-mail').fill(caEmail);
   await ca.getByLabel(/Password/).fill(password);
+  await ca.getByLabel(/I agree to the/).check();
   await ca.getByRole('button', { name: 'Create account' }).click();
   await ca.getByRole('heading', { name: 'Choose how to start' }).waitFor({ timeout: 15000 });
   await ca.goto(inv.acceptUrl.replace(/^https?:\/\/[^/]+/, APP));

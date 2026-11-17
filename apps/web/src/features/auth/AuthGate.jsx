@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { getStartup, signOut as apiSignOut } from '../../services/session';
-import { configureApiClient, forgetReads, rememberRead } from '../../lib/apiClient';
+import { apiClient, configureApiClient, forgetReads, rememberRead } from '../../lib/apiClient';
 import { flushPrintSettings } from '../print/printSettingsStore';
 import { applyPrefs, clearMirroredPrefs, flushMirroredPrefs, startMirroring } from '../../utils/prefsMirror';
 import LoginScreen from './LoginScreen';
 import Landing from '../landing/Landing';
+const AdminPage = lazy(() => import('../admin/AdminPage'));
+import { CONSENT_KEY } from '../../config/company';
 import BusinessSetup from './BusinessSetup';
 import PlansScreen from './PlansScreen';
 import FirstInvoiceGuide from '../onboarding/FirstInvoiceGuide';
@@ -24,7 +26,7 @@ const ENDED_KEY = 'ledgora_plan_ended_seen';
 const flag = (k) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
 const seen = (k) => { try { return sessionStorage.getItem(k) === '1'; } catch { return false; } };
 export default function AuthGate({ children }) {
-  const [phase, setPhase] = useState('loading'); // loading | error | out | plans | onboarding | guide | ended | in
+  const [phase, setPhase] = useState('loading'); // loading | error | out | plans | onboarding | guide | ended | in | admin
   const [me, setMe] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
   const [problem, setProblem] = useState('');
@@ -49,7 +51,9 @@ export default function AuthGate({ children }) {
       // Someone who signed up to join a team opens the invitation first: they are not choosing a plan or setting up
       // a business of their own. After accepting, the shared business is active and needs neither.
       const joining = window.location.pathname.startsWith('/accept-invite/');
-      if (joining) setPhase('in');
+      // The owner of the service signing in at /admin goes straight to the subscriber list: no plan, setup or business screens.
+      if (who.platformAdmin && /^\/admin\/?$/.test(window.location.pathname)) setPhase('admin');
+      else if (joining) setPhase('in');
       else if (owner && ent?.needsPlan) setPhase('plans');
       else if (!ob.complete) setPhase('onboarding');
       else if (flag(GUIDE_KEY)) setPhase('guide');
@@ -94,6 +98,15 @@ export default function AuthGate({ children }) {
 
   const value = useMemo(() => ({ me, signOut, refresh }), [me, signOut, refresh]);
 
+  // Record the terms accepted on the sign-up form, once, now that there is an account to record it on.
+  useEffect(() => {
+    if (phase !== 'in') return;
+    let v = null;
+    try { v = localStorage.getItem(CONSENT_KEY); } catch { /* ignore */ }
+    if (!v) return;
+    apiClient.post('/v1/privacy/consent', { version: v }).then(() => { try { localStorage.removeItem(CONSENT_KEY); } catch { /* ignore */ } }).catch(() => {});
+  }, [phase]);
+
   // Someone already signed in who opens /login or /signup is taken to the app.
   useEffect(() => {
     if (phase === 'in' && /^\/(login|signin|signup|register|forgot-password)\/?$/.test(window.location.pathname)) window.history.replaceState({}, '', '/');
@@ -117,6 +130,13 @@ export default function AuthGate({ children }) {
     const path = window.location.pathname.replace(/\/+$/, '') || '/';
     if (path === '/' && !window.location.search) return <Landing />;
     return <LoginScreen onSignedIn={refresh} />;
+  }
+  if (phase === 'admin') {
+    return (
+      <SessionContext.Provider value={value}>
+        <Suspense fallback={null}><AdminPage standalone /></Suspense>
+      </SessionContext.Provider>
+    );
   }
   if (phase === 'plans' || phase === 'ended') {
     return (

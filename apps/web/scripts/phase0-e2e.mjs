@@ -34,7 +34,7 @@ try {
   await pub.goto(`${APP}/terms`);
   await pub.getByRole('heading', { name: 'Terms of use' }).waitFor({ timeout: 15000 });
   check('/terms says the software does not file returns', /does not file anything for you/.test(await pub.locator('body').innerText()));
-  check('the public pages link to each other and to sign-in', (await pub.locator('.pub-head nav a').count()) === 4);
+  check('the public pages link to each other and to sign-in', (await pub.locator('.pub-head nav a').count()) === 8);
   await pub.goto(`${APP}/terms/`);
   await pub.getByRole('heading', { name: 'Terms of use' }).waitFor({ timeout: 15000 }).catch(() => {});
   check('a trailing slash still opens the page', (await pub.getByRole('heading', { name: 'Terms of use' }).count()) === 1);

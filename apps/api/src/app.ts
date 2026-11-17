@@ -38,6 +38,10 @@ import { settingsModule } from './modules/settings.ts';
 import { publicLinkEndpoints } from './publicLink.ts';
 import { messagingModule } from './modules/messaging.ts';
 import { billingModule, billingWebhook } from './modules/billing.ts';
+import { privacyModule } from './modules/privacy.ts';
+import { platformModule } from './modules/platform.ts';
+import { tdsDeductorModule } from './modules/tdsDeductor.ts';
+import { gspModule } from './modules/gsp.ts';
 import { rolesModule } from './modules/roles.ts';
 import { utilitiesModule } from './modules/utilities.ts';
 import { backupsModule } from './modules/backups.ts';
@@ -139,6 +143,10 @@ export function createApp(base: Omit<Deps, 'auth'>) {
     settingsModule,
     messagingModule,
     billingModule,
+    privacyModule,
+    platformModule,
+    tdsDeductorModule,
+    gspModule,
     rolesModule,
     utilitiesModule,
     backupsModule,

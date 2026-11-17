@@ -1,0 +1,20 @@
+/* Settings: a list of groups beside the page, and inputs wide enough to show their value (audit U5). */
+.settings-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.settings-side { position: sticky; top: 0.5rem; display: grid; gap: 1rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.settings-group { display: grid; gap: 0.15rem; }
+.settings-group-title { margin: 0 0 0.2rem; padding: 0 0.6rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.settings-side a { padding: 0.45rem 0.6rem; border-radius: 8px; color: var(--text-secondary); font-size: 0.88rem; font-weight: 600; text-decoration: none; }
+.settings-side a:hover { background: var(--bg-secondary); color: var(--text); }
+.settings-side a.active { background: rgba(var(--primary-rgb), 0.12); color: var(--primary); }
+.settings-body { min-width: 0; }
+.settings-body .form-group > input.form-input[type='text'], .settings-body .form-group > input.form-input[type='email'], .settings-body .form-group > input.form-input[type='tel'], .settings-body .form-group > input.form-input:not([type]) { min-width: min(280px, 100%); }
+@media (max-width: 900px) {
+  .settings-shell { grid-template-columns: 1fr; }
+  .settings-side { position: static; display: flex; gap: 0.25rem 1rem; overflow-x: auto; max-height: none; padding: 0.5rem; }
+  .settings-group { display: flex; align-items: center; gap: 0.15rem; flex: none; }
+  .settings-group-title { padding: 0 0.4rem 0 0.2rem; white-space: nowrap; }
+  .settings-side a { white-space: nowrap; }
+}
+/* Links inside Settings use the app's link colour, not the browser's blue. */
+.settings-body a:not(.btn) { color: var(--link, var(--primary)); }
+.settings-body input.form-input[type='email'], .settings-body input.form-input[type='text'] { text-overflow: ellipsis; }

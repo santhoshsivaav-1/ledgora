@@ -25,6 +25,32 @@ export function serveWeb(app: Hono, env: AppEnv) {
   const root = path.relative(process.cwd(), dir) || '.';
   // Read on each request: it is small, and a rebuilt app (new file names) is picked up without a restart.
   const index = () => readFileSync(path.join(dir, 'index.html'), 'utf8');
+  // Search engines: the public pages are indexed, the signed-in app and the API are not. The addresses are absolute, from APP_URL.
+  const site = env.APP_URL.replace(/\/+$/, '');
+  const PUBLIC = [
+    '/',
+    '/pricing',
+    '/security',
+    '/switch',
+    '/switch/vyapar',
+    '/switch/tally',
+    '/switch/zoho',
+    '/contact',
+    '/privacy',
+    '/terms',
+    '/login',
+    '/signup',
+  ];
+  app.get('/robots.txt', (c) =>
+    c.text(`User-agent: *\nAllow: /\nDisallow: /v1/\nSitemap: ${site}/sitemap.xml\n`),
+  );
+  app.get('/sitemap.xml', (c) =>
+    c.body(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${PUBLIC.map((p) => `  <url><loc>${site}${p}</loc></url>`).join('\n')}\n</urlset>\n`,
+      200,
+      { 'content-type': 'application/xml; charset=utf-8' },
+    ),
+  );
   const isApi = (p: string) => p.startsWith('/v1/') || p === '/health';
   // v1.10.81 — precompressed lets serveStatic hand out the `.br` / `.gz` twins the web build
   // writes next to every text file (scripts/compress-dist.mjs) with `Content-Encoding`.

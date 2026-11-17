@@ -29,6 +29,7 @@ await page.getByRole('tab', { name: 'Create account' }).click();
 await page.getByLabel('Your name').fill('Pdf Check');
 await page.getByLabel('E-mail').fill(email);
 await page.getByLabel(/Password/).fill('correct-horse-9');
+await page.getByLabel(/I agree to the/).check();
 await page.getByRole('button', { name: 'Create account' }).click();
 await page.getByRole('heading', { name: 'Check your e-mail' }).waitFor();
 const mail = await waitForMail((m) => m.to === email && /Confirm/.test(m.subject));

@@ -177,6 +177,7 @@ describe('business setup', () => {
       'fy.startMonth': 1,
       'tax.defaultItemRate': 12,
       'item.defaultGst': 12,
+      'item.defaultUnit': 'PCS',
       'tax.priceInclusive': true,
       'txn.terms.text': 'Pay in 15 days',
       'biz.type': 'retail',

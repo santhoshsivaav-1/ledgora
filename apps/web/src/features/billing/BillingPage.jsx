@@ -3,7 +3,8 @@ import PageHeader from '../../components/ui/PageHeader';
 import { LoadingState, ErrorState } from '../../components/ui/States';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction } from '../../components/ui/ConfirmModal';
-import { cancelPlan, getBilling, startCheckout } from '../../lib/data/billing';
+import { cancelPlan, getBilling, getInvoices, startCheckout } from '../../lib/data/billing';
+import SubscriptionInvoice from './SubscriptionInvoice';
 import { useEntitlements } from './useEntitlements';
 import PlanMatrix from './PlanMatrix';
 import { planSummary, fmtDate } from './planFormat';
@@ -18,11 +19,15 @@ export default function BillingPage() {
   const [error, setError] = useState(null);
   const [interval, setInterval] = useState('year');
   const [busy, setBusy] = useState('');
+  const [invoices, setInvoices] = useState([]);
+  const [open, setOpen] = useState(null);
   const load = () => getBilling().then(setData).catch(setError);
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (owner) getInvoices().then(setInvoices).catch(() => setInvoices([])); }, [owner]);
 
   if (error) return <ErrorState message={error.message} onRetry={() => { setError(null); load(); }} />;
   if (!data) return <LoadingState label="Opening your plan…" />;
+  if (open) return <SubscriptionInvoice id={open} onBack={() => setOpen(null)} />;
   const { current, usage, plans, features, checkoutAvailable } = data;
   const summary = planSummary({ ...current, features: [...(current.features || [])] });
 
@@ -79,6 +84,27 @@ export default function BillingPage() {
       <PlanMatrix plans={plans} features={features} interval={interval} currentPlan={current.trial ? null : current.plan}
         onChoose={owner ? upgrade : null} busy={busy} choosable={checkoutAvailable} />
       {!owner && <p className="ui-help" style={{ marginTop: 12 }}>Ask the owner to change the plan.</p>}
+      {current.status === 'active' && owner && <p className="ui-help" style={{ marginTop: 12 }}>Changing plan: pay for the new one first; the old one then stops at the end of its period, so you are never charged twice for the same days.</p>}
+      {owner && invoices.length > 0 && (
+        <section className="glass-panel p-6" style={{ marginTop: 24 }} aria-labelledby="inv-h">
+          <h3 className="section-title" id="inv-h" style={{ marginTop: 0 }}>Your invoices</h3>
+          <div className="table-scroll">
+            <table className="ui-table">
+              <thead><tr><th>Invoice</th><th>Date</th><th>Plan</th><th className="num">Total</th><th /></tr></thead>
+              <tbody>
+                {invoices.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.number}</td><td>{fmtDate(i.issuedAt)}</td>
+                    <td>{i.plan[0].toUpperCase() + i.plan.slice(1)}, {i.interval === 'year' ? 'yearly' : 'monthly'}</td>
+                    <td className="num">₹{i.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td><button type="button" className="btn btn-ghost" onClick={() => setOpen(i.id)}>View</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       {!checkoutAvailable && <p className="ui-help" style={{ marginTop: 12 }}>Online payment is not set up on this server yet. Contact support to upgrade.</p>}
     </div>
   );

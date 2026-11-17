@@ -61,3 +61,77 @@ export const newDeviceAlert = (
     `Your account was just signed in from a new device: <b>${esc(device)}</b> (${esc(when)}). If this was not you, sign in, choose <b>Log out everywhere</b> and change your password.`,
   ),
 });
+
+const planLine = 'Silver is Rs 2,999 a year and Gold Rs 4,999 (plus GST); Free stays free.';
+export const trialEndingMail = (
+  to: string,
+  name: string,
+  daysLeft: number,
+  url: string,
+): Message => ({
+  to,
+  subject:
+    daysLeft <= 1
+      ? 'Your Ledgora trial ends tomorrow'
+      : `Your Ledgora trial ends in ${daysLeft} days`,
+  text: `Hi ${name},\n\nYour free trial of every Ledgora feature ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Choose a plan to keep the paid features, or carry on with Free. Your data is yours either way.\n${planLine}\n\n${url}`,
+  html: wrap(
+    daysLeft <= 1 ? 'Your trial ends tomorrow' : `Your trial ends in ${daysLeft} days`,
+    `Hi ${esc(name)}, choose a plan to keep the paid features, or carry on with Free. Your data stays yours either way. ${esc(planLine)}`,
+    { label: 'Choose a plan', url },
+  ),
+});
+export const trialEndedMail = (to: string, name: string, url: string): Message => ({
+  to,
+  subject: 'Your Ledgora trial has ended',
+  text: `Hi ${name},\n\nYour free trial has ended. You can still read and download everything. Choose a plan, or carry on with Free, to keep entering new bills.\n${planLine}\n\n${url}`,
+  html: wrap(
+    'Your trial has ended',
+    `Hi ${esc(name)}, you can still read and download everything. Choose a plan, or carry on with Free, to keep entering new bills. ${esc(planLine)}`,
+    { label: 'Choose a plan', url },
+  ),
+});
+export const paymentReceiptMail = (
+  to: string,
+  name: string,
+  number: string,
+  total: number,
+  url: string,
+): Message => ({
+  to,
+  subject: `Ledgora invoice ${number}`,
+  text: `Hi ${name},\n\nThank you. Your payment of Rs ${total.toFixed(2)} is received. Your GST invoice ${number} is here:\n${url}`,
+  html: wrap(
+    'Payment received',
+    `Hi ${esc(name)}, thank you. Your payment of Rs ${total.toFixed(2)} is received. Invoice ${esc(number)} is ready.`,
+    {
+      label: 'View invoice',
+      url,
+    },
+  ),
+});
+
+export const dataRequestMail = (
+  to: string,
+  who: string,
+  kind: string,
+  note: string,
+  org: string,
+): Message => ({
+  to,
+  subject: `Data request (${kind}) from ${who}`,
+  text: `${who} of ${org} asks for: ${kind}.\n\n${note || '(no note)'}`,
+  html: wrap(
+    `Data request: ${kind}`,
+    `${esc(who)} of ${esc(org)} asks for: ${esc(kind)}.<br><br>${esc(note || '(no note)')}`,
+  ),
+});
+export const dataRequestReceivedMail = (to: string, name: string, kind: string): Message => ({
+  to,
+  subject: 'We received your data request',
+  text: `Hi ${name},\n\nWe received your request (${kind}). We will answer within 30 days. If you did not make this request, change your password and tell us.`,
+  html: wrap(
+    'We received your request',
+    `Hi ${esc(name)}, we received your request (${esc(kind)}). We will answer within 30 days. If you did not make it, change your password and tell us.`,
+  ),
+});

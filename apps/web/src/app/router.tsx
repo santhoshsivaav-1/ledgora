@@ -58,6 +58,7 @@ export const VIEW_ROUTES: ViewRoute[] = [
   // Vyapar parity Phase 12: the Point of Sale counter.
   { id: 'pos', path: '/pos', title: 'POS' },
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
+  { id: 'tdsdeducted', path: '/tds-deducted', title: 'TDS deducted' },
   { id: 'incometax', path: '/income-tax', title: 'Income tax' },
   { id: 'itr4', path: '/itr-4', title: 'ITR-4' },
   { id: 'itr3', path: '/itr-3', title: 'ITR-3' },

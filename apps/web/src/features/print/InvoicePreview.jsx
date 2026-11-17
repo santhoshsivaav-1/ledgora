@@ -1078,6 +1078,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
           <div style={{ wordBreak: 'break-all' }}>
             <div><strong>IRN:</strong> {einv.irn}</div>
             <div><strong>Ack No:</strong> {einv.ackNo} &nbsp; <strong>Ack Date:</strong> {einv.ackDt}</div>
+            {einv.sandbox && <div style={{ color: '#b91c1c', fontWeight: 700 }}>SANDBOX: not a real IRN, not valid for GST</div>}
           </div>
         </div>
       )}

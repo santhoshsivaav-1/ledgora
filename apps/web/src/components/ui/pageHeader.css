@@ -1,0 +1,14 @@
+/* The page header every screen shares (PageHeader.jsx). */
+.page-header.ph, [data-theme='dark'] .page-header.ph { display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; padding: 0.9rem 1.2rem; margin: 0 0 1rem; justify-content: flex-start; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; }
+.page-header.ph-compact, [data-theme='dark'] .page-header.ph-compact { padding: 0; margin-bottom: 0.9rem; background: none; border: 0; border-radius: 0; gap: 0.75rem; }
+.ph-icon { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), var(--primary-darker)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; flex: none; }
+.ph-text { flex: 1 1 260px; min-width: 0; }
+.ph-title { margin: 0; }
+.ph-compact .ph-title { font-size: 1.3rem; }
+.ph-sub { margin: 0.15rem 0 0; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.ph-meta { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--bg-secondary); border: 1px solid var(--border); font-weight: 600; color: var(--text); }
+.ph-meta-plain { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+.ph-crumbs { flex-basis: 100%; }
+.ph-actions { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
+.ui-crumb { display: inline-flex; gap: 4px; }
+@media (max-width: 640px) { .ph-actions { margin-left: 0; width: 100%; justify-content: flex-start; } }

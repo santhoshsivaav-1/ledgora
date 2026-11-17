@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { schema, seedOrgDefaults, type Database } from '@ledgora/db';
 import { TRIAL_DAYS } from '@ledgora/contracts';
+import { backfillLedger } from '../ledgerBackfill.ts';
+import { setCashbank } from '../cashbankRules.ts';
 
 /**
  * Sign-up (change 2.6): a new user gets an organization, an owner membership, a first business and a pending subscription (the 7-day trial starts when the owner asks),
@@ -12,6 +14,7 @@ import { TRIAL_DAYS } from '@ledgora/contracts';
 export async function onboardNewUser(
   db: Database,
   user: { id: string; name: string; email: string },
+  opts: { ledgerOn?: boolean } = {},
 ) {
   const orgId = randomUUID();
   const businessId = randomUUID();
@@ -31,6 +34,18 @@ export async function onboardNewUser(
       .values({ id: businessId, orgId, name: `${label}'s Business`, isDefault: true });
     await tx.insert(schema.businessSettings).values({ orgId, businessId });
     await seedOrgDefaults(tx, orgId);
+    // A new business keeps its books from the first bill: the ledger and Cash & Bank start on (a business with no documents has
+    // nothing to reconcile, so there is nothing to check first). If it can not, the account is still created, with both off.
+    if (opts.ledgerOn !== false)
+      try {
+        await tx.transaction(async (sp) => {
+          const t = sp as unknown as typeof tx;
+          await backfillLedger(t, orgId, { businessId, dryRun: false, force: false });
+          await setCashbank(t, orgId, businessId, { enabled: true });
+        });
+      } catch (e) {
+        console.error('[signup] ledger not switched on', e instanceof Error ? e.message : e);
+      }
     await tx.insert(schema.subscriptions).values({
       orgId,
       // The trial starts when the owner presses "Start free trial" on the plans page (POST /v1/billing/trial), not at

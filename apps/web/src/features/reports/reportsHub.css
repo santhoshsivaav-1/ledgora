@@ -1,0 +1,4 @@
+.rh-link { color: var(--text); text-decoration: none; }
+.rh-link:hover { color: var(--primary); text-decoration: underline; }
+.rh-link strong { font-weight: 600; }
+.rh-link-quiet { color: var(--text-secondary); text-decoration: underline; }

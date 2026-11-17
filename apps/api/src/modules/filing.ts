@@ -85,7 +85,7 @@ const LOCKS_MONTHS: readonly FilingKind[] = ['gstr1', 'gstr3b'];
 const inWindow = (a: Pick<OrgContext, 'dataFrom' | 'dataTo'>, periodTo: string) =>
   (!a.dataFrom || periodTo >= a.dataFrom) && (!a.dataTo || periodTo <= a.dataTo);
 
-async function loadPack(tx: Tx, id: string, a: OrgContext) {
+export async function loadPack(tx: Tx, id: string, a: OrgContext) {
   const [row] = await tx
     .select()
     .from(filingPacks)
@@ -118,7 +118,7 @@ async function event(
 }
 
 /** A pack without its (possibly large) file, for lists. */
-const summary = (p: Pack) => ({
+export const summary = (p: Pack) => ({
   id: p.id,
   businessId: p.businessId,
   kind: p.kind,
@@ -139,6 +139,8 @@ const summary = (p: Pack) => ({
   reviewedAt: p.reviewedAt,
   approvedSha256: p.approvedSha256,
   arn: p.arn,
+  gspReference: p.gspReference,
+  gspStatus: p.gspStatus,
   filedOn: p.filedOn,
   filedBy: p.filedBy,
   ackFileId: p.ackFileId,
@@ -421,6 +423,88 @@ async function calendarOf(tx: Tx, businessId: string, fy: number) {
     }
   }
   return { businessId, gstin: biz.gstin, frequency, regType, fy, trackedFrom: tracked, rows };
+}
+
+/** Records a pack as filed (ARN, date, acknowledgement), locks its months, and logs it. Used by the screen's button and by the GSP status check. */
+export async function recordFiledPack(
+  tx: Tx,
+  orgId: string,
+  auth: OrgContext,
+  id: string,
+  body: z.infer<typeof recordFiledBody>,
+) {
+  const p = await loadPack(tx, id, auth);
+  const to = move(p, 'record_filed');
+  if (p.approvedSha256 && p.approvedSha256 !== p.sha256)
+    throw new AppError(
+      'conflict',
+      'The file changed after it was approved; send it for review again',
+    );
+  const biz = await loadBusiness(tx, p.businessId);
+  if (p.kind === 'itr4' || p.kind === 'itr3') {
+    // The acknowledgement number is 15 digits. The file was built for a filing date: filed on the other side of the due
+    // date, its late fee, interest and filing section are wrong, so it must be built again.
+    const problem = ackProblem(body.arn ?? '');
+    if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
+    const itr = (
+      p.payload as {
+        ITR?: Record<
+          string,
+          | {
+              FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
+              PartA_GEN1?: {
+                FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
+              };
+            }
+          | undefined
+        >;
+      }
+    ).ITR;
+    // ITR-4 keeps the filing status at the top of the form; ITR-3 inside Part A General.
+    const f = p.kind === 'itr3' ? itr?.ITR3?.PartA_GEN1?.FilingStatus : itr?.ITR4?.FilingStatus;
+    const due = f?.ItrFilingDueDate ?? '';
+    if (due && body.filedOn <= due !== (f?.ReturnFileSec === 11))
+      throw new AppError(
+        'unprocessable',
+        f?.ReturnFileSec === 11
+          ? 'This return was built as filed in time, but you filed it after the due date. Build it again with the real filing date'
+          : 'This return was built as a belated return, but you filed it by the due date. Build it again with the real filing date',
+      );
+  } else if (p.kind !== 'ims') {
+    const problem = arnProblem(body.arn ?? '', biz.gstin ?? '');
+    if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
+  }
+  if (body.filedOn > today())
+    throw new AppError('unprocessable', 'The filing date is in the future');
+  if (body.filedOn < p.periodTo)
+    throw new AppError('unprocessable', 'A return is filed after its period ends');
+  const [row] = await tx
+    .update(filingPacks)
+    .set({
+      status: to,
+      arn: p.kind === 'ims' ? null : body.arn!,
+      filedOn: body.filedOn,
+      filedBy: auth.user.id,
+      ackFileId: body.ackFileId ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(filingPacks.id, p.id))
+    .returning();
+  if (LOCKS_MONTHS.includes(p.kind as FilingKind))
+    await setFiledMonths(tx, orgId, p.businessId, retPeriodMonths(p.period, p.quarterly), true);
+  await event(tx, auth, row!, {
+    kind: 'status',
+    from: p.status,
+    to,
+    body:
+      p.kind === 'ims'
+        ? `Actions taken on IMS on ${body.filedOn}`
+        : `ARN ${body.arn}, filed on ${body.filedOn}`,
+  });
+  await audit(tx, orgId, 'filing.filed', 'filing_pack', p.id, {
+    after: { arn: body.arn, filedOn: body.filedOn, sha256: p.sha256 },
+  });
+  return summary(row!);
 }
 
 export function filingModule({ route }: Registrar) {
@@ -830,80 +914,8 @@ export function filingModule({ route }: Registrar) {
     permission: 'filing:record',
     params: idParams,
     body: recordFiledBody,
-    handler: async ({ tx, orgId, auth, params, body }) => {
-      const p = await loadPack(tx, params.id, auth);
-      const to = move(p, 'record_filed');
-      if (p.approvedSha256 && p.approvedSha256 !== p.sha256)
-        throw new AppError(
-          'conflict',
-          'The file changed after it was approved; send it for review again',
-        );
-      const biz = await loadBusiness(tx, p.businessId);
-      if (p.kind === 'itr4' || p.kind === 'itr3') {
-        // The acknowledgement number is 15 digits. The file was built for a filing date: filed on the other side of the due
-        // date, its late fee, interest and filing section are wrong, so it must be built again.
-        const problem = ackProblem(body.arn ?? '');
-        if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
-        const itr = (
-          p.payload as {
-            ITR?: Record<
-              string,
-              | {
-                  FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
-                  PartA_GEN1?: {
-                    FilingStatus?: { ReturnFileSec?: number; ItrFilingDueDate?: string };
-                  };
-                }
-              | undefined
-            >;
-          }
-        ).ITR;
-        // ITR-4 keeps the filing status at the top of the form; ITR-3 inside Part A General.
-        const f = p.kind === 'itr3' ? itr?.ITR3?.PartA_GEN1?.FilingStatus : itr?.ITR4?.FilingStatus;
-        const due = f?.ItrFilingDueDate ?? '';
-        if (due && body.filedOn <= due !== (f?.ReturnFileSec === 11))
-          throw new AppError(
-            'unprocessable',
-            f?.ReturnFileSec === 11
-              ? 'This return was built as filed in time, but you filed it after the due date. Build it again with the real filing date'
-              : 'This return was built as a belated return, but you filed it by the due date. Build it again with the real filing date',
-          );
-      } else if (p.kind !== 'ims') {
-        const problem = arnProblem(body.arn ?? '', biz.gstin ?? '');
-        if (problem) throw new AppError('unprocessable', problem, { field: 'arn' });
-      }
-      if (body.filedOn > today())
-        throw new AppError('unprocessable', 'The filing date is in the future');
-      if (body.filedOn < p.periodTo)
-        throw new AppError('unprocessable', 'A return is filed after its period ends');
-      const [row] = await tx
-        .update(filingPacks)
-        .set({
-          status: to,
-          arn: p.kind === 'ims' ? null : body.arn!,
-          filedOn: body.filedOn,
-          filedBy: auth.user.id,
-          ackFileId: body.ackFileId ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(filingPacks.id, p.id))
-        .returning();
-      if (LOCKS_MONTHS.includes(p.kind as FilingKind))
-        await setFiledMonths(tx, orgId, p.businessId, retPeriodMonths(p.period, p.quarterly), true);
-      await event(tx, auth, row!, {
-        kind: 'status',
-        from: p.status,
-        to,
-        body:
-          p.kind === 'ims'
-            ? `Actions taken on IMS on ${body.filedOn}`
-            : `ARN ${body.arn}, filed on ${body.filedOn}`,
-      });
-      await audit(tx, orgId, 'filing.filed', 'filing_pack', p.id, {
-        after: { arn: body.arn, filedOn: body.filedOn, sha256: p.sha256 },
-      });
-      return summary(row!);
-    },
+    handler: ({ tx, orgId, auth, params, body }) =>
+      recordFiledPack(tx, orgId, auth, params.id, body),
   });
 
   route({

@@ -1,0 +1,22 @@
+/* Subscription invoice: on screen as a card, on paper as the whole page. */
+.sub-invoice-actions { display: flex; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.sub-invoice { max-width: 760px; margin: 0 auto; background: var(--card-bg, #fff); border: 1px solid var(--border, #e3e6ee); border-radius: 12px; padding: 2rem; }
+.sub-invoice header { display: flex; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border, #e3e6ee); padding-bottom: 1rem; }
+.sub-invoice h2 { margin: 0 0 0.4rem; }
+.sub-invoice p { margin: 0.1rem 0; }
+.sub-invoice dl { display: grid; grid-template-columns: auto auto; gap: 0.2rem 1rem; margin: 0; align-content: start; }
+.sub-invoice dt { color: var(--text-muted, #64748b); }
+.sub-invoice dd { margin: 0; font-weight: 600; text-align: right; }
+.sub-invoice section { padding: 1rem 0; }
+.sub-invoice h3 { margin: 0 0 0.3rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted, #64748b); }
+.sub-invoice table { width: 100%; border-collapse: collapse; }
+.sub-invoice th, .sub-invoice td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border, #e3e6ee); text-align: left; }
+.sub-invoice .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sub-invoice .total td { font-weight: 700; font-size: 1.05rem; border-bottom: 0; }
+.sub-invoice-note { margin-top: 1rem !important; font-size: 0.82rem; color: var(--text-muted, #64748b); }
+@media print {
+  body * { visibility: hidden; }
+  .sub-invoice, .sub-invoice * { visibility: visible; }
+  .sub-invoice { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; }
+  .no-print { display: none !important; }
+}

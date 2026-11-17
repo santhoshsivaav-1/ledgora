@@ -8,3 +8,6 @@ export const cancelPlan = () => apiClient.post('/v1/billing/cancel', {});
 export const startTrial = (choice) => apiClient.post('/v1/billing/trial', { choice });
 /** After the trial or a paid plan has ended: carry on with Free. Unlocks a locked account. Owner only. */
 export const chooseFree = () => apiClient.post('/v1/billing/free', {});
+/** The GST invoices issued for this organization's subscription payments. Owner only. */
+export const getInvoices = () => apiClient.get('/v1/billing/invoices').then((r) => r.invoices);
+export const getInvoice = (id) => apiClient.get(`/v1/billing/invoices/${id}`).then((r) => r.invoice);

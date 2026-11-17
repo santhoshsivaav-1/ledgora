@@ -8,6 +8,7 @@ import { AppError, validationError } from './errors.ts';
 import type { Storage } from './storage.ts';
 import type { Providers } from './messaging/providers.ts';
 import type { BillingProvider } from './billing/provider.ts';
+import type { GspProvider } from './gsp/provider.ts';
 import type { Auth } from './auth/auth.ts';
 import {
   requireFeature,
@@ -29,6 +30,8 @@ export interface Deps {
   providers?: Providers;
   /** SaaS billing provider. Tests pass a fake; omitted = Razorpay from env. */
   billing?: BillingProvider;
+  /** GST service provider for IRN, e-way bill and GSTN. Tests pass the sandbox; omitted = from env. */
+  gsp?: GspProvider;
 }
 
 export interface RouteSpec<

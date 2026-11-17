@@ -1,0 +1,6 @@
+/* Backup & Restore: a file chooser and number boxes that look like the rest of the app (audit U11). */
+.file-input { font: inherit; color: var(--text-secondary); max-width: 100%; }
+.file-input::file-selector-button { font: inherit; font-weight: 600; margin-right: 0.75rem; padding: 0.4rem 0.9rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text); cursor: pointer; }
+.file-input::file-selector-button:hover { border-color: var(--primary); color: var(--primary); }
+.form-label input[type='number']::-webkit-inner-spin-button, .form-label input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.form-label input[type='number'] { -moz-appearance: textfield; appearance: textfield; }

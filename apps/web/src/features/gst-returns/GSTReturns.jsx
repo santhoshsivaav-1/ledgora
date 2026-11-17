@@ -8,6 +8,7 @@ import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, hsnUqc, get
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
 import { MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, billIsInterstate, buildReconciliation, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
+import './gstReturns.css';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
 import Gstr2bPage from './Gstr2bPage';
@@ -398,19 +399,18 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   };
 
   // ========== RENDER ==========
+  const TAB_TITLES = { gstr1: 'GSTR-1', gstr3b: 'GSTR-3B', gstr2b: 'GSTR-2B Reconciliation', tds: 'TDS / TCS Report', guide: 'Filing Guide' };
   const totalTax = grandTotals.cgst + grandTotals.sgst + grandTotals.igst;
   const netPayable = netTax.igst + netTax.cgst + netTax.sgst;
 
   return (
     <div className="dashboard-container">
-      {/* Header row: title + period selector + portal link */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>GST Returns</h1>
-        {can('filing:read') && (
-          <Link className="btn btn-secondary" to="/filing" style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }} title="Every return of the year: packs, CA review, ARNs">
-            Return Register
-          </Link>
-        )}
+      {/* Header: the page's own title, then what it is for (period, filing status), then the actions, wrapping as units */}
+      <div className="gr-head">
+        <div className="gr-title">
+          <h1 className="page-title" style={{ margin: 0 }}>{TAB_TITLES[activeTab] || 'GST Returns'}</h1>
+          <p className="page-subtitle" style={{ margin: 0 }}>GST Returns</p>
+        </div>
         <HelpButton title="GST Returns — how to use" doc="gst-returns">
           <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
             <li><strong>Pick a period</strong> — Monthly / Quarterly (QRMP) / Full Year, then the specific month + year.</li>
@@ -421,52 +421,61 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
             <li><strong>Mark Filed</strong> — after filing on the portal, click Mark Filed to keep the app's status in sync.</li>
           </ul>
         </HelpButton>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-          <select className="form-input" value={filterMode} onChange={e => setFilterMode(e.target.value)} style={{ width: 'auto', minWidth: '120px' }}>
+        <div className="gr-controls" role="group" aria-label="Return period">
+          <select className="form-input" value={filterMode} onChange={e => setFilterMode(e.target.value)}>
             <option value="month">Monthly</option>
             <option value="quarter">Quarterly (QRMP)</option>
             <option value="fy">Full Year</option>
           </select>
           {filterMode === 'fy' ? (
-            <select className="form-input" value={fyFilter} onChange={e => setFyFilter(e.target.value)} style={{ width: 'auto' }}>
+            <select className="form-input" value={fyFilter} onChange={e => setFyFilter(e.target.value)}>
               {fyOptions.map(fy => <option key={fy.value} value={fy.value}>{fy.label}</option>)}
             </select>
           ) : filterMode === 'quarter' ? (
             <>
-              <select className="form-input" value={quarterFilter} onChange={e => setQuarterFilter(e.target.value)} style={{ width: 'auto' }}>
+              <select className="form-input" value={quarterFilter} onChange={e => setQuarterFilter(e.target.value)}>
                 {QUARTERS.map(q => <option key={q.id} value={q.id}>{q.label}</option>)}
               </select>
-              <select className="form-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ width: 'auto', minWidth: '80px' }}>
+              <select className="form-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
                 {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </>
           ) : (
             <>
-              <select className="form-input" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} style={{ width: 'auto' }}>
+              <select className="form-input" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
                 {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
               </select>
-              <select className="form-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ width: 'auto', minWidth: '80px' }}>
+              <select className="form-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)}>
                 {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </>
           )}
+        </div>
+        <div className="gr-status" role="group" aria-label="Filing status">
           {/* Filing status — v1.10.18: clickable to toggle. Reported: "in
               every option give option to change or edit because by mistake
               if click happens user can change that". */}
           <button type="button" onClick={() => toggleFiled('gstr1')}
             title={periodFiling.gstr1 ? 'Click to mark as pending' : 'Click to mark as filed'}
-            style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '10px', border: 'none', cursor: 'pointer', background: periodFiling.gstr1 ? '#ecfdf5' : '#fef2f2', color: periodFiling.gstr1 ? '#059669' : '#dc2626', fontWeight: 600 }}>
+            className={`gr-pill ${periodFiling.gstr1 ? 'gr-pill-ok' : 'gr-pill-pending'}`}>
             R1 {periodFiling.gstr1 ? 'Filed' : 'Pending'}
           </button>
           <button type="button" onClick={() => toggleFiled('gstr3b')}
             title={periodFiling.gstr3b ? 'Click to mark as pending' : 'Click to mark as filed'}
-            style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '10px', border: 'none', cursor: 'pointer', background: periodFiling.gstr3b ? '#ecfdf5' : '#fef2f2', color: periodFiling.gstr3b ? '#059669' : '#dc2626', fontWeight: 600 }}>
+            className={`gr-pill ${periodFiling.gstr3b ? 'gr-pill-ok' : 'gr-pill-pending'}`}>
             3B {periodFiling.gstr3b ? 'Filed' : 'Pending'}
           </button>
         </div>
-        <a href="https://gst.gov.in" target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-          <ExternalLink size={14} /> GST Portal
-        </a>
+        <div className="gr-actions">
+          {can('filing:read') && (
+            <Link className="btn btn-secondary btn-sm" to="/filing" title="Every return of the year: packs, CA review, ARNs">
+              Return Register
+            </Link>
+          )}
+          <a href="https://gst.gov.in" target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
+            <ExternalLink size={14} /> GST Portal
+          </a>
+        </div>
       </div>
 
       {/* Warnings — collapsed by default, only errors show */}
@@ -517,7 +526,7 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+      <div className="gr-tabs" role="tablist" aria-label="Returns">
         {[
           { id: 'gstr1', label: 'GSTR-1', icon: BarChart3 },
           { id: 'gstr3b', label: 'GSTR-3B', icon: FileText },
@@ -525,8 +534,8 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
           { id: 'tds', label: 'TDS / TCS Report', icon: FileText },
           { id: 'guide', label: 'Filing Guide', icon: BookOpen },
         ].map(tab => (
-          <button key={tab.id} className={`btn ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab(tab.id)} style={{ fontSize: '0.82rem', padding: '0.4rem 0.75rem' }}>
+          <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={`btn btn-sm ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab(tab.id)}>
             <tab.icon size={14} /> {tab.label}
           </button>
         ))}

@@ -8,3 +8,6 @@ export const COMPANY = {
 };
 /** The day the wording of the privacy policy and terms last changed. Change it with the text. */
 export const LEGAL_UPDATED = '16 November 2026';
+/** The version a person accepts at sign-up (recorded server-side). Change it with LEGAL_UPDATED. */
+export const CONSENT_VERSION = '2026-11-16';
+export const CONSENT_KEY = 'ledgora_consent_pending';

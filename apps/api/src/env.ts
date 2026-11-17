@@ -16,6 +16,23 @@ const schema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   /** Razorpay plan ids: "silver:month=plan_x,silver:year=plan_y,gold:month=plan_z,gold:year=plan_w". */
   RAZORPAY_PLAN_IDS: z.string().optional(),
+  /** A new business starts with the accounting ledger and Cash & Bank switched on. Off only in tests that assume a bare account. */
+  LEDGER_ON_SIGNUP: bool.default(true),
+  /** GST Suvidha Provider for e-invoice (IRN), e-way bill and GSTN upload. off = the manual route only; sandbox = a built-in stand-in for trying it; http = a real provider behind docs/GSP_INTEGRATION.md. */
+  GSP_MODE: z.enum(['off', 'sandbox', 'http']).default('off'),
+  GSP_BASE_URL: z.string().url().optional(),
+  GSP_API_KEY: z.string().optional(),
+  /** Where data-protection requests (access, correction, erasure) are mailed. Empty = they are only recorded in the audit log. */
+  SUPPORT_EMAIL: z.string().optional(),
+  /** The e-mail addresses (comma separated) of the people who run this installation. They alone see the Platform admin page (subscribers, plans, e-mails). The address must be confirmed. */
+  PLATFORM_ADMIN_EMAILS: z.string().default(''),
+  /** Who issues the GST invoice for a Ledgora subscription. Leave the GSTIN empty until registered: the invoice is then a bill of supply. */
+  SELLER_NAME: z.string().default('Ledgora'),
+  SELLER_GSTIN: z.string().optional(),
+  SELLER_STATE: z.string().default('Tamil Nadu'),
+  SELLER_ADDRESS: z.string().default(''),
+  /** GST rate on the software subscription (SAC 998431). */
+  SELLER_GST_RATE: z.coerce.number().min(0).max(40).default(18),
   /** Public address of this API; Better Auth builds e-mail links and cookie scope from it. */
   API_URL: z.string().url().optional(),
   /** Extra browser origins (comma separated) allowed to call the API with cookies, besides APP_URL. */

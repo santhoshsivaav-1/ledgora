@@ -12,6 +12,7 @@
   --ad-good: var(--success);
   --ad-bad: var(--danger);
   max-width: 1240px;
+  width: 100%; /* the main column is a flex box: without this the centred page shrinks to its content and sits inset from the banner */
   margin: 0 auto;
   display: flex;
   flex-direction: column;

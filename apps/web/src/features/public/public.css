@@ -17,3 +17,13 @@
 .pub-note { color: var(--text-muted, #52606d); font-size: 0.9rem; }
 .pub-foot { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; padding: 1rem 1.25rem 1.5rem; font-size: 0.85rem; color: var(--text-muted, #52606d); }
 .pub-foot a { color: inherit; }
+
+.pub-cards { list-style: none; padding: 0; margin: 1.25rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.pub-cards a { display: grid; gap: 0.25rem; padding: 1rem 1.1rem; border: 1px solid var(--border, #e3e6ee); border-radius: 12px; background: var(--card-bg, #fff); color: var(--text, #1f2937); text-decoration: none; }
+.pub-cards a:hover { border-color: var(--primary, #15803d); }
+.pub-cards span { color: var(--text-secondary, #475569); font-size: 0.9rem; }
+.pub-steps { list-style: none; counter-reset: s; padding: 0; margin: 1.25rem 0; display: grid; gap: 1rem; }
+.pub-steps li { counter-increment: s; position: relative; padding: 0.9rem 1rem 0.9rem 3.2rem; border: 1px solid var(--border, #e3e6ee); border-radius: 12px; background: var(--card-bg, #fff); }
+.pub-steps li::before { content: counter(s); position: absolute; left: 0.9rem; top: 0.9rem; width: 28px; height: 28px; border-radius: 50%; background: var(--primary, #15803d); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 0.9rem; }
+.pub-steps h2 { margin: 0 0 0.25rem; font-size: 1.05rem; }
+.pub-steps p { margin: 0; }

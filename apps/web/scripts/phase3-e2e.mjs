@@ -91,6 +91,7 @@ await guest.getByRole('tab', { name: 'Create account' }).click();
 await guest.getByLabel('Your name').fill('Sam Sales');
 await guest.getByLabel('E-mail').fill(salesEmail);
 await guest.getByLabel(/Password/).fill(password);
+await guest.getByLabel(/I agree to the/).check();
 await guest.getByRole('button', { name: 'Create account' }).click();
 // With e-mail confirmation on, confirm first; either way a new account lands on the plans page.
 const guestVerify = guest.getByRole('heading', { name: 'Check your e-mail' });
