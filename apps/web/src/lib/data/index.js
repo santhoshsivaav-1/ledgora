@@ -13,3 +13,4 @@ export * from './receipts';
 export * from './transfer';
 export * from './files';
 export * from './accounting';
+export * from './godowns';

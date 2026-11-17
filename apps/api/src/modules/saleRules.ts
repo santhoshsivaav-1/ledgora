@@ -27,6 +27,7 @@ const {
   staff,
   businessSettings,
   stockMovements,
+  godowns,
   financialYears,
 } = schema;
 
@@ -351,7 +352,7 @@ export interface GuardInput {
   partyId: string | null;
   total: number;
   data: unknown;
-  lines: { itemId: string | null; name: string; quantity: number }[];
+  lines: { itemId: string | null; name: string; quantity: number; godownId?: string | null }[];
   tracked: Set<string>;
   payments: InlinePayment[];
   confirm: {
@@ -441,7 +442,12 @@ async function dayCash(tx: Tx, partyId: string, date: string, excludeInvoiceId?:
   return r2(s.v);
 }
 
-async function stockOnHand(tx: Tx, itemIds: string[], excludeInvoiceId?: string) {
+async function stockOnHand(
+  tx: Tx,
+  itemIds: string[],
+  excludeInvoiceId?: string,
+  pool?: { godownId: string; isDefault: boolean } | null,
+) {
   if (!itemIds.length) return {};
   const rows = await tx
     .select({
@@ -453,6 +459,12 @@ async function stockOnHand(tx: Tx, itemIds: string[], excludeInvoiceId?: string)
       and(
         inArray(stockMovements.itemId, itemIds),
         isNull(stockMovements.deletedAt),
+        // Phase 3: stock of one godown (the default one also holds the unnamed movements); no pool = the whole business.
+        pool
+          ? pool.isDefault
+            ? sql`(${stockMovements.godownId} = ${pool.godownId} or ${stockMovements.godownId} is null)`
+            : sql`${stockMovements.godownId} = ${pool.godownId}`
+          : undefined,
         excludeInvoiceId
           ? sql`not (${stockMovements.refType} = 'invoice' and ${stockMovements.refId} = ${excludeInvoiceId})`
           : undefined,
@@ -615,23 +627,49 @@ export async function runGuards(tx: Tx, orgId: string, auth: OrgContext, g: Guar
     }
   }
 
-  // Negative stock (only documents that take stock out).
+  // Negative stock (only documents that take stock out). Phase 3: a line that names a godown sells from that godown,
+  // so the check runs once per godown named (a move without a godown belongs to the default one); lines that name no
+  // godown while none of the lines do are checked against the whole business, as before.
   const mode = settings.negativeStock ?? 'allow';
   const takesStock = (STOCK_SIGN[g.invoiceType] ?? -1) < 0;
   if (mode !== 'allow' && takesStock && g.restock !== false) {
     const lines = g.lines.filter((l) => l.itemId && g.tracked.has(l.itemId));
-    const stock = await stockOnHand(
-      tx,
-      [...new Set(lines.map((l) => l.itemId as string))],
-      g.invoiceId,
-    );
-    const res = negativeStockCheck(lines, stock, mode);
-    if (res.action === 'block' || (res.action === 'warn' && g.confirm.negativeStock !== true))
-      throw new AppError(
-        'negative_stock',
-        `Not enough stock: ${res.short.map((s) => `${s.name || 'item'} short by ${s.short}`).join(', ')}`,
-        { mode, short: res.short },
+    const named = [...new Set(lines.map((l) => l.godownId ?? '').filter(Boolean))] as string[];
+    const godownRows = named.length
+      ? await tx
+          .select({ id: godowns.id, isDefault: godowns.isDefault })
+          .from(godowns)
+          .where(and(isNull(godowns.deletedAt), inArray(godowns.id, named)))
+      : [];
+    const pools = new Map<string, { godownId: string; isDefault: boolean } | null>();
+    if (named.length) {
+      for (const gid of named) {
+        const row = godownRows.find((r) => r.id === gid);
+        pools.set(gid, row ? { godownId: row.id, isDefault: row.isDefault } : null);
+      }
+      if (lines.some((l) => !l.godownId)) {
+        const def = godownRows.find((r) => r.isDefault);
+        pools.set('__default__', def ? { godownId: def.id, isDefault: true } : null);
+      }
+    } else pools.set('*', null);
+    for (const [gid, pool] of pools) {
+      const group = lines.filter((l) =>
+        named.length ? (l.godownId ?? '__default__') === (gid === '*' ? null : gid) : true,
       );
+      const stock = await stockOnHand(
+        tx,
+        [...new Set(group.map((l) => l.itemId as string))],
+        g.invoiceId,
+        pool,
+      );
+      const res = negativeStockCheck(group, stock, mode);
+      if (res.action === 'block' || (res.action === 'warn' && g.confirm.negativeStock !== true))
+        throw new AppError(
+          'negative_stock',
+          `Not enough stock${gid && gid !== '*' && gid !== '__default__' ? ' in the godown' : ''}: ${res.short.map((s) => `${s.name || 'item'} short by ${s.short}`).join(', ')}`,
+          { mode, short: res.short, godownId: gid && gid !== '*' ? gid : null },
+        );
+    }
   }
 }
 

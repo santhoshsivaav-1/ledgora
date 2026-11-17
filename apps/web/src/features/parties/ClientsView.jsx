@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, FolderTree } from 'lucide-react';
 import { useUiMode } from '../../app/uiMode';
 import HelpButton from '../../components/ui/HelpButton';
-import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../../lib/data';
+import { deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../../lib/data';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../../utils';
 import { getPrintSettings } from '../print/printSettingsStore';
 import { openWhatsAppShare } from '../import-export/share';
@@ -31,6 +31,7 @@ import PartyGroupsModal from './PartyGroupsModal';
 import { Badge } from '../../components/ui/Display';
 import { createPartyGroup, ensureGroupPath, groupPath, listPartyGroups } from '../../lib/data/partyGroups';
 import { CLIENT_TEMPLATE, clientCsvToRecords, downloadCsv } from '../import-export/bulkCsv';
+import useClientList from './useClientList';
 
 const STATUS_COLORS = {
   unpaid: { label: 'Unpaid', color: '#f59e0b', bg: '#fffbeb' },
@@ -44,36 +45,21 @@ const STATUS_COLORS = {
 
 export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   const newLook = useUiMode() === 'vyapar';
-  const [clients, setClients] = useState([]);
-  const [bills, setBills] = useState([]);
-  const [search, setSearch] = useState('');
-  const [kindFilter, setKindFilter] = useState(''); // '' | customer | supplier (Settings > Party > party type)
+  // The paged saved-client list, the whole-collection bill load behind the
+  // card figures, party groups and the post-write reload live in the hook.
+  const {
+    clients, bills, groups, search, setSearch, kindFilter, setKindFilter,
+    clientsCursor, clientsLoading, filteredClients, loadMore, loadData,
+  } = useClientList();
   const [expandedClient, setExpandedClient] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [modalClient, setModalClient] = useState(null);
   const [editingClientId, setEditingClientId] = useState(null);
   const [profileCountry, setProfileCountry] = useState('');
   const [showGroups, setShowGroups] = useState(false);
-  const [groups, setGroups] = useState([]);
 
   useEffect(() => {
     getProfile().then(p => { if (p?.country) setProfileCountry(p.country); }).catch(() => {});
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const [c, b] = await Promise.all([getAllClients(), getAllBills()]);
-      setClients(c);
-      setBills(b);
-    } catch {
-      toast('Failed to load data', 'error');
-    }
-    // Groups are a label on the card; a failure here must not hide the clients.
-    listPartyGroups().then(setGroups).catch(() => {});
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
   // Client Statement PDF — feature A from v1.6.7 audit ("#1 daily ask when
@@ -600,17 +586,6 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
     }
   };
 
-  // Get all unique client names from bills (includes unsaved clients)
-  const allClientNames = [...new Set([
-    ...clients.map(c => c.name),
-    ...bills.map(b => b.clientName).filter(Boolean)
-  ])];
-
-  const kindOf = (name) => clients.find(c => c.name === name)?.kind || 'customer';
-  const filteredClients = (search.trim()
-    ? allClientNames.filter(name => name.toLowerCase().includes(search.toLowerCase()))
-    : allClientNames).filter(name => !kindFilter || kindOf(name) === kindFilter || kindOf(name) === 'both');
-
   // Sort by outstanding amount
   const sortedClients = [...filteredClients].sort((a, b) => {
     const sa = getClientStats(a);
@@ -812,10 +787,13 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
         <div className="glass-panel p-6">
           <div className="empty-state">
             <Users size={48} />
-            <p>No clients found.</p>
-            <button className="btn btn-secondary" onClick={() => openAddClient()} style={{ marginTop: '0.5rem' }}>
-              <Plus size={16} /> Add Your First Client
-            </button>
+            {/* Phase 3 — the list pages, so an empty table can just mean the first page is still loading. */}
+            <p>{clientsLoading ? 'Loading clients…' : 'No clients found.'}</p>
+            {!clientsLoading && (
+              <button className="btn btn-secondary" onClick={() => openAddClient()} style={{ marginTop: '0.5rem' }}>
+                <Plus size={16} /> Add Your First Client
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -1024,6 +1002,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Phase 3 — paged saved clients: the next 50. Hidden once every page is in (nextCursor null). */}
+      {clientsCursor && (
+        <div style={{ textAlign: 'center', padding: '0.5rem 0 1.5rem' }}>
+          <button className="btn btn-secondary" onClick={() => loadMore()} disabled={clientsLoading}>
+            {clientsLoading ? 'Loading…' : 'Load more clients'}
+          </button>
         </div>
       )}
     </div>

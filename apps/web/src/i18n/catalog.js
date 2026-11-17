@@ -16,6 +16,7 @@ export const CATALOGS = {
     ...nav({
       home: 'होम', parties: 'पार्टियाँ', 'parties-all': 'सभी पार्टियाँ', 'party-groups': 'पार्टी समूह', 'parties-import': 'पार्टियाँ आयात करें',
       items: 'आइटम', 'items-all': 'सभी आइटम', 'item-categories': 'श्रेणियाँ', 'item-units': 'इकाइयाँ',
+      godowns: 'गोदाम',
       sale: 'बिक्री', 'sale-overview': 'सारांश', 'sales-quotes': 'कोटेशन', 'sales-orders': 'बिक्री ऑर्डर', 'sales-challans': 'डिलीवरी चालान',
       'sales-invoices': 'बिल', 'sales-proforma': 'प्रोफ़ॉर्मा', 'sales-credit': 'बिक्री वापसी / क्रेडिट नोट', pos: 'POS',
       'payment-in': 'भुगतान प्राप्त', recurring: 'आवर्ती बिल',
@@ -53,6 +54,7 @@ export const CATALOGS = {
     ...nav({
       home: 'முகப்பு', parties: 'தரப்பினர்', 'parties-all': 'அனைத்து தரப்பினர்', 'party-groups': 'தரப்பினர் குழுக்கள்', 'parties-import': 'தரப்பினரை இறக்குமதி செய்',
       items: 'பொருட்கள்', 'items-all': 'அனைத்து பொருட்கள்', 'item-categories': 'வகைகள்', 'item-units': 'அலகுகள்',
+      godowns: 'கிடங்கு',
       sale: 'விற்பனை', 'sale-overview': 'கண்ணோட்டம்', 'sales-quotes': 'விலைப்புள்ளிகள்', 'sales-orders': 'விற்பனை ஆர்டர்கள்', 'sales-challans': 'டெலிவரி சலான்கள்',
       'sales-invoices': 'விலைப்பட்டியல்கள்', 'sales-proforma': 'புரோஃபார்மா', 'sales-credit': 'விற்பனை திருப்பம் / கிரெடிட் நோட்', pos: 'POS',
       'payment-in': 'பணம் வரவு', recurring: 'தொடர் பில்கள்',

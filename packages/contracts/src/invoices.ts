@@ -31,6 +31,8 @@ export const invoiceLineInput = z.object({
   expDate: isoDate.nullish(),
   mfgDate: isoDate.nullish(),
   serials: z.array(z.string().trim().min(1).max(60)).max(500).nullish(),
+  /** Phase 3: the godown the line sells from; left out = the business's default godown. */
+  godownId: z.string().uuid().nullish(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineInput>;
 

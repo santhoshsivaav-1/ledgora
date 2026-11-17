@@ -42,16 +42,18 @@ export const items = pgTable(
   ],
 );
 
-/** Stock is the sum of these rows, never an editable number (change 1.15). Positive = in, negative = out. */
+/** Stock is the sum of these rows, never an editable number (change 1.15). Positive = in, negative = out.
+ *  A movement without a godown belongs to the business's default godown (Phase 3). */
 export const stockMovements = pgTable(
   'stock_movements',
   {
     ...base(),
     itemId: uuid('item_id').notNull(),
     quantity: qty('quantity').notNull(),
-    reason: text('reason').notNull(), // opening | sale | sale_return | purchase | adjustment | cancel
-    refType: text('ref_type'), // invoice | purchase
+    reason: text('reason').notNull(), // opening | sale | sale_return | purchase | adjustment | cancel | transfer | manufacture
+    refType: text('ref_type'), // invoice | purchase | transfer | manufacture
     refId: uuid('ref_id'),
+    godownId: uuid('godown_id'),
     note: text('note').notNull().default(''),
     movedAt: timestamp('moved_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -59,5 +61,6 @@ export const stockMovements = pgTable(
     foreignKey({ columns: [t.orgId, t.itemId], foreignColumns: [items.orgId, items.id] }),
     index('stock_movements_item_idx').on(t.orgId, t.itemId),
     index('stock_movements_ref_idx').on(t.orgId, t.refType, t.refId),
+    index('stock_movements_godown_idx').on(t.orgId, t.godownId, t.itemId),
   ],
 );

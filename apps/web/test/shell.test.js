@@ -99,6 +99,7 @@ describe('navigation (one source for the new menu)', () => {
       'sales-menu',
       'clients',
       'inventory',
+      'godowns',
       'expenses',
       'purchases',
       'reports',

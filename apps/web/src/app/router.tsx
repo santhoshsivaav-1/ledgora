@@ -55,6 +55,8 @@ export const VIEW_ROUTES: ViewRoute[] = [
   { id: 'reports', path: '/reports', title: 'Reports' },
   // Vyapar parity Phase 5: Cash & Bank is one screen with tabs (/cash-bank/:tab), like the books.
   { id: 'cashbank', path: '/cash-bank', title: 'Cash & Bank' },
+  // Vyapar parity Phase 3: Godowns is one screen with tabs (/godowns/:tab), the same shape.
+  { id: 'godowns', path: '/godowns', title: 'Godowns' },
   // Vyapar parity Phase 12: the Point of Sale counter.
   { id: 'pos', path: '/pos', title: 'POS' },
   { id: 'filing', path: '/gst-returns', title: 'GST returns' },
@@ -94,6 +96,7 @@ export function viewFromPath(pathname: string) {
   if (clean.startsWith('/accounting')) return 'accounting'; // the books have one address per tab
   if (clean === '/filing' || clean.startsWith('/filing/')) return 'returns'; // the register and each pack
   if (clean === '/cash-bank' || clean.startsWith('/cash-bank/')) return 'cashbank'; // one address per tab
+  if (clean === '/godowns' || clean.startsWith('/godowns/')) return 'godowns'; // one address per tab
   if (clean === '/reports' || clean.startsWith('/reports/')) return 'reports'; // the hub and every /reports/:id
   for (const r of VIEW_ROUTES) {
     if (matches(r.path, clean) || (r.vyaparPath && matches(r.vyaparPath, clean))) return r.id;

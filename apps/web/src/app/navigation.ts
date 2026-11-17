@@ -24,6 +24,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Warehouse,
   Workflow,
   Wrench,
 } from 'lucide-react';
@@ -101,6 +102,7 @@ export const NAV: NavEntry[] = [
     perm: 'item:read',
     children: [
       { id: 'items-all', label: 'All Items', view: 'inventory' },
+      { id: 'godowns', label: 'Godowns', path: '/godowns', match: '/godowns' },
       { id: 'item-categories', label: 'Categories', path: '/products/categories', planned: 'P1' },
       { id: 'item-units', label: 'Units', path: '/products/units', planned: 'P1' },
     ],
@@ -347,6 +349,8 @@ export function buildClassicNav({ showIfModule, openDocs, isCa = false }: Classi
     { id: 'sales-menu', icon: FileText, label: 'Sales', module: 'dashboard', children: salesChildren },
     { id: 'clients', icon: Users, label: 'Clients', module: 'clients' },
     { id: 'inventory', icon: Package, label: 'Products', module: 'inventory' },
+    // Godowns (Vyapar parity Phase 3): the stock's locations, with transfers and manufacture runs.
+    { id: 'godowns', icon: Warehouse, label: 'Godowns', module: 'inventory' },
     { id: 'expenses', icon: Wallet, label: 'Expenses', module: 'expenses' },
     { id: 'purchases', icon: ShoppingCart, label: 'Purchases', module: 'purchases' },
     { id: 'reports', icon: BarChart3, label: 'Reports', module: 'reports' },

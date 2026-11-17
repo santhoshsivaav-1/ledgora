@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { FileText, Download, Upload, ExternalLink, CheckCircle, ChevronDown, ChevronRight, AlertTriangle, BookOpen, BarChart3 } from 'lucide-react';
-import { getAllBills, getAllExpenses, getAllOtherIncome, getAllPurchaseDocs, getAllReceipts, getProfile, savePurchase } from '../../lib/data';
+import { listBillsPage, isIncome, getProfile, savePurchase } from '../../lib/data';
 import { promptAction } from '../../components/ui/ConfirmModal';
 import { useAppSettings } from '../../lib/appSettings';
 import { compositionTax, gstReturnsModel, imsActions, imsPack } from '@ledgora/tax-engine';
 import { formatCurrency, INVOICE_TYPES, getStateCode, formatDateGST, hsnUqc, getFYOptions, getCustomUnits, GST_PORTAL_RATES, roundQty, placeOfSupplyLabel } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import HelpButton from '../../components/ui/HelpButton';
-import { MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, billIsInterstate, buildReconciliation, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
+import { MONTHS, QUARTERS, downloadCSV, round2, readFilingStatus, computeItemTaxSplit, getTaxableAmount, billIsInterstate, buildReconciliation, collectPages, fetchCollectionPages, periodDateRange, GSTR1_STEPS, GSTR3B_STEPS, NIL_GSTR1_STEPS, NIL_GSTR3B_STEPS, StepList } from './gstHelpers';
 import './gstReturns.css';
 import Gstr1Page from './Gstr1Page';
 import Gstr3bPage from './Gstr3bPage';
@@ -29,11 +29,19 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   // gstReturnsModel (packages/tax-engine), the same code the server builds filing packs with.
   const [docs, setDocs] = useState({ profile: {}, bills: [], purchases: [], expenses: [], receipts: [], otherIncome: [] });
   const profile = docs.profile || {};
+  // FY options first: the period state below initialises from them (Phase 3 —
+  // the period is fetched from the server, so it must be correct on the first
+  // render instead of being filled in by an effect after a whole-collection load).
+  const fyOptions = getFYOptions(5, new Date(), 4);
+  const currentYear = new Date().getFullYear();
+  const yearOptions = [];
+  for (let y = currentYear; y >= currentYear - 5; y--) yearOptions.push(y);
+  const nowMonth = new Date().getMonth();
   const [filterMode, setFilterMode] = useState('month');
-  const [fyFilter, setFyFilter] = useState('');
-  const [monthFilter, setMonthFilter] = useState('');
-  const [yearFilter, setYearFilter] = useState('');
-  const [quarterFilter, setQuarterFilter] = useState('Q1');
+  const [fyFilter, setFyFilter] = useState(() => fyOptions[0]?.value || '');
+  const [monthFilter, setMonthFilter] = useState(() => String(nowMonth));
+  const [yearFilter, setYearFilter] = useState(() => String(currentYear));
+  const [quarterFilter, setQuarterFilter] = useState(() => (QUARTERS.find(q => q.months.includes(nowMonth))?.id || 'Q1'));
   const activeTab = tab;
   const setActiveTab = onTab;
   const [gstr2bData, setGstr2bData] = useState(null); // imported 2B JSON
@@ -73,36 +81,57 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
   const filingStatus = filingState.data;
   const setFilingStatus = (data) => setFilingState({ key: filingKey, data });
 
-  const fyOptions = getFYOptions(5, new Date(), 4);
-  const currentYear = new Date().getFullYear();
-  const yearOptions = [];
-  for (let y = currentYear; y >= currentYear - 5; y--) yearOptions.push(y);
-
-  const loadData = async () => {
+  // Phase 3 (audit): the whole bills collection is no longer loaded so a
+  // period can be filtered in the browser (section-12 leftover). The bills
+  // and the expense/other-income records (one shared `expenses` collection,
+  // split by `kind` here exactly as getAllExpenses/getAllOtherIncome did)
+  // come back already scoped to the return period, 200 docs a page until the
+  // cursor runs out. Purchases and receipts deliberately stay WHOLE-collection
+  // loads — 180-day ITC reversals (3B 4B), RCM credit paid this period for an
+  // older bill (4A(3)), Table 11B adjustments of an earlier advance receipt
+  // and the GSTR-2B matching all read documents dated outside the period — so
+  // scoping them to the period would understate those tables. They are still
+  // fetched page by page instead of one unbounded request.
+  const loadStaticDocs = async () => {
     try {
-      const [b, e, p] = await Promise.all([getAllBills(), getAllExpenses(), getProfile()]);
-      // Older servers may lack these endpoints; the returns then read as before they existed.
-      let otherIncome = [];
-      try { otherIncome = (await getAllOtherIncome()) || []; } catch { /* older servers */ }
+      const p = await getProfile();
       let purchaseDocs = [];
-      try { purchaseDocs = (await getAllPurchaseDocs()) || []; } catch { /* older servers */ }
       let receiptDocs = [];
-      try { receiptDocs = (await getAllReceipts()) || []; } catch { /* older servers */ }
-      setDocs({ profile: p || {}, bills: b || [], expenses: e || [], purchases: purchaseDocs, receipts: receiptDocs, otherIncome });
+      try { purchaseDocs = (await fetchCollectionPages('purchases')) || []; } catch { /* older servers */ }
+      try { receiptDocs = (await fetchCollectionPages('receipts')) || []; } catch { /* older servers */ }
+      setDocs((prev) => ({ ...prev, profile: p || prev.profile || {}, purchases: purchaseDocs, receipts: receiptDocs }));
     } catch { toast('Failed to load data', 'error'); }
   };
 
+  const periodLoadRef = useRef(0);
+  const loadPeriodDocs = async (range) => {
+    const loadId = ++periodLoadRef.current;
+    const { from, to } = range || {};
+    try {
+      const [bills, expenseRows] = await Promise.all([
+        collectPages(({ limit, cursor }) => listBillsPage({ limit, cursor, from, to })),
+        fetchCollectionPages('expenses', { from, to }),
+      ]);
+      if (loadId !== periodLoadRef.current) return; // the picked period changed meanwhile
+      const rows = Array.isArray(expenseRows) ? expenseRows : [];
+      setDocs((prev) => ({
+        ...prev,
+        bills: bills || [],
+        expenses: rows.filter((e) => !isIncome(e)),
+        otherIncome: rows.filter(isIncome),
+      }));
+    } catch { toast('Failed to load data', 'error'); }
+  };
+
+  // After a write (RCM payment): profile and purchases are re-read whole, the
+  // period's documents with the period still in force.
+  const loadData = () => {
+    loadStaticDocs();
+    loadPeriodDocs(periodDateRange(period));
+  };
+
   useEffect(() => {
-    const now = new Date();
-    const fy = fyOptions[0];
-    if (fy) setFyFilter(fy.value);
-    setYearFilter(String(now.getFullYear()));
-    setMonthFilter(String(now.getMonth()));
-    // Auto-detect current quarter
-    const m = now.getMonth();
-    const q = QUARTERS.find(q => q.months.includes(m));
-    if (q) setQuarterFilter(q.id);
-    loadData();
+    loadStaticDocs();
   }, []);
 
   // ========== The period's returns (engine: gstReturnsModel) ==========
@@ -115,6 +144,17 @@ export default function GSTReturns({ tab = 'gstr1', onTab = () => {} }) {
       : { mode: 'month', year: yearFilter, month: monthFilter }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filterMode, fyFilter, quarterFilter, monthFilter, yearFilter]);
+  // Phase 3: the return period is fetched from the server (`from`/`to`), so
+  // the period's documents reload whenever the picked period changes. This
+  // also makes the first load, so nothing fetches the whole collection on
+  // mount. Keying on the resolved bounds means month/quarter/fy modes that
+  // cover the same dates share one fetch.
+  const periodRange = periodDateRange(period);
+  const periodRangeKey = periodRange ? `${periodRange.from}..${periodRange.to}` : '';
+  useEffect(() => {
+    loadPeriodDocs(periodRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodRangeKey]);
   const model = useMemo(() => gstReturnsModel(docs, period, { customUnits: getCustomUnits() }), [docs, period]);
   const {
     purchases, receipts, filterByPeriod, getReturnPeriod,

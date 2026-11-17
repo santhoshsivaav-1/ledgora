@@ -1,8 +1,9 @@
-import { purchaseBookTotals } from '@ledgora/tax-engine';
+import { purchaseBookTotals, periodBounds, QUARTERS } from '@ledgora/tax-engine';
 // Helpers shared by the GST returns pages: tax splits, the GSTR-2B reconciliation, CSV download and the filing steps (change 3.17).
 import { useState } from 'react';
 import { CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { toCsvLine, splitLineTax } from '../../utils';
+import { API, apiFetch } from '../../lib/data/api';
 
 // GSTR-1 Table 13 "nature of document" codes.
 export const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -30,6 +31,72 @@ export function readFilingStatus(key) {
 // The per-line split lives in utils.js (splitLineTax) so it can be tested;
 // see v1.10.77 (#89) there.
 export const computeItemTaxSplit = splitLineTax;
+
+// ========== Paged period loads (audit Phase 3) ==========
+// The Returns screen used to load the WHOLE bills collection (section-12
+// leftover) and filter the period in the browser. Now it asks the server for
+// exactly the return period, page by page. These helpers are pure so
+// test/pagedScreens.test.js can cover the maths without a server.
+
+/** The 'YYYY-MM-DD' bounds of the period picked on the screen (months are 0-based, like the screen's filters). Null when
+ * the period isn't resolved yet (a FY option missing, no month picked) — the caller then fetches without `from`/`to`,
+ * which the model's filterByPeriod treats the same way (an unresolved FY keeps everything). */
+export function periodDateRange(period) {
+  if (!period) return null;
+  if (period.mode === 'fy') {
+    const fy = period.fy;
+    return fy && fy.from && fy.to ? { from: fy.from, to: fy.to } : null;
+  }
+  if (period.mode === 'quarter') {
+    const q = QUARTERS.find((x) => x.id === period.quarter);
+    if (!q) return null;
+    return periodBounds('quarter', { year: parseInt(period.year), months: q.months });
+  }
+  if (period.month === '' || period.month == null) return null;
+  return periodBounds('month', { year: parseInt(period.year), month: parseInt(period.month) });
+}
+
+/** Query string for `GET /v1/workspace/collections/<collection>?limit&cursor&q&status&from&to`. Empty/absent filters
+ * produce no param at all, so the URL stays exactly as short as the request needs. */
+export function pagedCollectionQuery({ limit, cursor, q, status, from, to } = {}) {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** Follow a cursor-paged endpoint until it is exhausted. `fetchPage({ limit, cursor })` returns either the paged shape
+ * `{ data, nextCursor }` or (an older server that ignores `limit`, or a caller without one) the whole array. Page size
+ * 200: a quarter of bills is bounded, and the guard keeps a broken cursor from spinning forever. */
+export async function collectPages(fetchPage, { pageSize = 200 } = {}) {
+  const out = [];
+  let cursor = null;
+  let guard = 0;
+  do {
+    const page = await fetchPage({ limit: pageSize, cursor });
+    const data = Array.isArray(page) ? page : ((page && page.data) || []);
+    out.push(...data);
+    cursor = Array.isArray(page) ? null : ((page && page.nextCursor) || null);
+    guard += 1;
+  } while (cursor && guard < 1000);
+  return out;
+}
+
+/** Every document of one workspace collection — for the returns screen's non-bill collections (expenses, purchases,
+ * receipts), which have no page-fetch function of their own. `from`/`to` filter the document's date field. */
+export function fetchCollectionPages(collection, { from, to, pageSize = 200 } = {}) {
+  return collectPages(
+    ({ limit, cursor }) => apiFetch(`${API}/collections/${collection}${pagedCollectionQuery({ limit, cursor, from, to })}`),
+    { pageSize },
+  );
+}
+
+// GSTR-1 Table 13 "nature of document" codes.
 // Moved to the engine with the GST return builders (X1); re-exported so the screens' imports stay as they were.
 export {
   GST_TYPES,

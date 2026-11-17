@@ -1,7 +1,7 @@
 import { postsToLedger, syncWorkspaceDoc } from './ledgerBridge.ts';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { schema } from '@ledgora/db';
+import { schema, type Tx } from '@ledgora/db';
 import {
   INVOICE_TYPES,
   countsAsSales,
@@ -14,6 +14,7 @@ import {
 import { audit } from '../../audit.ts';
 import { AppError } from '../../errors.ts';
 import type { Registrar } from '../../http.ts';
+import { isoDate, page } from '@ledgora/contracts';
 import { generateFromTemplate } from './generate.ts';
 import {
   COLLECTIONS,
@@ -27,6 +28,7 @@ import {
   getDoc,
   getKv,
   listDocs,
+  listDocsPage,
   putDoc,
   setKv,
   trashedDocs,
@@ -67,18 +69,50 @@ function visible(collection: string, docs: Doc[], auth: Rules) {
  * row-level security, roles and the audit log all apply.
  */
 export function workspaceModule({ route }: Registrar) {
+  // The standard terms template seeds itself on first read; both the whole-list and the paged read share this.
+  const seedTemplates = async (tx: Tx, orgId: string) => {
+    if (!(await getDoc(tx, 'templates', DEFAULT_TEMPLATE.id)))
+      await putDoc(tx, orgId, 'templates', DEFAULT_TEMPLATE.id, DEFAULT_TEMPLATE);
+  };
+
   // ---- collections: bills, clients, products, expenses, recurring, receipts, purchases, profiles, templates ----
   route({
     method: 'get',
     path: '/v1/workspace/collections/:collection',
     tag: 'Workspace',
-    summary: 'All documents of one collection, in the order the screen lists them',
+    summary:
+      'All documents of one collection in the order the screen lists them — or one page at a time with ?limit=, filtered and sorted in SQL (Phase 3)',
     params: z.object({ collection }),
-    response: z.array(anyDoc),
-    handler: async ({ tx, orgId, params, auth }) => {
+    query: z
+      .object({
+        limit: z.coerce.number().int().min(1).max(500).optional(),
+        cursor: z.string().max(200).optional(),
+        q: z.string().trim().max(120).optional(),
+        status: z.string().trim().max(40).optional(),
+        from: isoDate.optional(),
+        to: isoDate.optional(),
+      })
+      .optional(),
+    response: z.union([z.array(anyDoc), page(anyDoc)]),
+    handler: async ({ tx, orgId, params, query, auth }) => {
+      const { limit, cursor, q, status, from, to } = query ?? {};
+      if (limit) {
+        if (params.collection === 'templates') await seedTemplates(tx, orgId);
+        const res = await listDocsPage(tx, params.collection, {
+          limit,
+          cursor,
+          q,
+          status,
+          from,
+          to,
+          // The rule applies while paging too: a member's page is filled from their own documents only.
+          createdBy: auth.ownOnly && TRANSACTIONS.has(params.collection) ? auth.user.id : null,
+        });
+        return { data: visible(params.collection, res.data, auth), nextCursor: res.nextCursor };
+      }
       let docs = await listDocs(tx, params.collection);
       if (params.collection === 'templates' && docs.length === 0) {
-        await putDoc(tx, orgId, 'templates', DEFAULT_TEMPLATE.id, DEFAULT_TEMPLATE);
+        await seedTemplates(tx, orgId);
         docs = [DEFAULT_TEMPLATE];
       }
       return visible(params.collection, docs, auth).sort(SORT[params.collection]);

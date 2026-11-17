@@ -16,6 +16,32 @@ export const getAllBills = async () => {
   return apiFetch(`${API}/collections/bills`);
 };
 
+// Query string for the paged list (S6, screens 50 invoices at a time). Pure so
+// it can be unit-tested: empty/absent filters produce no param at all, so the
+// URL stays exactly as short as the request needs. `status` is passed through
+// verbatim — the caller decides which of its filter values the server
+// understands ('open' / 'converted' are client-side concepts and never sent).
+export const billsPageQuery = ({ limit = 50, cursor, q, status, from, to } = {}) => {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+};
+
+// One page of invoices, newest invoiceDate first. Returns
+// `{ data: [...bill docs in the legacy shape...], nextCursor: string | null }`
+// when `limit` is present; without `limit` it behaves like getAllBills (full
+// array) so other screens are unaffected. getAllBills above is left alone —
+// SalesOverview, IncomeTax, GSTReturns etc. keep using it untouched.
+export const listBillsPage = async (opts = {}) => {
+  return apiFetch(`${API}/collections/bills${billsPageQuery(opts)}`);
+};
+
 export const deleteBill = async (id) => {
   return apiFetch(`${API}/collections/bills/${encodeURIComponent(id)}`, { method: 'DELETE' });
 };

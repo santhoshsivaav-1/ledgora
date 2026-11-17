@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { ShoppingCart, Plus, Edit3, Trash2, Search, X, Save, Download, Wand2, FileText, Eye } from 'lucide-react';
 import HelpButton from '../../components/ui/HelpButton';
 import { getAllPurchases, getAllDebitNotes, getAllPurchaseOrders, savePurchase, deletePurchase, getAllProducts, saveProduct, getProfile, getNextInvoiceNumber } from '../../lib/data';
+import { listGodowns, godownLineOptions } from '../../lib/data/godowns';
 import { formatCurrency, getFYOptions, belongsToProfile, isUnassignedToBusiness, isInterstateSupply, localToday, roundQty, INDIAN_STATES, businessKeyOf } from '../../utils';
 import { ITC_STATUSES, ITC_STATUS_LABELS } from '@ledgora/tax-engine';
 import ChargeRows from '../invoices/editor/ChargeRows';
@@ -93,6 +94,8 @@ export default function PurchaseBills() {
   // v1.10.54 (#42) — the Products & Services master, used to seed item
   // suggestions. Loaded on mount alongside purchases.
   const [products, setProducts] = useState([]);
+  // Godowns (Phase 3): { data, defaultId } from the typed API, or null when it could not be read.
+  const [godowns, setGodowns] = useState(null);
   const [search, setSearch] = useState('');
   const [fyFilter, setFyFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -204,6 +207,9 @@ export default function PurchaseBills() {
     if (fyOptions[0]) setFyFilter(fyOptions[0].value);
     loadPurchases();
     loadProducts();
+    // Godowns (Phase 3): a purchase line can name the godown the goods arrive into. Loaded once; the per-line
+    // select shows only when the business has more than one godown (empty = the default godown).
+    listGodowns().then(setGodowns).catch(() => {});
   }, []);
 
   const filtered = purchases.filter(p => {
@@ -367,6 +373,8 @@ export default function PurchaseBills() {
           itcStatus: ITC_STATUSES.includes(i.itcStatus) ? i.itcStatus : 'eligible',
           ...(i.productId ? { productId: i.productId } : {}),
           ...(i.itemId ? { itemId: i.itemId } : {}),
+          // Godowns (Phase 3): the godown the goods arrive into; empty means the default godown.
+          ...(i.godownId ? { godownId: i.godownId } : {}),
         })),
         // totalAmount is the grand total INCLUDING round-off so the table
         // sum and GSTR-3B reconciliation both reflect what the supplier
@@ -810,6 +818,8 @@ export default function PurchaseBills() {
   })();
 
   const formTotals = calcPurchaseTotal(form.items, form.applyRoundOff, form);
+  // Godowns (Phase 3): per-line options — the first choice is "empty = the default godown" — only with 2+ godowns.
+  const godownOpts = godowns && godowns.data.length > 1 ? godownLineOptions(godowns.data, godowns.defaultId) : null;
 
   return (
     <div className="dashboard-container">
@@ -1193,6 +1203,18 @@ export default function PurchaseBills() {
                     {ITC_STATUSES.map(st => <option key={st} value={st}>{ITC_STATUS_LABELS[st]}</option>)}
                   </select>
                 </div>
+                {/* Godowns (Phase 3): the godown these goods arrive into. Shown only when the business has more
+                    than one godown; empty means the default godown. */}
+                {godownOpts && (
+                  <div className="form-group" style={{ flex: 1, margin: 0 }}>
+                    {idx === 0 && <label className="form-label">Godown</label>}
+                    <select className="form-input" value={item.godownId || ''} aria-label={`Line ${idx + 1} godown`}
+                      title="Which godown these goods arrive into; empty uses the default godown"
+                      onChange={e => updateItem(idx, 'godownId', e.target.value || undefined)}>
+                      {godownOpts.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div style={{ flex: '0 0 auto', marginBottom: idx === 0 ? 0 : 0 }}>
                   {form.items.length > 1 && (
                     <button className="icon-btn icon-btn-red" onClick={() => removeItem(idx)} title="Remove"><Trash2 size={15} /></button>

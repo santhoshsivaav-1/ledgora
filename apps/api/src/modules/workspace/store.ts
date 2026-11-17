@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { schema, type Tx } from '@ledgora/db';
+import { tsText } from '../../http.ts';
 
 const { documents, workspaceKv } = schema;
 
@@ -80,6 +81,122 @@ export async function listDocs(tx: Tx, collection: Collection): Promise<Doc[]> {
     .where(and(eq(documents.collection, collection), isNull(documents.deletedAt)))
     .orderBy(asc(documents.createdAt));
   return rows.map((r) => r.data as Doc);
+}
+
+// ---- Phase 3 (S6): the same lists, one page at a time, straight from indexes -------------------------------
+
+/** The SQL sort key of each collection, mirroring SORT above: newest date first, names A→Z. */
+const SORT_KEY: Record<Collection, { expr: SQL; dateField?: string; dir: 'asc' | 'desc' }> = {
+  bills: {
+    expr: sql`(coalesce(${documents.data}->>'invoiceDate', ''))`,
+    dateField: 'invoiceDate',
+    dir: 'desc',
+  },
+  clients: { expr: sql`(lower(coalesce(${documents.data}->>'name', '')))`, dir: 'asc' },
+  products: { expr: sql`(lower(coalesce(${documents.data}->>'name', '')))`, dir: 'asc' },
+  expenses: {
+    expr: sql`(coalesce(${documents.data}->>'date', ''))`,
+    dateField: 'date',
+    dir: 'desc',
+  },
+  recurring: { expr: sql`(lower(coalesce(${documents.data}->>'clientName', '')))`, dir: 'asc' },
+  receipts: {
+    expr: sql`(coalesce(${documents.data}->>'date', ''))`,
+    dateField: 'date',
+    dir: 'desc',
+  },
+  purchases: {
+    expr: sql`(coalesce(${documents.data}->>'date', ''))`,
+    dateField: 'date',
+    dir: 'desc',
+  },
+  profiles: { expr: sql`(lower(coalesce(${documents.data}->>'businessName', '')))`, dir: 'asc' },
+  templates: { expr: sql`(lower(coalesce(${documents.data}->>'name', '')))`, dir: 'asc' },
+};
+
+/** What `q` searches, the fields the screens' search boxes look at. */
+const SEARCH_FIELDS: Record<Collection, string[]> = {
+  bills: ['invoiceNumber', 'clientName'],
+  clients: ['name', 'phone', 'gstin', 'email'],
+  products: ['name', 'hsn', 'sku', 'barcode'],
+  expenses: ['name', 'category'],
+  recurring: ['clientName'],
+  receipts: ['clientName'],
+  purchases: ['clientName', 'name'],
+  profiles: ['businessName'],
+  templates: ['name'],
+};
+
+export type DocsPageOpts = {
+  limit: number;
+  cursor?: string | null;
+  q?: string | null;
+  status?: string | null;
+  from?: string | null;
+  to?: string | null;
+  /** "Own transactions only": only documents stamped with this maker (Phase 3 keeps the rule in the query). */
+  createdBy?: string | null;
+};
+
+const decodeCursor = (raw: string): [string, string] => {
+  try {
+    const [v, t] = JSON.parse(Buffer.from(raw, 'base64url').toString());
+    if (typeof v === 'string' && typeof t === 'string') return [v, t];
+  } catch {
+    /* fall through */
+  }
+  throw new Error('cursor is not valid');
+};
+
+/**
+ * One page of a collection, newest/A→Z like the screens list them, keyset on (sort key, created_at) so a save between
+ * two pages can never repeat or skip a row, and every filter run in SQL against the expression indexes — a 50,000
+ * invoice list opens from the first page without loading the collection.
+ */
+export async function listDocsPage(tx: Tx, collection: Collection, o: DocsPageOpts) {
+  const key = SORT_KEY[collection];
+  const t = tsText(documents.createdAt);
+  const where: SQL[] = [
+    sql`${documents.collection} = ${collection}`,
+    sql`${documents.deletedAt} is null`,
+  ];
+  if (o.q) {
+    const like = `%${o.q.replace(/[%_\\]/g, '\\$&')}%`;
+    const field = (f: string) => sql`coalesce(${documents.data}->>${f}, '') ilike ${like}`;
+    where.push(sql`(${sql.join(SEARCH_FIELDS[collection].map(field), sql` or `)})`);
+  }
+  if (o.status) where.push(sql`coalesce(${documents.data}->>'status', '') = ${o.status}`);
+  const dateField = key.dateField;
+  if (o.from && dateField)
+    where.push(sql`coalesce(${documents.data}->>${dateField}, '') >= ${o.from}`);
+  if (o.to && dateField) where.push(sql`coalesce(${documents.data}->>${dateField}, '') <= ${o.to}`);
+  if (o.createdBy) where.push(sql`${documents.data}->>'_createdBy' = ${o.createdBy}`);
+  if (o.cursor) {
+    const [v, ts] = decodeCursor(o.cursor);
+    // Date sorts run newest first; name sorts A→Z. Ties (same sort key) always go on by created_at, oldest first,
+    // which is the order the old in-memory stable sort left them in.
+    where.push(
+      key.dir === 'desc'
+        ? sql`(${key.expr} < ${v} or (${key.expr} = ${v} and ${t} > ${ts}))`
+        : sql`(${key.expr} > ${v} or (${key.expr} = ${v} and ${t} > ${ts}))`,
+    );
+  }
+  const rows = await tx
+    .select({ data: documents.data, s: key.expr, t: t })
+    .from(documents)
+    .where(sql`${sql.join(where, sql` and `)}`)
+    .orderBy(
+      key.dir === 'desc' ? sql`${key.expr} desc` : sql`${key.expr} asc`,
+      sql`${t} asc`,
+      asc(documents.id),
+    )
+    .limit(o.limit + 1);
+  const more = rows.length > o.limit;
+  const pageRows = more ? rows.slice(0, o.limit) : rows;
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    more && last ? Buffer.from(JSON.stringify([last.s, last.t])).toString('base64url') : null;
+  return { data: pageRows.map((r) => r.data as Doc), nextCursor };
 }
 
 export async function getDoc(tx: Tx, collection: Collection, key: string) {

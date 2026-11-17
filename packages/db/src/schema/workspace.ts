@@ -23,6 +23,35 @@ export const documents = pgTable(
       .on(t.orgId, t.collection, t.key)
       .where(sql`${t.deletedAt} is null`),
     index('documents_collection_idx').on(t.orgId, t.collection),
+    // Phase 3 (S6): the lists page in the order the screens show, straight from indexes instead of a whole-table scan.
+    // The keyset walks (sort key, created_at): newest date first, ties in insertion order, exactly like the old
+    // in-memory sort. The JSON fields are text-compared in SQL, which is exact for the ISO dates the screens store.
+    index('documents_bills_date_idx')
+      .on(t.orgId, t.collection, sql`(coalesce(${t.data}->>'invoiceDate', '')) desc`, t.createdAt)
+      .where(sql`${t.deletedAt} is null`),
+    index('documents_txn_date_idx')
+      .on(t.orgId, t.collection, sql`(coalesce(${t.data}->>'date', '')) desc`, t.createdAt)
+      .where(sql`${t.deletedAt} is null`),
+    index('documents_list_name_idx')
+      .on(
+        t.orgId,
+        t.collection,
+        sql`(lower(coalesce(${t.data}->>'name', ${t.data}->>'businessName', '')))`,
+        t.createdAt,
+      )
+      .where(sql`${t.deletedAt} is null`),
+    index('documents_list_client_idx')
+      .on(t.orgId, t.collection, sql`(lower(coalesce(${t.data}->>'clientName', '')))`, t.createdAt)
+      .where(sql`${t.deletedAt} is null`),
+    index('documents_list_status_idx')
+      .on(
+        t.orgId,
+        t.collection,
+        sql`(coalesce(${t.data}->>'status', ''))`,
+        sql`(coalesce(${t.data}->>'invoiceDate', '')) desc`,
+        t.createdAt,
+      )
+      .where(sql`${t.deletedAt} is null`),
   ],
 );
 

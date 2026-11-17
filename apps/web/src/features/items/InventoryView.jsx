@@ -3,8 +3,11 @@ import { itemFieldVisibility, newItemDefaults, lowStockLimit } from './itemField
 import { useEntitlements } from '../billing/useEntitlements';
 import { itemExtraVisibility, barcodeTaken, parseSerials, hsnDigitsProblem } from './itemExtras';
 import { useState, useEffect, useRef } from 'react';
-import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download } from 'lucide-react';
+import { Package, Search, Plus, Edit3, Trash2, X, Save, Upload, Table2, Download, ListTree, PackagePlus } from 'lucide-react';
 import { getAllProducts, saveProduct, deleteProduct, getProfile, getStockAlertSettings } from '../../lib/data';
+import { listAllItems } from '../../lib/data/utilities';
+import BomDialog from './BomDialog';
+import AssembleDialog from '../godowns/AssembleDialog';
 import { getAllUnits, getCountryConfig, formatCurrency } from '../../utils';
 import { toast } from '../../components/ui/Toast';
 import { confirmAction } from '../../components/ui/ConfirmModal';
@@ -70,6 +73,12 @@ export default function InventoryView() {
   // as everything else (still "Out of Stock" red for 0 — that's a hard fact,
   // not an alert preference).
   const [stockAlerts, setStockAlerts] = useState({ enabled: true, threshold: 5 });
+  // Godowns (Phase 3): the bill of materials and the Assemble action live on the typed items catalog
+  // (/v1/items), so the screen also reads that list and matches a product to it by name. A product the typed
+  // catalog does not know yet shows neither action — the godowns screen's New run still reaches every typed item.
+  const [typedItems, setTypedItems] = useState([]);
+  const [bomDialog, setBomDialog] = useState(null); // { product, item }
+  const [assembleDialog, setAssembleDialog] = useState(null); // { item }
 
   const loadProducts = async () => {
     try {
@@ -82,6 +91,7 @@ export default function InventoryView() {
 
   useEffect(() => {
     loadProducts();
+    listAllItems().then(setTypedItems).catch(() => {}); // non-fatal: without it, no BOM/Assemble actions show
     setUnits(getAllUnits());
     getProfile().then(p => { if (p?.country) setProfileCountry(p.country); }).catch(() => {});
     getStockAlertSettings().then(setStockAlerts).catch(() => {});
@@ -231,6 +241,11 @@ export default function InventoryView() {
   };
 
   const csvInputRef = useRef(null);
+
+  // The typed-catalog twin of a product (matched by name), which carries the godowns-phase facts: the bill of
+  // materials and, for an item that tracks stock, the Assemble action.
+  const typedItemOf = (product) =>
+    typedItems.find((t) => (t.name || '').trim().toLowerCase() === (product.name || '').trim().toLowerCase()) || null;
 
   const handleCSVImport = async (e) => {
     const file = e.target.files?.[0];
@@ -579,6 +594,18 @@ export default function InventoryView() {
                     </td>}
                     <td>
                       <div className="table-actions">
+                        {typedItemOf(product) && (
+                          <button className="icon-btn icon-btn-blue" title="Bill of materials — what one unit is made of"
+                            onClick={() => setBomDialog({ product, item: typedItemOf(product) })}>
+                            <ListTree size={15} />
+                          </button>
+                        )}
+                        {(() => { const t = typedItemOf(product); return t?.trackStock ? (
+                          <button className="icon-btn icon-btn-blue" title="Assemble — make from the bill of materials"
+                            onClick={() => setAssembleDialog({ item: t })}>
+                            <PackagePlus size={15} />
+                          </button>
+                        ) : null; })()}
                         <button className="icon-btn icon-btn-blue" onClick={() => openEdit(product)} title="Edit">
                           <Edit3 size={15} />
                         </button>
@@ -594,6 +621,14 @@ export default function InventoryView() {
           </div>
         )}
       </div>
+      {bomDialog && (
+        <BomDialog item={bomDialog.item} typedItems={typedItems}
+          onClose={() => setBomDialog(null)}
+          onSaved={async () => setTypedItems(await listAllItems().catch(() => typedItems))} />
+      )}
+      {assembleDialog && (
+        <AssembleDialog item={assembleDialog.item} items={typedItems} onClose={() => setAssembleDialog(null)} />
+      )}
     </div>
   );
 }

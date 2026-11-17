@@ -10,6 +10,8 @@ export interface LotMove {
   expDate?: string | null;
   mfgDate?: string | null;
   serials?: readonly string[] | null;
+  /** The godown the move belongs to (Phase 3); a move without one belongs to the default godown. */
+  godownId?: string | null;
 }
 export interface Lot {
   batchNo: string;

@@ -235,7 +235,8 @@ async function priorReturns(tx: Tx, billId: string, excludeId?: string) {
   return Promise.all(notes.map(async (n) => ({ items: await linesOf(tx, n.id) })));
 }
 
-/** A stock movement per tracked item: in for a bill, out for a debit note that sends goods back. */
+/** A stock movement per tracked item: in for a bill, out for a debit note that sends goods back.
+ *  Phase 3: the movement lands in the line's godown (the default one when the line names none). */
 async function moveStock(tx: Tx, orgId: string, row: PurchaseRow, lines: LineRow[], sign: 1 | -1) {
   for (const l of lines) {
     if (!l.itemId) continue;
@@ -249,6 +250,7 @@ async function moveStock(tx: Tx, orgId: string, row: PurchaseRow, lines: LineRow
         reason: sign > 0 ? 'purchase' : 'purchase_return',
         refType: 'purchase',
         refId: row.id,
+        godownId: (l.extra as { godownId?: string } | null)?.godownId ?? null,
         note: sign > 0 && l.landedCost ? `landed cost ${l.landedCost}` : '',
       });
   }
@@ -473,6 +475,7 @@ export async function createPurchase(
             ? { batchNo: l.batchNo, expDate: l.expDate ?? null, mfgDate: l.mfgDate ?? null }
             : {}),
           ...(l.serials?.length ? { serials: l.serials } : {}),
+          ...(l.godownId ? { godownId: l.godownId } : {}),
         },
       })),
     )

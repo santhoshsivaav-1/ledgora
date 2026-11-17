@@ -80,6 +80,7 @@ export const LineItem = memo(function LineItem({
   onAddCustomUnit, onRemoveCustomUnit, onRemove, clampNonNeg,
   isLastRow, onAddRow, isOnlyRow,
   batches = null, serialStock = null, product = null, settings = {},
+  godownOptions = null,
 }) {
   const quick = !!settings['txn.quickEntry']; // Settings > Transaction > Quick entry: only item, qty, unit, rate and tax
   const expired = item.expDate && item.expDate < localToday();
@@ -290,6 +291,18 @@ export const LineItem = memo(function LineItem({
             onChange={(e) => onFieldChange(item.id, 'mrp', e.target.value === '' ? undefined : clampNonNeg(e.target.value))}
             style={Number(item.mrp) > 0 && Number(item.rate) > Number(item.mrp) ? { borderColor: '#d97706' } : undefined}
             title={Number(item.mrp) > 0 && Number(item.rate) > Number(item.mrp) ? 'The rate is above the MRP' : 'Maximum retail price'} />
+        </div>
+      )}
+      {/* Godowns (Phase 3): which godown this line sells from. Shown only when the business has more than one
+          godown; empty means the default godown, so older lines read exactly as before. */}
+      {godownOptions && godownOptions.length > 1 && !item.isCharge && (
+        <div className="line-item-field" style={{ flex: 1 }}>
+          <label className="form-label">Godown</label>
+          <select className="form-input" value={item.godownId || ''} aria-label="Godown"
+            title="Which godown this line sells from; empty uses the default godown"
+            onChange={(e) => onFieldChange(item.id, 'godownId', e.target.value || undefined)}>
+            {godownOptions.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+          </select>
         </div>
       )}
       <div className="line-item-field line-item-delete">

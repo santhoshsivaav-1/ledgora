@@ -33,7 +33,7 @@ import {
   numberSeriesFor,
   startFor,
   stockDelta,
-  stockEffect,
+  STOCK_SIGN,
   overReturns,
   returnableQty,
   saleOrderProgress,
@@ -298,6 +298,7 @@ async function build(tx: Tx, input: BuildInput) {
           ? { batchNo: l.batchNo, expDate: l.expDate ?? null, mfgDate: l.mfgDate ?? null }
           : {}),
         ...(l.serials?.length ? { serials: l.serials } : {}),
+        ...(l.godownId ? { godownId: l.godownId } : {}),
       },
     };
   });
@@ -358,22 +359,32 @@ async function syncStock(
   invoiceId: string,
   invoiceType: string,
   status: string,
-  lines: { itemId: string | null; quantity: number }[],
+  lines: { itemId: string | null; quantity: number; godownId?: string | null }[],
   tracked: Set<string>,
   reason: string,
 ) {
   // P8-S3 "Auto-deduct stock on challan": off, a delivery challan moves no stock (the invoice made from it will).
   const challanOff = invoiceType === 'delivery-challan' && !(await challanStockOn(tx, invoiceId));
-  const want = stockEffect(
-    lines
-      .filter((l) => l.itemId && !challanOff && tracked.has(l.itemId))
-      .map((l) => ({ productId: l.itemId, quantity: l.quantity })),
-    invoiceType,
-    status,
-  );
+  // Phase 3: a movement is keyed by item and godown, so a line that names a godown takes from (or returns to) that one.
+  // The key is `item::godown` (empty godown = the business's default); a cancelled document moves nothing.
+  const sign = status === 'cancelled' ? 0 : (STOCK_SIGN[invoiceType || 'tax-invoice'] ?? -1);
+  const want: Record<string, number> = {};
+  if (sign) {
+    for (const l of lines.filter((l) => l.itemId && !challanOff && tracked.has(l.itemId))) {
+      const factor =
+        Number((l as { unitFactor?: number }).unitFactor) > 0
+          ? Number((l as { unitFactor?: number }).unitFactor)
+          : 1;
+      const q = (Number(l.quantity) || 0) * factor;
+      if (!q) continue;
+      const key = `${l.itemId}::${l.godownId ?? ''}`;
+      want[key] = Math.round(((want[key] ?? 0) + sign * q) * 1000) / 1000;
+    }
+  }
   const rows = await tx
     .select({
       itemId: stockMovements.itemId,
+      godownId: stockMovements.godownId,
       q: sql<number>`sum(${stockMovements.quantity})::float8`,
     })
     .from(stockMovements)
@@ -384,14 +395,21 @@ async function syncStock(
         isNull(stockMovements.deletedAt),
       ),
     )
-    .groupBy(stockMovements.itemId);
+    .groupBy(stockMovements.itemId, stockMovements.godownId);
   const have: Record<string, number> = {};
-  for (const r of rows) have[r.itemId] = Math.round(r.q * 1000) / 1000;
+  for (const r of rows) have[`${r.itemId}::${r.godownId ?? ''}`] = Math.round(r.q * 1000) / 1000;
   const delta = stockDelta(have, want);
-  for (const [itemId, quantity] of Object.entries(delta)) {
-    await tx
-      .insert(stockMovements)
-      .values({ orgId, itemId, quantity, reason, refType: 'invoice', refId: invoiceId });
+  for (const [key, quantity] of Object.entries(delta)) {
+    const [itemId, godownId] = key.split('::');
+    await tx.insert(stockMovements).values({
+      orgId,
+      itemId: itemId!,
+      quantity,
+      reason,
+      refType: 'invoice',
+      refId: invoiceId,
+      ...(godownId ? { godownId } : {}),
+    });
   }
 }
 

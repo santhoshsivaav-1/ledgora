@@ -34,6 +34,8 @@ export const purchaseLineInput = z.object({
   expDate: isoDate.nullish(),
   mfgDate: isoDate.nullish(),
   serials: z.array(z.string().trim().min(1).max(60)).max(500).nullish(),
+  /** Phase 3: the godown the goods are received into; left out = the business's default godown. */
+  godownId: z.string().uuid().nullish(),
 });
 
 export const purchaseInput = z

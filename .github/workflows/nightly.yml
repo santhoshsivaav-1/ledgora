@@ -1,0 +1,109 @@
+# Nightly: the full gate plus the real-browser e2e suite, on a schedule instead of every push.
+# The PR job in ci.yml skips the browser suite (slow); this is where sign-in, billing and every
+# screen still get driven end to end each night, against the latest main.
+name: Nightly e2e
+
+on:
+  schedule:
+    # 03:30 IST — before the workday starts.
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+# A newer scheduled run cancels the one it makes obsolete.
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The API tests run against a real Postgres (row-level security can not be mocked).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ledgora
+          POSTGRES_PASSWORD: ledgora
+          POSTGRES_DB: ledgora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledgora -d ledgora" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://ledgora:ledgora@localhost:5432/ledgora
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the exact pnpm version from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm --filter @ledgora/web size
+
+  # Drives the real app in Firefox: sign-in, billing, every screen. Same steps as the browser job
+  # in ci.yml, but not gated off pull requests — this is the nightly copy of it.
+  browser:
+    name: Browser tests (sign-in, billing, every screen)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ledgora
+          POSTGRES_PASSWORD: ledgora
+          POSTGRES_DB: ledgora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledgora -d ledgora" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://ledgora:ledgora@localhost:5432/ledgora
+      API_LISTEN_PORT: 4000
+      APP_URL: http://localhost:4000
+      API_URL: http://localhost:4000
+      RUN_MIGRATIONS: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ledgora/web build
+      - run: pnpm --filter @ledgora/web exec playwright install --with-deps firefox
+      - run: node apps/api/src/server.ts &
+      - run: npx --yes wait-on http://localhost:4000/health
+      - run: node apps/web/scripts/auth-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/phase3-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/billing-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000
+      - run: node apps/web/scripts/screens-e2e.mjs
+        env:
+          E2E_APP_URL: http://localhost:4000
+          E2E_API_URL: http://localhost:4000

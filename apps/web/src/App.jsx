@@ -123,6 +123,8 @@ const AcceptInvitePage = lazyView(() => import('./features/auth/AcceptInvitePage
 const ClientsView = lazyView(() => import('./features/parties/ClientsView'), 'clients');
 const AdminPage = lazy(() => import('./features/admin/AdminPage'));
 const InventoryView = lazyView(() => import('./features/items/InventoryView'), 'inventory');
+// Vyapar parity Phase 3: godowns, one screen with tabs (/godowns/:tab).
+const GodownsPage = lazyView(() => import('./features/godowns/GodownsPage'), 'godowns');
 const BarcodePage = lazyView(() => import('./features/utilities/BarcodePage'), 'barcode');
 const TallyPage = lazyView(() => import('./features/utilities/TallyPage'), 'tally');
 const CloseFyPage = lazyView(() => import('./features/utilities/CloseFyPage'), 'close-fy');
@@ -1098,6 +1100,9 @@ function App() {
                   />
                 ))}
                 <Route path="/products" element={<InventoryView />} />
+                {/* Vyapar parity Phase 3: godowns, one screen with tabs like the books and Cash & Bank. */}
+                <Route path="/godowns" element={<Navigate to="/godowns/godowns" replace />} />
+                <Route path="/godowns/:tab" element={<GodownsPage key={businessKey} />} />
                 <Route path="/expenses" element={<ExpenseTracker key={businessKey} />} />
                 <Route path="/purchases" element={<PurchaseBills key={businessKey} />} />
                 <Route path={pathForView('payment-out')} element={<PaymentVoucher direction="out" key={businessKey} />} />
