@@ -143,6 +143,67 @@ describe('P7-S1 barcodes', () => {
   });
 });
 
+describe('Barcode bulk import from a spreadsheet', () => {
+  const imp = (who: Tenant, rows: Record<string, unknown>[]) =>
+    who.call('POST', '/v1/utilities/barcodes/import', { rows });
+  it('creates the items, keeps typed barcodes, numbers the blank ones, and books opening stock', async () => {
+    const t = await h.newTenant();
+    const r = await imp(t, [
+      {
+        name: 'Pen',
+        salePrice: 10,
+        mrp: 12,
+        taxPercent: 12,
+        openingStock: 5,
+        barcode: '4006381333931',
+      },
+      { name: 'Pencil', salePrice: 5 },
+      { name: 'Eraser', salePrice: 3 },
+    ]);
+    expect(r.status, r.text).toBe(200);
+    expect(r.body).toMatchObject({ created: 3, existing: 0, failed: 0, coded: 2 });
+    const [pen, pencil, eraser] = r.body.rows;
+    expect(pen.code).toBe('4006381333931');
+    expect(pencil.code).toMatch(/^200\d{10}$/);
+    expect(Number(eraser.code.slice(3, 12))).toBe(Number(pencil.code.slice(3, 12)) + 1);
+    const got = (await t.call('GET', `/v1/items/${pen.id}`)).body;
+    expect(got).toMatchObject({ name: 'Pen', salePrice: 10, stock: 5, taxPercent: 12 });
+    expect(got.extra).toMatchObject({ barcode: '4006381333931', mrp: 12 });
+  });
+  it('reuses an item already there instead of duplicating it, and fills a blank barcode', async () => {
+    const t = await h.newTenant();
+    const a = await item(t, { name: 'Notebook' });
+    const b = await item(t, { name: 'Marker', extra: { barcode: '4006381333931' } });
+    const r = await imp(t, [
+      { name: 'notebook' },
+      { name: 'Marker renamed', barcode: '4006381333931' },
+      { name: 'Marker', barcode: '4006381333931' },
+    ]);
+    expect(r.status, r.text).toBe(200);
+    expect(r.body.rows.map((x: any) => x.status)).toEqual(['existing', 'error', 'existing']);
+    expect(r.body.rows[1].message).toMatch(/already belongs to "Marker"/);
+    expect(r.body.rows[0].id).toBe(a.id);
+    expect(r.body.rows[0].code).toMatch(/^200\d{10}$/);
+    expect((await t.call('GET', `/v1/items/${a.id}`)).body.extra.barcode).toBe(r.body.rows[0].code);
+    expect((await t.call('GET', '/v1/items?limit=50')).body.data).toHaveLength(2);
+    expect(b.id).toBe(r.body.rows[2].id);
+  });
+  it('a name repeated inside the file makes one item', async () => {
+    const t = await h.newTenant();
+    const r = await imp(t, [{ name: 'Glue' }, { name: 'GLUE', barcode: '8901234567890' }]);
+    expect(r.body.rows.map((x: any) => x.status)).toEqual(['created', 'existing']);
+    expect(r.body.rows[0].id).toBe(r.body.rows[1].id);
+    expect(r.body.rows[0].code).toBe('8901234567890');
+    expect((await t.call('GET', '/v1/items?limit=50')).body.data).toHaveLength(1);
+  });
+  it('a viewer can not import', async () => {
+    const t = await h.newTenant();
+    const v = await h.addMember(t, 'viewer');
+    const r = await v.call('POST', '/v1/utilities/barcodes/import', { rows: [{ name: 'X' }] });
+    expect(r.status, r.text).toBe(403);
+  });
+});
+
 describe('P7-S2 Tally export', () => {
   it('refuses with the ledger off and says to enable accounting', async () => {
     const t = await h.newTenant();

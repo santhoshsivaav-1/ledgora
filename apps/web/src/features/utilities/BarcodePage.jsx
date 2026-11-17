@@ -94,8 +94,8 @@ export default function BarcodePage() {
   return (
     <div className="dashboard-container">
       <PageHeader icon={<ScanBarcode size={22} />} title="Barcode Generator" subtitle="Print barcode labels for your items on a label sheet or a roll. Items without a barcode get one." />
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) minmax(0, 1fr)', gap: '1rem' }}>
-        <div className="glass-panel p-4" style={{ display: 'grid', gap: 10, alignContent: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 440px) minmax(0, 1fr)', gap: '1rem', alignItems: 'start' }}>
+        <div className="glass-panel p-4" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, alignContent: 'start', minWidth: 0 }}>
           <div>
             <label className="form-label" htmlFor="bc-q">Items ({picked.size} selected)</label>
             <input id="bc-q" className="form-input" placeholder="Search name, code or barcode" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -127,7 +127,7 @@ export default function BarcodePage() {
               {problem && <div className="pos-bad" role="alert" style={{ gridColumn: '1 / -1', color: 'var(--danger, #dc2626)' }}>{problem}</div>}
             </div>
           )}
-          <div role="radiogroup" aria-label="Barcode type" style={{ display: 'flex', gap: 14 }}>
+          <div role="radiogroup" aria-label="Barcode type" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <strong style={{ fontSize: '0.8rem' }}>Barcode type</strong>
             {[['ean13', 'EAN-13'], ['code128', 'Code 128'], ['qr', 'QR']].map(([v, l]) => <label key={v}><input type="radio" name="bctype" checked={type === v} onChange={() => setType(v)} /> {l}</label>)}
           </div>
@@ -142,7 +142,7 @@ export default function BarcodePage() {
           <label className="form-label">Start at label<input className="form-input" type="number" min="1" disabled={sheet.cols * sheet.rows === 1} value={startAt} onChange={(e) => setStartAt(Math.max(1, Number(e.target.value) || 1))} />
             <span className="field-hint">To reuse a partly used sheet.</span></label>
           {missing.length > 0 && <div className="field-hint" role="status">{missing.length} selected item{missing.length === 1 ? ' has' : 's have'} no barcode. Printing gives each the next in-store code (200…).</div>}
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" disabled={busy || !missing.length} onClick={generate}>Generate missing codes</button>
             <button className="btn btn-secondary" disabled={!!problem} onClick={savePreset}>Save these settings</button>
             <button className="btn btn-primary" disabled={busy || !chosen.length || !!problem} onClick={print}>Print / Save as PDF</button>

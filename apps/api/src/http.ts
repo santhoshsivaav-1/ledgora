@@ -147,7 +147,7 @@ export function createRegistrar(app: Hono, deps: Deps) {
             run(tx, { ...session, orgId: '' } as unknown as OrgContext),
           );
         } else {
-          const ctx = await requireOrg(c, deps.db, session);
+          const ctx = await requireOrg(c, deps.db, session, deps.env.AUTH_CACHE_MS);
           // The real path, not the route pattern: a pattern like /v1/workspace/collections/:collection says nothing about which collection.
           await requirePermission(deps.db, ctx, spec.method, c.req.path, spec.permission);
           await requireFeature(deps.db, ctx, spec.method, c.req.path, {

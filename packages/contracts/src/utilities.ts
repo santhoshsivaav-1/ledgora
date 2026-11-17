@@ -14,6 +14,36 @@ export const barcodeAssignResult = z.object({
   alreadyHad: z.number().int(),
 });
 
+/** Bulk items from a spreadsheet (Barcode Generator): one row per item; a blank barcode gets the next in-store EAN-13. */
+export const barcodeImportRow = z.object({
+  name: z.string().trim().min(1).max(200),
+  sku: z.string().trim().max(60).nullish(),
+  barcode: z.string().trim().max(40).nullish(),
+  hsn: z.string().trim().max(10).default(''),
+  unit: z.string().trim().max(10).default('PCS'),
+  salePrice: z.number().min(0).default(0),
+  mrp: z.number().min(0).nullish(),
+  purchasePrice: z.number().min(0).default(0),
+  taxPercent: z.number().min(0).max(100).default(0),
+  openingStock: z.number().min(0).default(0),
+});
+export const barcodeImportInput = z.object({ rows: z.array(barcodeImportRow).min(1).max(500) });
+export const barcodeImportResult = z.object({
+  rows: z.array(
+    z.object({
+      index: z.number().int(),
+      status: z.enum(['created', 'existing', 'error']),
+      id: uuid.nullable(),
+      code: z.string().nullable(),
+      message: z.string().nullable(),
+    }),
+  ),
+  created: z.number().int(),
+  existing: z.number().int(),
+  failed: z.number().int(),
+  coded: z.number().int(),
+});
+
 // ---- P7-S2 ----
 export const tallyMappingInput = z.record(z.string(), z.string().max(100));
 export const tallyInclude = z.object({

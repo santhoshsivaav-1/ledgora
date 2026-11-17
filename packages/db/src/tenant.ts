@@ -31,11 +31,11 @@ export async function withTenant<T>(
   if (!businessIds.every((b) => UUID.test(b)))
     throw new Error('withTenant: businessIds must be UUIDs');
   return db.transaction(async (tx) => {
-    await tx.execute(sql`set local role app_user`);
-    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
-    await tx.execute(sql`select set_config('app.business_ids', ${businessIds.join(',')}, true)`);
-    await tx.execute(sql`select set_config('app.actor_id', ${opts.actorId ?? ''}, true)`);
-    await tx.execute(sql`select set_config('app.ip', ${opts.ip ?? ''}, true)`);
+    // One statement instead of five: each used to be its own round trip to the database. set_config('role', ..., true) is
+    // SET LOCAL ROLE, and is_local=true keeps every value transaction-local.
+    await tx.execute(
+      sql`select set_config('role', 'app_user', true), set_config('app.org_id', ${orgId}, true), set_config('app.business_ids', ${businessIds.join(',')}, true), set_config('app.actor_id', ${opts.actorId ?? ''}, true), set_config('app.ip', ${opts.ip ?? ''}, true)`,
+    );
     return fn(tx);
   });
 }

@@ -7,6 +7,8 @@ import { schema, type Tx } from '@ledgora/db';
 import {
   barcodeAssignInput,
   barcodeAssignResult,
+  barcodeImportInput,
+  barcodeImportResult,
   fyCloseInput,
   fyPreviewQuery,
   fyReopenInput,
@@ -50,6 +52,7 @@ const {
   expenseCategories,
   documents,
   items,
+  stockMovements,
   invoices,
   invoiceLines,
   purchases,
@@ -745,6 +748,37 @@ async function fyPlan(
   return { year, years, problems, journal, summary, ledgerOn };
 }
 
+/** One barcode run at a time per organization: assigning and importing share this lock so codes never repeat. */
+const lockBarcodes = (tx: Tx, orgId: string) =>
+  tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`barcode:${orgId}`}))`);
+
+/** The next `count` in-store EAN-13 codes after the highest 200… code in use. Call with the barcode lock held. */
+async function nextCodes(tx: Tx, count: number) {
+  if (!count) return [];
+  const [top] = await tx
+    .select({
+      seq: sql<
+        number | null
+      >`max(substring(${items.extra}->>'barcode' from 4 for 9)::bigint)::float8`,
+    })
+    .from(items)
+    .where(sql`${items.extra}->>'barcode' ~ '^200[0-9]{10}$'`);
+  return nextInternalCodes(Math.floor(top?.seq ?? 0), count);
+}
+
+interface ImportEntry {
+  id: string | null;
+  name: string;
+  code: string;
+  extra: Record<string, unknown>;
+  fresh: boolean;
+  /** An existing item whose barcode was blank and now takes one. */
+  dirty: boolean;
+  auto: boolean;
+  values?: typeof items.$inferInsert;
+  openingStock: number;
+}
+
 export function utilitiesModule({ route }: Registrar) {
   // ---- P7-S1 ----
   route({
@@ -757,22 +791,14 @@ export function utilitiesModule({ route }: Registrar) {
     response: barcodeAssignResult,
     handler: async ({ tx, orgId, body }) => {
       // One run at a time per organization; the unique barcode index is the backstop.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`barcode:${orgId}`}))`);
+      await lockBarcodes(tx, orgId);
       const rows = await tx
         .select()
         .from(items)
         .where(and(inArray(items.id, body.itemIds), isNull(items.deletedAt)));
       if (rows.length !== new Set(body.itemIds).size) throw notFound('Item');
-      const [top] = await tx
-        .select({
-          seq: sql<
-            number | null
-          >`max(substring(${items.extra}->>'barcode' from 4 for 9)::bigint)::float8`,
-        })
-        .from(items)
-        .where(sql`${items.extra}->>'barcode' ~ '^200[0-9]{10}$'`);
       const need = rows.filter((r) => !(r.extra as { barcode?: string }).barcode);
-      const codes = nextInternalCodes(Math.floor(top?.seq ?? 0), need.length);
+      const codes = await nextCodes(tx, need.length);
       const assigned: { id: string; code: string }[] = [];
       for (const [i, r] of need.entries()) {
         await tx
@@ -786,6 +812,159 @@ export function utilitiesModule({ route }: Registrar) {
           after: { count: assigned.length, first: assigned[0].code },
         });
       return { assigned, alreadyHad: rows.length - need.length };
+    },
+  });
+
+  route({
+    method: 'post',
+    path: '/v1/utilities/barcodes/import',
+    tag: 'Utilities',
+    summary:
+      'Add items from a spreadsheet and give each the barcode in its row, or the next in-store EAN-13 when blank. An item already there (same barcode, SKU or name) is reused, never duplicated. One transaction for the whole file',
+    body: barcodeImportInput,
+    response: barcodeImportResult,
+    handler: async ({ tx, orgId, body }) => {
+      await lockBarcodes(tx, orgId);
+      const live = await tx
+        .select({ id: items.id, name: items.name, sku: items.sku, extra: items.extra })
+        .from(items)
+        .where(isNull(items.deletedAt));
+      const byCode = new Map<string, ImportEntry>();
+      const bySku = new Map<string, ImportEntry>();
+      const byName = new Map<string, ImportEntry>();
+      const lc = (v: string) => v.trim().toLowerCase();
+      const remember = (e: ImportEntry, sku?: string | null) => {
+        if (e.code) byCode.set(lc(e.code), e);
+        if (sku) bySku.set(lc(sku), e);
+        byName.set(lc(e.name), e);
+      };
+      for (const r of live) {
+        const extra = (r.extra ?? {}) as Record<string, unknown>;
+        remember(
+          {
+            id: r.id,
+            name: r.name,
+            code: typeof extra.barcode === 'string' ? extra.barcode : '',
+            extra,
+            fresh: false,
+            dirty: false,
+            auto: false,
+            openingStock: 0,
+          },
+          r.sku,
+        );
+      }
+
+      type Outcome = { entry: ImportEntry | null; created: boolean; message: string | null };
+      const outcomes: Outcome[] = [];
+      const creates: ImportEntry[] = [];
+      const needCode: ImportEntry[] = [];
+      for (const r of body.rows) {
+        const typed = r.barcode?.trim() ?? '';
+        const sku = r.sku?.trim() || null;
+        const hitCode = typed ? byCode.get(lc(typed)) : undefined;
+        if (hitCode && lc(hitCode.name) !== lc(r.name)) {
+          outcomes.push({
+            entry: null,
+            created: false,
+            message: `Barcode ${typed} already belongs to "${hitCode.name}"`,
+          });
+          continue;
+        }
+        const hit = hitCode ?? (sku ? bySku.get(lc(sku)) : undefined) ?? byName.get(lc(r.name));
+        if (hit) {
+          if (!hit.code) {
+            if (typed) {
+              hit.code = typed;
+              hit.dirty = true;
+              byCode.set(lc(typed), hit);
+            } else if (!needCode.includes(hit)) needCode.push(hit);
+          }
+          outcomes.push({ entry: hit, created: false, message: null });
+          continue;
+        }
+        const entry: ImportEntry = {
+          id: null,
+          name: r.name,
+          code: typed,
+          extra: { ...(r.mrp != null ? { mrp: r.mrp } : {}) },
+          fresh: true,
+          dirty: false,
+          auto: false,
+          openingStock: r.openingStock,
+          values: {
+            orgId,
+            name: r.name,
+            sku,
+            hsn: r.hsn,
+            unit: r.unit,
+            salePrice: r.salePrice,
+            purchasePrice: r.purchasePrice,
+            taxPercent: r.taxPercent,
+          } as typeof items.$inferInsert,
+        };
+        remember(entry, sku);
+        creates.push(entry);
+        if (!typed) needCode.push(entry);
+        outcomes.push({ entry, created: true, message: null });
+      }
+
+      // A later row of the same file may have supplied the code for an entry that first came without one.
+      const pending = needCode.filter((e) => !e.code);
+      const codes = await nextCodes(tx, pending.length);
+      for (const [i, e] of pending.entries()) {
+        e.code = codes[i].code;
+        e.auto = true;
+        e.dirty = !e.fresh;
+      }
+      if (creates.length) {
+        const made = await tx
+          .insert(items)
+          .values(
+            creates.map((e) => ({
+              ...e.values!,
+              extra: { ...e.extra, barcode: e.code },
+            })),
+          )
+          .returning({ id: items.id });
+        creates.forEach((e, i) => (e.id = made[i].id));
+        const opening = creates
+          .filter((e) => e.openingStock > 0)
+          .map((e) => ({ orgId, itemId: e.id!, quantity: e.openingStock, reason: 'opening' }));
+        if (opening.length) await tx.insert(stockMovements).values(opening);
+      }
+      for (const e of new Set(outcomes.map((o) => o.entry).filter((e) => e?.dirty && !e.fresh))) {
+        await tx
+          .update(items)
+          .set({ extra: { ...e!.extra, barcode: e!.code }, updatedAt: new Date() })
+          .where(eq(items.id, e!.id!));
+      }
+
+      const rows = outcomes.map((o, index) => ({
+        index,
+        status: o.entry
+          ? o.created
+            ? ('created' as const)
+            : ('existing' as const)
+          : ('error' as const),
+        id: o.entry?.id ?? null,
+        code: o.entry?.code || null,
+        message: o.message,
+      }));
+      const created = rows.filter((r) => r.status === 'created').length;
+      const existing = rows.filter((r) => r.status === 'existing').length;
+      const result = {
+        rows,
+        created,
+        existing,
+        failed: rows.length - created - existing,
+        coded: pending.length,
+      };
+      if (created || pending.length)
+        await audit(tx, orgId, 'barcode.import', 'item', null, {
+          after: { created, existing, coded: pending.length },
+        });
+      return result;
     },
   });
 

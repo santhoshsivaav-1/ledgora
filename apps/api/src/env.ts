@@ -82,6 +82,8 @@ const schema = z.object({
   /** Without S3 settings the API stores files on disk here (development only). */
   LOCAL_FILES_DIR: z.string().default('.local-files'),
   FILE_SIGNING_SECRET: z.string().min(16).default('dev-only-signing-secret-change-me'),
+  /** How many milliseconds a session and a member's role are remembered between calls (0 = look them up every time). */
+  AUTH_CACHE_MS: z.coerce.number().int().min(0).max(60_000).default(10_000),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   RUN_MIGRATIONS: bool.default(false),
 });

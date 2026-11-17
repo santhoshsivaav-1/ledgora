@@ -6,6 +6,8 @@ import pkg from '../package.json' with { type: 'json' };
 import { createAuth } from './auth/auth.ts';
 import { consoleHtml } from './console.ts';
 import { errorHandler, notFoundHandler } from './errors.ts';
+import { forgetSessions } from './middleware/session.ts';
+import { forgetMembers } from './middleware/org.ts';
 import { getOutbox } from './mail/index.ts';
 import { applySecurity } from './security.ts';
 import { serveWeb } from './web.ts';
@@ -87,7 +89,16 @@ export function createApp(base: Omit<Deps, 'auth'>) {
   app.use('/v1/*', compress({ contentTypeFilter: (type) => type.startsWith('application/json') }));
 
   // Better Auth owns everything under /v1/auth: sign-up, sign-in, OTP, 2FA, password reset, Google.
-  app.on(['GET', 'POST'], '/v1/auth/*', (c) => deps.auth.handler(c.req.raw));
+  app.on(['GET', 'POST'], '/v1/auth/*', async (c) => {
+    const res = await deps.auth.handler(c.req.raw);
+    if (c.req.method !== 'GET') forgetSessions();
+    return res;
+  });
+  // Any write may change a role, a member or a business assignment: drop the short-lived member cache with it.
+  app.use('/v1/*', async (c, next) => {
+    await next();
+    if (c.req.method !== 'GET') forgetMembers();
+  });
 
   const reg = createRegistrar(app, deps);
   const { route } = reg;

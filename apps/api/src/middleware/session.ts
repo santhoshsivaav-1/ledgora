@@ -24,9 +24,27 @@ export function clientIp(c: Context, env: AppEnv): string | null {
   return incoming?.socket?.remoteAddress ?? null;
 }
 
+// Every request used to re-read the session and user from the database (2 round trips). The answer is kept for a few
+// seconds per cookie, and dropped whenever anything under /v1/auth writes (sign-out, switching organization, 2FA).
+const sessions = new Map<
+  string,
+  { at: number; found: Awaited<ReturnType<Auth['api']['getSession']>> }
+>();
+export const forgetSessions = () => sessions.clear();
+
 /** First link of the chain (change 2.7): the request must carry a valid session cookie. */
 export async function requireSession(c: Context, auth: Auth, env: AppEnv): Promise<AuthContext> {
-  const found = await auth.api.getSession({ headers: c.req.raw.headers });
+  const key = c.req.header('cookie') ?? c.req.header('authorization') ?? '';
+  const hit = key ? sessions.get(key) : undefined;
+  let found: Awaited<ReturnType<Auth['api']['getSession']>>;
+  if (hit && Date.now() - hit.at < env.AUTH_CACHE_MS) found = hit.found;
+  else {
+    found = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (key && found && env.AUTH_CACHE_MS > 0) {
+      if (sessions.size > 2000) sessions.clear();
+      sessions.set(key, { at: Date.now(), found });
+    } else if (key) sessions.delete(key);
+  }
   if (!found) throw new AppError('unauthorized', 'Sign in required');
   const u = found.user as unknown as SessionUser;
   return {

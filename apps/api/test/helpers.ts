@@ -37,6 +37,8 @@ export function makeHarness(opts: HarnessOptions = {}) {
     RATE_LIMIT_ENABLED: 'false',
     // Existing tests start from a bare account; onboardingDefaults.test.ts checks the real default.
     LEDGER_ON_SIGNUP: 'false',
+    // Helpers change members and sessions straight in the database; a remembered answer would be stale.
+    AUTH_CACHE_MS: '0',
     ...opts.env,
   });
   const { db, sql, close } = createDb(url(), { max: 12 });

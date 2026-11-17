@@ -294,6 +294,8 @@ export interface LabelItem {
   mrp?: number | null;
   /** Used when copies are "= stock quantity". */
   stock?: number;
+  /** This item's own number of labels (from a spreadsheet's "Labels to print" column); wins over the job's copies. */
+  copies?: number;
 }
 /**
  * The labels to print, page by page. `copies` is a number (≥ 1) or 'stock' (the item's stock, at least 1); each is capped
@@ -306,8 +308,10 @@ export function layoutLabels(
   const perPage = o.sheet.cols * o.sheet.rows;
   const queue: LabelItem[] = [];
   for (const it of items) {
-    const n =
-      o.copies === 'stock'
+    const own = it.copies !== undefined && Number.isFinite(it.copies) && it.copies >= 1;
+    const n = own
+      ? Math.floor(it.copies as number)
+      : o.copies === 'stock'
         ? Math.max(1, Math.floor(it.stock ?? 1))
         : Math.max(1, Math.floor(o.copies));
     for (let k = 0; k < Math.min(n, MAX_COPIES); k++) queue.push(it);
